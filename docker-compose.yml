@@ -1,7 +1,7 @@
 version: '3.9'
 services:
   neo4j:
-    container_name: innernet-neo4j
+    container_name: persona-graph-neo4j
     image: neo4j:latest
     restart: always
     environment:
@@ -13,7 +13,7 @@ services:
       - ./neo4j-data:/data
   
   app:
-    container_name: innernet-app
+    container_name: persona-graph
     build: .
     volumes:
       - .:/app

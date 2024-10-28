@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "innernet-user-memory"
+name = "persona-graph"
 version = "0.1.0"
 description = "A digital user memory and identity system for personalization"
 authors = ["Utkarsh Saxena"]
 readme = "README.md"
 license = "MIT"
-homepage = "https://github.com/yourusername/innernet-user-memory"
-repository = "https://github.com/yourusername/innernet-user-memory"
+homepage = "https://github.com/saxenauts/persona-graph"
+repository = "https://github.com/saxenauts/persona-graph"
 
 [tool.poetry.dependencies]
 python = "^3.12"

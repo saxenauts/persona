@@ -1,10 +1,14 @@
-# Innernet User Memory
+# Persona Graph - Intelligent User Memory
 
-Innernet User Memory is an innovative digital identity system that evolves with a user's digital footprint. By creating and maintaining a dynamic knowledge graph for each user, Innernet provides contextually rich information to any programming interface, particularly LLM-based systems, enabling unprecedented levels of personalization and user-centric experiences.
+Persona Graph is an innovative digital identity system that evolves with a user's digital footprint. By creating and maintaining a dynamic knowledge graph for each user, the graph provides contextually rich information to any programming interface, particularly LLM-based systems, enabling next gen personalization and user-centric experiences. At its core, persona graph is an attempt to create a memetic digital organism that can evolve and grow with the user, and represent the user's mindspace digitally. 
 
 ## Vision
 
-At Innernet, we believe in a future where digital interactions are seamlessly personalized, respecting user privacy while delivering unparalleled value. Our mission is to empower developers and businesses to create user experiences that are not just tailored, but truly understand and grow with each individual user.
+We believe in a future where digital interactions are seamlessly personalized, respecting user privacy while delivering unparalleled value. Our mission is to empower developers and businesses to create user experiences that are not just tailored, but truly understand and grow with each individual user.
+
+Check the introductory blog post [here](https://open.substack.com/pub/saxenauts/p/memetics-meets-ai-building-your-digital?r=5djzi&utm_campaign=post&utm_medium=web)
+
+![Sample Graph Update](https://substackcdn.com/image/fetch/f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fab907625-6e05-4516-8266-01432ad6240e_1710x1558.gif)
 
 ## Features
 
@@ -19,8 +23,8 @@ At Innernet, we believe in a future where digital interactions are seamlessly pe
 
 1. Clone the repository:
    ```
-   git clone https://github.com/innernets/persona-graph.git
-   cd innernet-user-memory
+   git clone https://github.com/saxenauts/persona-graph.git
+   cd persona-graph
    ```
 
 2. Ensure you have Docker and Docker Compose installed on your system.
@@ -64,7 +68,6 @@ curl -X POST "http://localhost:8000/api/v1/rag/alice123/query" -H "Content-Type:
 
 See the [examples.ipynb](examples.ipynb) file for a sample product recommendation use case. 
 
-Also see the [Concept Note](EderLabs_Innernet_ConceptNote.pdf) for a more detailed overview of the product offering for consumer focused use cases toward a personalised internet. 
 
 ## Supercharging Personalization: Use Cases
 
@@ -80,6 +83,14 @@ Also see the [Concept Note](EderLabs_Innernet_ConceptNote.pdf) for a more detail
 4. **Health and Fitness Applications**
    By tracking a user's exercise routines, dietary preferences, and health goals, Innernet can assist in providing personalized workout plans and nutrition advice that adapts as the user's fitness journey progresses.
 
+## TODOs
+
+- [ ] Write tests and evals for graph construction
+- [ ] Add activation, and forgetting functions to the graph update 
+- [ ] Add manual graph update functions to the API
+- [ ] Add a graph visualization tool in D3
+- [ ] Write notebook for ingesting X posts and bookmarks to the graph
+- [ ] Write notebook for ingesting a users browsing history to the graph
 
 
 ## Architecture
