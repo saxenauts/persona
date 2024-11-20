@@ -15,7 +15,7 @@ class Neo4jConnectionManager:
             self.uri,
             auth=basic_auth(self.username, self.password)
         )
-        self.ensure_vector_index_task = self.ensure_vector_index()
+        # self.ensure_vector_index_task = self.ensure_vector_index()
 
     async def wait_for_neo4j(self, timeout=60):
         start_time = time.time()
@@ -176,7 +176,7 @@ class Neo4jConnectionManager:
         CALL db.index.vector.queryNodes($indexName, 5, $embedding)
         YIELD node, score
         WHERE node.UserId = $user_id
-        RETURN id(node) AS nodeId, node.name AS nodeName, score
+        RETURN elementId(node) AS nodeId, node.name AS nodeName, score
         ORDER BY score DESC
         """
         results = []
@@ -281,6 +281,7 @@ class Neo4jConnectionManager:
         query = """
         MERGE (u:User {id: $user_id})
         """
+        print("URI: ", self.uri)
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
         print(f"User {user_id} created successfully.")

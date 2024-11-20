@@ -99,7 +99,7 @@ async def test_constructor_flow():
             if "already exists" not in str(e):
                 raise e
             
-            
+
         # Ensure vector index exists (only once)
         try:
             await graph_constructor.graph_ops.neo4j_manager.ensure_vector_index()
@@ -112,11 +112,11 @@ async def test_constructor_flow():
         data = UnstructuredData(title="Sample Statement", content=SPACE_SCHOOL_CHAT)
         
         # Process the unstructured data
-        await graph_constructor.process_unstructured_data(data)
+        await graph_constructor.ingest_unstructured_data_to_graph(data)
         
         # Retrieve and print the updated graph context
         print("Retrieving updated graph context...")
-        context = await graph_constructor.get_graph_context("Technology")
+        context = await context_retriever.get_rich_context(query="Technology", user_id=user_id)
         print("Updated graph context:", context)
 
         return {"status": "Graph updated successfully", "context": context}

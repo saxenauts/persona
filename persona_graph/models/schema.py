@@ -1,10 +1,24 @@
+"""
+Schema and Pydantic Models for the Graph Library Ops. TODO put in an apt folder"
+"""
+
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+from instructor import OpenAISchema
 
 class UnstructuredData(BaseModel):
     title: str
     content: str
     metadata: Optional[Dict[str, str]] = {}
+
+class Node(OpenAISchema):
+    name: str
+    perspective: Optional[str] = None
+
+class Relationship(OpenAISchema):
+    source: str
+    target: str
+    relation: str
 
 class NodeModel(BaseModel):
     name: str
@@ -90,3 +104,21 @@ class RAGQuery(BaseModel):
 
 class RAGResponse(BaseModel):
     answer: str
+
+class Subgraph(OpenAISchema):
+    id: int
+    nodes: List[str]
+    relationships: List[Dict[str, str]]
+    size: int
+    central_nodes: List[str]  # nodes with highest degree/influence
+
+class CommunitySubheader(OpenAISchema):
+    subheader: str
+    subgraph_ids: List[int]
+
+class CommunityHeader(OpenAISchema):
+    header: str
+    subheaders: List[CommunitySubheader]
+
+class CommunityStructure(OpenAISchema):
+    communityHeaders: List[CommunityHeader]

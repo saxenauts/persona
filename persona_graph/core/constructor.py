@@ -1,8 +1,27 @@
 from persona_graph.core.graph_ops import GraphOps
-from persona_graph.llm.llm_graph import get_entities, get_nodes_and_relationships
-from persona_graph.models.schema import NodeModel, RelationshipModel, GraphUpdateModel, UnstructuredData, NodesAndRelationshipsResponse
+from persona_graph.llm.llm_graph import get_nodes, get_relationships
+from persona_graph.llm.embeddings import generate_embeddings
+from persona_graph.models.schema import NodeModel, RelationshipModel, GraphUpdateModel, UnstructuredData, NodesAndRelationshipsResponse, Node, Relationship
 from typing import List, Dict, Any, Tuple
 from collections import defaultdict
+import asyncio
+
+# Schema constants
+NODE_TYPES = [
+    'CORE_PSYCHE',
+    'STABLE_INTEREST', 
+    'TEMPORAL_INTEREST',
+    'ACTIVE_INTEREST'
+]
+
+RELATIONSHIP_TYPES = [
+    'PART_OF',          # Hierarchical relationships
+    'RELATES_TO',       # Cross-domain connections
+    'LEADS_TO',         # Learning progression
+    'INFLUENCED_BY',    # Impact relationships
+    'SIMILAR_TO'        # Similarity connections
+]
+
 
 class GraphConstructor:
     def __init__(self, user_id: str):
@@ -23,10 +42,10 @@ class GraphConstructor:
         # Recreate the vector index after cleaning
         await self.graph_ops.neo4j_manager.ensure_vector_index()
 
-    async def process_unstructured_data(self, data: UnstructuredData):
-        structured_data = self.preprocess_data(data)
-        entities = await self.extract_entities(structured_data)
-        nodes, relationships = await self.generate_nodes_and_relationships(entities)
+    async def ingest_unstructured_data_to_graph(self, data: UnstructuredData):
+        text = self.preprocess_data(data)
+        nodes = await self.extract_nodes(text)
+        relationships = await self.generate_relationships(nodes)
         
         if not nodes and not relationships:
             print("No nodes or relationships generated from the unstructured data.")
@@ -51,30 +70,139 @@ class GraphConstructor:
         if data.metadata:
             preprocessed += "\n".join([f"{k}: {v}" for k, v in data.metadata.items()])
         return preprocessed
-
-    async def extract_entities(self, text: str) -> List[str]:
-        print(f"Extracting entities from text...")
-        entities_response = await get_entities(text)
-        entities = entities_response.get('entities', [])
-        print(f"Extracted entities: {entities}")
-        return entities
-
-    async def generate_nodes_and_relationships(self, entities: List[str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        print(f"Generating nodes and relationships from entities...")
-        graph_context = await self.get_entire_graph_context()
-        nodes, relationships = await get_nodes_and_relationships(entities, graph_context)
+    
+    async def get_schema_context(self) -> str:
+        """Returns the static schema types and existing core/stable nodes as context"""
+        # Get existing core and stable nodes
+        print(f"Getting schema context for user {self.user_id}")
         
-        print(f"Generated nodes: {nodes}")
+        context = "# Graph Schema\n\n"
+        
+        # Add node types
+        context += "## Node Types\n"
+        for node_type in NODE_TYPES:
+            context += f"- {node_type}\n"
+        
+        # Add relationship types
+        context += "\n## Relationship Types\n"
+        for rel_type in RELATIONSHIP_TYPES:
+            context += f"- {rel_type}\n"
+        
+        return context
+
+    async def extract_nodes(self, text: str) -> List[Node]:
+        print(f"Extracting nodes from text...")
+        schema_context = await self.get_schema_context()
+        nodes_response = await get_nodes(text, schema_context)
+        print(f"Extracted nodes: {nodes_response}")
+        return nodes_response
+
+    async def generate_relationships(self, nodes: List[Node]) -> List[Relationship]:
+        print(f"Generating relationships from nodes...")
+        # graph_context = await self.get_entire_graph_context()
+        schema_context = await self.get_schema_context()
+        graph_context = await self.get_relevant_graph_context(nodes)
+        relationships = await get_relationships(nodes, schema_context, graph_context)
         print(f"Generated relationships: {relationships}")
-        return nodes, relationships
+        return relationships
+    
+    async def get_relevant_graph_context(self, nodes: List[Node], max_hops: int = 2) -> str:
+        """Get relevant subgraph context for the given nodes"""
+        context = "# Relevant Graph Context\n\n"
+        
+        # Check if there are any existing nodes in the graph
+        existing_nodes = await self.graph_ops.get_all_nodes(self.user_id)
+        if not existing_nodes:
+            print("No existing nodes in graph (t=0). Skipping context retrieval.")
+            return context
+        
+        print(f"Found {len(existing_nodes)} existing nodes in graph")
+        # print(f"Current nodes being processed: {[n.name for n in nodes]}")
+        
+        # Generate embeddings for all nodes in batch
+        node_names = [node.name for node in nodes]
+        print(f"Generating embeddings for {len(node_names)} nodes in batch")
+        embeddings = generate_embeddings(node_names)
+        
+        # Perform similarity searches concurrently but safely
+        similar_nodes = []
+        tasks = []
+        for node_name, embedding in zip(node_names, embeddings):
+            task = asyncio.create_task(
+                self.graph_ops.perform_similarity_search(
+                    query=node_name,
+                    embedding=embedding,
+                    user_id=self.user_id,
+                    limit=5
+                )
+            )
+            tasks.append(task)
+        
+        try:
+            results = await asyncio.gather(*tasks)
+            for result in results:
+                if result and result.get('results'):
+                    print(f"Found similar nodes for {result['query']}")
+                    similar_nodes.extend(result['results'])
+        except Exception as e:
+            print(f"Error during similarity search: {str(e)}")
+            return context
+        
+        if not similar_nodes:
+            print("No similar nodes found in existing graph.")
+            return context
+        
+        # Crawl the graph from similar nodes
+        subgraph = {}
+        for node in similar_nodes:
+            await self._explore_node(node['nodeName'], subgraph, max_hops)
+        
+        # Format the subgraph context
+        if subgraph:
+            context += "## Related Nodes and Relationships\n"
+            for node_name, data in subgraph.items():
+                context += f"\n### {node_name}\n"
+                context += f"Perspective: {data['perspective']}\n"
+                if data['relationships']:
+                    context += "Relationships:\n"
+                    for rel in data['relationships']:
+                        context += f"- {rel}\n"
+        
+        return context
+
+    async def _explore_node(self, node_name: str, subgraph: Dict, hops_left: int):
+        """Helper method to explore node relationships for context building"""
+        if node_name in subgraph or hops_left < 0:
+            return
+        
+        node_data = await self.graph_ops.get_node_data(node_name, self.user_id)
+        relationships = await self.graph_ops.get_node_relationships(node_name, self.user_id)
+        
+        subgraph[node_name] = {
+            'perspective': node_data.perspective,
+            'relationships': []
+        }
+        
+        for rel in relationships:
+            subgraph[node_name]['relationships'].append(
+                f"{rel.source} {rel.relation} {rel.target}"
+            )
+            if hops_left > 0:
+                next_node = rel.target if rel.source == node_name else rel.source
+                await self._explore_node(next_node, subgraph, hops_left - 1)
 
     async def get_entire_graph_context(self) -> str:
+        """
+        Get graph context relative to the nodes, and user psyche.
+        Currently gets the entire graph context, which is not efficient.
+        """
+        # TODO: This is not efficient, only get the context for the nodes that are relevant.
+        # TODO: Use more efficient sophisticated context retrieval techniques like graph traversal, etc.
+        # TODO: Use vector search to get the context for the nodes.
+    
         nodes = await self.graph_ops.get_all_nodes(self.user_id)
         relationships = await self.graph_ops.get_all_relationships(self.user_id)
        
-        print (nodes)
-        print (relationships)
-        
         context = "# Current Knowledge Graph\n\n## Nodes\n"
         for node in nodes:
             context += f"- {node.name}: {node.perspective}\n"
@@ -85,16 +213,9 @@ class GraphConstructor:
         
         return context
 
-    async def add_nodes_and_relationships(self, nodes: List[Dict[str, Any]], relationships: List[Dict[str, Any]]):
-        print(f"Adding nodes and relationships to the graph...")
-        node_models = [NodeModel(name=node['name'], label=node.get('label', 'Entity')) for node in nodes] if nodes else []
-        relationship_models = [RelationshipModel(source=rel['source'], target=rel['target'], relation=rel['relation']) for rel in relationships] if relationships else []
-        graph_update = GraphUpdateModel(nodes=node_models, relationships=relationship_models)
-        await self.graph_ops.update_graph(graph_update, self.user_id)
-
     async def get_graph_context(self, query: str):
         print(f"Getting graph context for query: {query}")
-        results = await self.graph_ops.perform_similarity_search(query, self.user_id)
+        results = await self.graph_ops.perform_similarity_search(query=query, user_id=self.user_id)
         return results
 
     async def close(self):
@@ -102,15 +223,12 @@ class GraphConstructor:
         await self.graph_ops.close()
 
 
-
-
-
 class GraphContextRetriever:
     def __init__(self, graph_ops: GraphOps):
         self.graph_ops = graph_ops
 
     async def get_rich_context(self, query: str, user_id: str, top_k: int = 5, max_hops: int = 2) -> str:
-        similar_nodes = await self.graph_ops.perform_similarity_search(query=query, user_id=user_id)
+        similar_nodes = await self.graph_ops.text_similarity_search(query=query, user_id=user_id, limit=top_k, index_name="embeddings_index")
         context = await self.crawl_graph(similar_nodes['results'], max_hops, user_id)
         return self.format_separated_context(context)
 

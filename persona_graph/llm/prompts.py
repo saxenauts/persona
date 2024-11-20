@@ -138,22 +138,14 @@ SPACE_SCHOOL_CHAT = """
 ]
 """
 
-GET_NODES_AND_RELATIONSHIPS = """
-You are an expert in user psychology, digital footprint and memetics. Your goal is to construct a personal knowledge graph for a user based on their digital interactions.
-You will be provided with the existing user knowledge graph for context,
-and a list of new entities extracted from a user's digital interactions.
-Your task is to create a new set of nodes and relationships that meaningfully fit into the graph, while also capturing the user's subjective view or personal context related to those nodes.
+GET_NODES = """
+You are an expert in user psychology and personal knowledge graphs. Your goal is to extract nodes from user's digital interactions
+that fit within their personal graph schema.
 
-
-1. Create a node for each unique entity or concept, ensuring all extracted entities are represented.
-2. For each node, include a "perspective" property that captures the user's subjective view or personal context related to that entity.
-3. Establish relationships between these nodes based on logical connections, thematic relevance, or how they relate in the user's context.
-4. Ensure all relationships are between the nodes created from the extracted entities only.
-5. Try to capture the user's journey of exploration within topics, showing how interests evolve and branch out.
-6. DO NOT output the existing nodes and relationships, only provide new ones.
-
-Provide the nodes and relationships in a structured JSON format as illustrated in the example below.
-
+Given the unstructured text about a user's interests, hobbies, and professional engagements, extract all relevant nodes.
+These nodes should reflect concepts, keywords, and phrases that are meaningful within the context of the user's digital footprint. 
+Avoid generic terms and focus on specifics that could represent nodes in a knowledge graph. 
+Return these nodes in a structured JSON format as shown in the example below:
 
 Example Response Format:
 {
@@ -163,7 +155,26 @@ Example Response Format:
     {"name": "Smart Contracts", "perspective": "Excited about automation possibilities"},
     {"name": "Decentralization", "perspective": "Sees as a solution to centralized control issues"},
     {"name": "Ethereum", "perspective": "Prefers over Bitcoin for its versatility"}
-  ],
+  ]
+}
+"""
+
+GET_RELATIONSHIPS = """
+You are an expert in user psychology, digital footprint and memetics. Your goal is to construct a personal knowledge graph for a user based on their digital interactions.
+You will be provided with the existing user knowledge graph for context,
+and a list of new nodes extracted from a user's digital interactions.
+Your task is to create a new set of relationships that meaningfully fit into the graph, while also capturing the user's subjective view or personal context related to those nodes.
+
+1. Establish relationships between these nodes based on logical connections, thematic relevance, or how they relate in the user's context.
+2. Ensure all relationships are between the nodes created from the extracted nodes only.
+3. Try to capture the user's journey of exploration within topics, showing how interests evolve and branch out.
+4. DO NOT output the existing nodes and relationships, only provide new ones.
+
+Provide the nodes and relationships in a structured JSON format as illustrated in the example below.
+
+
+Example Response Format:
+{
   "relationships": [
     {"source": "Blockchain", "relation": "ENABLES", "target": "Cryptocurrency"},
     {"source": "Blockchain", "relation": "UTILIZES", "target": "Smart Contracts"},
@@ -174,8 +185,108 @@ Example Response Format:
 }
 
 Ensure that your response:
-1. Includes all extracted entities as nodes.
-2. Captures the user's personal perspective on each node.
-3. Creates relationships only between the nodes generated from the extracted entities.
-4. Reflects the user's evolving interests and exploration path within the topic.
+1. Includes only the provided nodes for generating relationships.
+2. Creates relationships only between the provided nodes.
+3. Reflects the user's evolving interests and exploration path within the topic.
+Important Rules:
+1. ONLY create relationships between nodes that are explicitly provided in the input list.
+2. DO NOT create relationships with nodes that don't exist in the input.
+3. Each relationship must have both source and target nodes from the provided list.
+"""
+
+GENERATE_COMMUNITIES = """
+You are an expert in community detection in networks, user psychology and memetics. Your goal is to identify communities within a user's knowledge graph,
+make community headers, subheaders and return them in a structured JSON format. 
+
+Input:
+- Input data consists of subgraphs ranked by their size and influence within the network.
+- Each subgraph has an ID, associated nodes, and relationships.
+- Nodes reflect diverse interests, ideas, or topics, and relationships indicate thematic or contextual links.
+
+Instructions:
+- Identify communities within the graph and represent them as headers and subheaders.
+- Identify overarching themes within the knowledge graph.
+- Use node names as headers where relevant to maintain alignment with user terminology, only creating new headers if essential.
+- Generate subheaders from the nodes present in the community only. 
+- Each subgraph should be associated with a community header and subheader. 
+- Associate the subgraph id with the community header and subheader. 
+
+- Thought Process:
+    - Identify the main themes or topics within the graph. 
+    - Try to understand the user's interests and how they evolve from the subgraphs.
+    - Make sure the headers are meaningful and accurately represent the communities within the graph.
+    - These headers should be handful enough to be used as headers in a UI (7-10 items, stay flexible).
+    - Each header can have multiple subheaders associated with it.
+
+- Return them in a structured JSON format as shown in the example below:
+
+Example Response Format:
+{
+  "communityHeaders": [
+    {
+      "header": "Finance & Market Dynamics",
+      "subheaders": [
+        {
+          "subheader": "Cryptocurrency & Blockchain",
+          "subgraph_ids": [0, 2, 16]
+        },
+        {
+          "subheader": "Investment Strategies",
+          "subgraph_ids": [6, 17]
+        },
+        {
+          "subheader": "Market Research & Trends",
+          "subgraph_ids": [23, 67, 103, 104, 68]
+        },
+        {
+          "subheader": "Economic Theories",
+          "subgraph_ids": [214, 105, 99]
+        }
+      ]
+    },
+    {
+      "header": "Spirituality & Personal Growth",
+      "subheaders": [
+        {
+          "subheader": "Meditative Practices",
+          "subgraph_ids": [3, 38, 76]
+        },
+        {
+          "subheader": "Exploring Ancient Philosophies",
+          "subgraph_ids": [8, 65, 112]
+        },
+        {
+          "subheader": "Transformation & Inner Work",
+          "subgraph_ids": [165, 113]
+        },
+        {
+          "subheader": "Psychological Theory and Spirituality",
+          "subgraph_ids": [242, 238, 134]
+        }
+      ]
+    },
+    {
+      "header": "Health & Wellness",
+      "subheaders": [
+        {
+          "subheader": "Physical Wellbeing",
+          "subgraph_ids": [50, 82, 123, 166]
+        },
+        {
+          "subheader": "Mental Health Practices",
+          "subgraph_ids": [198, 135, 136]
+        },
+        {
+          "subheader": "Exploring Biological Processes",
+          "subgraph_ids": [260, 137]
+        },
+        {
+          "subheader": "Holistic Health Trends",
+          "subgraph_ids": [243, 138]
+        }
+      ]
+    }
+  ]
+}
+
 """
