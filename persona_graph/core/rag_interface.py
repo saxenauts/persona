@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
-from app.graph.graph_ops import GraphOps
-from app.openai.llm_graph import generate_response_with_context
+from persona_graph.core.graph_ops import GraphOps
+from persona_graph.llm.llm_graph import generate_response_with_context
 
 class RAGInterface:
     def __init__(self, user_id: str):

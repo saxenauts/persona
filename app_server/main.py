@@ -1,10 +1,10 @@
 # main.py
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from app.graph.neo4j_database import Neo4jConnectionManager
+from persona_graph.core.neo4j_database import Neo4jConnectionManager
 
-from app.routers.graph_api import router as graph_ops_router
-from app.config import BaseConfig
+from app_server.routers.graph_api import router as graph_ops_router
+from app_server.config import BaseConfig
 
 config = BaseConfig()
 

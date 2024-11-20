@@ -1,6 +1,6 @@
-from app.graph.neo4j_database import Neo4jConnectionManager
-from app.openai.embeddings import generate_embeddings
-from app.utils.models import NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse
+from persona_graph.core.neo4j_database import Neo4jConnectionManager
+from persona_graph.llm.embeddings import generate_embeddings
+from persona_graph.models.schema import NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse
 from typing import List, Dict, Any
 import asyncio
 import json

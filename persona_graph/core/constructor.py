@@ -1,6 +1,6 @@
-from app.graph.graph_ops import GraphOps
-from app.openai.llm_graph import get_entities, get_nodes_and_relationships
-from app.utils.models import NodeModel, RelationshipModel, GraphUpdateModel, UnstructuredData, NodesAndRelationshipsResponse
+from persona_graph.core.graph_ops import GraphOps
+from persona_graph.llm.llm_graph import get_entities, get_nodes_and_relationships
+from persona_graph.models.schema import NodeModel, RelationshipModel, GraphUpdateModel, UnstructuredData, NodesAndRelationshipsResponse
 from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 

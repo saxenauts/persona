@@ -1,4 +1,4 @@
-from app.graph.graph_ops import GraphOps
+from persona_graph.core.graph_ops import GraphOps
 
 class UserService:
     @staticmethod

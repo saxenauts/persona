@@ -1,5 +1,6 @@
-from app.graph.constructor import GraphConstructor
-from app.utils.models import UnstructuredData
+from persona_graph.core.constructor import GraphConstructor
+from persona_graph.models.schema import UnstructuredData
+from persona_graph.core.graph_ops import GraphOps
 
 class IngestService:
     @staticmethod

@@ -2,9 +2,9 @@ from typing import List, Dict, Any, Union, Tuple
 from neo4j import AsyncGraphDatabase, basic_auth
 import asyncio
 import time
-from app.openai.embeddings import generate_embeddings
+from persona_graph.llm.embeddings import generate_embeddings
 import json
-from app.config import config
+from app_server.config import config
 
 class Neo4jConnectionManager:
     def __init__(self):

@@ -1,13 +1,13 @@
 import json
 import openai
 from typing import List, Tuple, Dict
-from app.openai.prompts import GET_ENTITIES, GET_NODES_AND_RELATIONSHIPS
-from app.utils.models import EntityExtractionResponse, NodesAndRelationshipsResponse
-from app.config import config
+from persona_graph.llm.prompts import GET_ENTITIES, GET_NODES_AND_RELATIONSHIPS
+from persona_graph.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse
+from app_server.config import config
 import instructor
 from instructor import OpenAISchema
 from pydantic import Field
-from app.utils.instructions_reader import INSTRUCTIONS
+from persona_graph.utils.instructions_reader import INSTRUCTIONS
 
 # Initialize the OpenAI client globally if not already set up elsewhere in your application
 print(f"OpenAI Key: {config.MACHINE_LEARNING.OPENAI_KEY}")
@@ -35,7 +35,7 @@ async def get_entities(text: str) -> Dict[str, List[str]]:
         combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nEntity Extraction Task: {GET_ENTITIES}"
         print("Open AI key ", config.MACHINE_LEARNING.OPENAI_KEY)
         response = await openai_client.chat.completions.create(
-            model='gpt-3.5-turbo-0125',
+            model='gpt-4o-mini',
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": combined_instructions},
@@ -52,9 +52,6 @@ async def get_entities(text: str) -> Dict[str, List[str]]:
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON: {e}")
         return {"entities": []}
-    except openai.error.AuthenticationError as e:
-        print(f"OpenAI Authentication Error: {e}")
-        return {"entities": []}
     except Exception as e:
         print(f"Error while extracting entities: {e}")
         return {"entities": []}
@@ -67,7 +64,7 @@ async def get_nodes_and_relationships(entities: List[str], graph_context: str) -
     combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nEntity Extraction Task: {GET_ENTITIES}"
     try:
         response = await client.chat.completions.create(
-            model='gpt-4-turbo',
+            model='gpt-4o-mini',
             messages=[
                 {"role": "system", "content": combined_instructions},
                 {"role": "user", "content": f"Existing Graph Context:\n{graph_context}\n\nNew Entities: {entities_str}"}
@@ -81,9 +78,6 @@ async def get_nodes_and_relationships(entities: List[str], graph_context: str) -
         print(f"Generated nodes: {nodes}")
         print(f"Generated relationships: {relationships}")
         return nodes, relationships
-    except openai.error.AuthenticationError as e:
-        print(f"OpenAI Authentication Error: {e}")
-        return GraphResponse(nodes=[], relationships=[])
     except Exception as e:
         print(f"Error while generating nodes and relationships: {e}")
         return GraphResponse(nodes=[], relationships=[])
@@ -99,15 +93,19 @@ async def generate_response_with_context(query: str, context: str) -> str:
 
     Please provide a comprehensive answer based on the given context:
     """
-
-    response = await openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
             {"role": "user", "content": prompt},
             {"role": "system", "content": "You are a helpful assistant that answers queries about a user based on the provided context from their graph."},
             
         ]
     )
-    return response.choices[0].message.content
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error while generating response: {e}")
+        return "I'm sorry, I'm having trouble answering that question. Please try again later."
+
 
 # You can further use these functions in your application to update the graph or for other processes.

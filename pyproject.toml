@@ -3,6 +3,9 @@ name = "persona-graph"
 version = "0.1.0"
 description = "A digital user memory and identity system for personalization"
 authors = ["Utkarsh Saxena"]
+packages = [
+    { include = "persona_graph", from = "." },
+]
 readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/saxenauts/persona-graph"
@@ -24,3 +27,4 @@ httpx = "^0.24.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+package-mode = false
