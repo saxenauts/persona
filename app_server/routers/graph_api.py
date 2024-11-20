@@ -85,7 +85,6 @@ async def test_constructor_flow():
     try:
         user_id = "test_user"
         graph_constructor = await GraphConstructor(user_id=user_id).__aenter__()
-        context_retriever = GraphContextRetriever(graph_constructor.graph_ops)
             
         # Clean up the graph first
         print("Cleaning graph for user:", user_id)
@@ -116,7 +115,7 @@ async def test_constructor_flow():
         
         # Retrieve and print the updated graph context
         print("Retrieving updated graph context...")
-        context = await context_retriever.get_rich_context(query="Technology", user_id=user_id)
+        context = await graph_constructor.graph_context_retriever.get_rich_context(query="Technology", user_id=user_id)
         print("Updated graph context:", context)
 
         return {"status": "Graph updated successfully", "context": context}

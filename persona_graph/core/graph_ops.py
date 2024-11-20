@@ -1,6 +1,9 @@
 from persona_graph.core.neo4j_database import Neo4jConnectionManager
 from persona_graph.llm.embeddings import generate_embeddings
-from persona_graph.models.schema import NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse, CommunityStructure, Subgraph
+from persona_graph.models.schema import (
+    NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse, 
+    CommunityStructure, Subgraph, Node, Relationship
+)
 from typing import List, Dict, Any
 import asyncio
 import json
@@ -10,7 +13,6 @@ from collections import defaultdict
 class GraphOps:
     def __init__(self):
         self.neo4j_manager = Neo4jConnectionManager()
-        # self.ensure_index_task = asyncio.create_task(self.neo4j_manager.ensure_vector_index())
 
     async def __aenter__(self):
         await self.neo4j_manager.ensure_vector_index()
@@ -21,12 +23,7 @@ class GraphOps:
 
     async def clean_graph(self):
         # Clean the graph
-        async with self.neo4j_manager.driver.session() as session:
-            await session.run("MATCH (n) DETACH DELETE n")
-        print("Graph cleaned.")
-
-        # Clean the vector index if it exists
-        await self.neo4j_manager.drop_vector_index("embeddings_index")
+        await self.neo4j_manager.clean_graph()
 
     async def add_nodes(self, nodes: List[NodeModel], user_id: str):
         if not await self.user_exists(user_id):
@@ -44,30 +41,15 @@ class GraphOps:
         await self.neo4j_manager.create_nodes(node_dicts, user_id)
         
         # Generate and add embeddings for new nodes
-        # for node in nodes:
-        #     await self.add_node_embedding(node.name, user_id)
         await self.add_nodes_batch_embeddings(nodes, user_id)
 
-    async def add_node_embedding(self, node_name: str, user_id: str):
-        if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add node with embedding.")
-            return
-
-        print(f"Generating embedding for node: {node_name}")
-        embeddings = generate_embeddings([node_name])
-        if not embeddings[0]:
-            print(f"Failed to generate embeddings for node: {node_name}")
-            return
-
-        await self.neo4j_manager.add_embedding_to_vector_index(node_name, embeddings[0], user_id)
-        print(f"Added embedding for node: {node_name}")
 
     async def add_nodes_batch_embeddings(self, nodes: List[NodeModel], user_id: str):
         if not await self.user_exists(user_id):
             print(f"User {user_id} does not exist. Cannot add nodes.")
             return
 
-        # First create all nodes
+        # Create all nodes
         node_dicts = [
             {
                 "name": node.name,
@@ -80,14 +62,12 @@ class GraphOps:
         
         # Generate embeddings for all nodes in one batch
         node_names = [node.name for node in nodes]
-        print(f"Generating embeddings for {len(node_names)} nodes in batch")
         embeddings = generate_embeddings(node_names)
         
         # Add embeddings to nodes
         for node_name, embedding in zip(node_names, embeddings):
             if embedding:
                 await self.neo4j_manager.add_embedding_to_vector_index(node_name, embedding, user_id)
-                print(f"Added embedding for node: {node_name}")
             else:
                 print(f"Failed to generate embedding for node: {node_name}")
 
@@ -97,28 +77,8 @@ class GraphOps:
             print(f"User {user_id} does not exist. Cannot add relationships.")
             return
 
-        print(f"Adding relationships to the graph for user ID: {user_id}")
         relationship_dicts = [rel.dict() for rel in relationships]
         await self.neo4j_manager.create_relationships(relationship_dicts, user_id)
-
-    async def add_node_with_embedding(self, node_name: str, user_id: str):
-        if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add node with embedding.")
-            return
-
-        print(f"Generating embedding for node: {node_name}")
-        embeddings = generate_embeddings([node_name])
-        if not embeddings[0]:
-            print("Failed to generate embeddings.")
-            return
-
-        node = NodeModel(
-            name=node_name,
-            properties={},  # Additional properties can be added here
-            embedding=embeddings[0]
-        )
-        await self.add_nodes([node], user_id)
-        await self.neo4j_manager.add_embedding_to_vector_index(node_name, embeddings[0], user_id)
 
     async def get_node_data(self, node_name: str, user_id: str) -> NodeModel:
         if not await self.user_exists(user_id):
@@ -144,6 +104,9 @@ class GraphOps:
                 for rel in relationships]
 
     async def text_similarity_search(self, query: str, user_id: str, limit: int = 5, index_name: str = "embeddings_index") -> Dict[str, Any]:
+        """
+        Perform a similarity search on the graph based on a text query. 
+        """
         if not await self.user_exists(user_id):
             print(f"User {user_id} does not exist. Cannot perform similarity search.")
             return {"query": query, "results": []}
@@ -168,11 +131,13 @@ class GraphOps:
         }
     
     async def update_graph(self, graph_update: NodesAndRelationshipsResponse, user_id: str):
+        """
+        Update the graph with new nodes and relationships
+        """
         if not await self.user_exists(user_id):
             print(f"User {user_id} does not exist. Cannot update graph.")
             return
 
-        print(f"Updating graph with new nodes and relationships for user ID: {user_id}")
         if graph_update.nodes:
             await self.add_nodes(graph_update.nodes, user_id)
         if graph_update.relationships:
@@ -357,10 +322,8 @@ class GraphOps:
 
     async def community_detection(self, user_id) -> None:
         """Main orchestrator for community detection process"""
-        print("Starting community detection")
         # Get ranked subgraphs
         subgraphs = await self.get_ranked_subgraphs(user_id)
-        print(f"Found {len(subgraphs)} subgraphs")
         
         # Format for LLM
         subgraphs_text = await self.format_subgraphs_for_llm(subgraphs)
@@ -370,4 +333,179 @@ class GraphOps:
         
         # Create community structure in graph
         await self.make_communities(user_id, community_structure, subgraphs)
-        print("Community structure created")
+
+
+
+class GraphContextRetriever:
+    def __init__(self, graph_ops: GraphOps):
+        self.graph_ops = graph_ops
+
+    async def get_rich_context(self, query: str, user_id: str, top_k: int = 5, max_hops: int = 2) -> str:
+        """
+        Get rich context from the graph based on a text query.
+        """
+        similar_nodes = await self.graph_ops.text_similarity_search(query=query, user_id=user_id, limit=top_k, index_name="embeddings_index")
+        context = await self.crawl_graph(similar_nodes['results'], max_hops, user_id)
+        return self.format_separated_context(context)
+
+    async def crawl_graph(self, start_nodes, max_hops, user_id):
+        """
+        Crawl the graph to get rich context.
+        """
+        context = {}
+        for node in start_nodes:
+            print(node)
+            await self.explore_node(node['nodeName'], context, max_hops, user_id)
+        return context
+
+    async def explore_node(self, node_name, context, hops_left, user_id):
+        if node_name in context or hops_left < 0:
+            return
+        
+        node_data = await self.graph_ops.get_node_data(node_name, user_id)
+        relationships = await self.graph_ops.get_node_relationships(node_name, user_id)
+        
+        context[node_name] = {
+            'perspective': node_data.perspective,
+            'properties': node_data.properties,
+            'relationships': []
+        }
+
+        for rel in relationships:
+            context[node_name]['relationships'].append(f"{rel.relation} -> {rel.target}")
+            if hops_left > 0:
+                await self.explore_node(rel.target, context, hops_left - 1, user_id)
+
+    def format_separated_context(self, context):
+        graph_structure = []
+        node_perspectives = []
+
+        for node, data in context.items():
+            for relationship in data['relationships']:
+                graph_structure.append(f"{node} -> {relationship.split(' -> ')[1]}")
+            
+            node_perspectives.append(f"### {node}")
+            node_perspectives.append(data['perspective'])
+            node_perspectives.append("")
+
+        formatted = "# User Knowledge Graph\n\n## Graph Structure\n```\n"
+        formatted += "\n".join(graph_structure)
+        formatted += "\n```\n\n## Node Perspectives\n\n"
+        formatted += "\n".join(node_perspectives)
+
+        return formatted
+    
+    async def get_relevant_graph_context(self, nodes: List[Node], user_id: str, max_hops: int = 2) -> str:
+        """
+        Get relevant subgraph context for the given nodes.
+        Similarity Search, then Graph Crawl to get subgraph based context.
+        """
+        context = "# Relevant Graph Context\n\n"
+        
+        # Check if there are any existing nodes in the graph
+        existing_nodes = await self.graph_ops.get_all_nodes(user_id)
+        if not existing_nodes:
+            print("No existing nodes in graph (t=0). Skipping context retrieval.")
+            return context
+        
+        print(f"Found {len(existing_nodes)} existing nodes in graph")
+        # print(f"Current nodes being processed: {[n.name for n in nodes]}")
+        
+        # Generate embeddings for all nodes in batch
+        node_names = [node.name for node in nodes]
+        print(f"Generating embeddings for {len(node_names)} nodes in batch")
+        embeddings = generate_embeddings(node_names)
+        
+        # Perform similarity searches concurrently but safely
+        similar_nodes = []
+        tasks = []
+        for node_name, embedding in zip(node_names, embeddings):
+            task = asyncio.create_task(
+                self.graph_ops.perform_similarity_search(
+                    query=node_name,
+                    embedding=embedding,
+                    user_id=user_id,
+                    limit=5
+                )
+            )
+            tasks.append(task)
+        
+        try:
+            results = await asyncio.gather(*tasks)
+            for result in results:
+                if result and result.get('results'):
+                    print(f"Found similar nodes for {result['query']}")
+                    similar_nodes.extend(result['results'])
+        except Exception as e:
+            print(f"Error during similarity search: {str(e)}")
+            return context
+        
+        if not similar_nodes:
+            print("No similar nodes found in existing graph.")
+            return context
+        
+        # Crawl the graph from similar nodes
+        subgraph = {}
+        for node in similar_nodes:
+            await self._explore_node(node_name = node['nodeName'], subgraph=subgraph, user_id=user_id, max_hops=max_hops)
+        
+        # Format the subgraph context
+        if subgraph:
+            context += "## Related Nodes and Relationships\n"
+            for node_name, data in subgraph.items():
+                context += f"\n### {node_name}\n"
+                context += f"Perspective: {data['perspective']}\n"
+                if data['relationships']:
+                    context += "Relationships:\n"
+                    for rel in data['relationships']:
+                        context += f"- {rel}\n"
+        
+        return context
+
+    async def _explore_node(self, node_name: str, subgraph: Dict, user_id: str, max_hops: int):
+        """Helper method to explore node relationships for context building"""
+        if node_name in subgraph or max_hops < 0:
+            return
+        
+        node_data = await self.graph_ops.get_node_data(node_name, user_id)
+        relationships = await self.graph_ops.get_node_relationships(node_name, user_id)
+        
+        subgraph[node_name] = {
+            'perspective': node_data.perspective,
+            'relationships': []
+        }
+        
+        for rel in relationships:
+            subgraph[node_name]['relationships'].append(
+                f"{rel.source} {rel.relation} {rel.target}"
+            )
+            if max_hops > 0:
+                next_node = rel.target if rel.source == node_name else rel.source
+                await self._explore_node(next_node, subgraph, user_id, max_hops - 1)
+
+    async def get_entire_graph_context(self) -> str:
+        """
+        Get graph context relative to the nodes, and user psyche.
+        Currently gets the entire graph context, which is not efficient.
+        """
+        # TODO: This is not efficient, only get the context for the nodes that are relevant.
+        # TODO: Use more efficient sophisticated context retrieval techniques like graph traversal, etc.
+        # TODO: Use vector search to get the context for the nodes.
+    
+        nodes = await self.graph_ops.get_all_nodes(self.user_id)
+        relationships = await self.graph_ops.get_all_relationships(self.user_id)
+       
+        context = "# Current Knowledge Graph\n\n## Nodes\n"
+        for node in nodes:
+            context += f"- {node.name}: {node.perspective}\n"
+        
+        context += "\n## Relationships\n"
+        for rel in relationships:
+            context += f"- {rel.source} {rel.relation} {rel.target}\n"
+        
+        return context
+
+    async def get_graph_context(self, query: str):
+        print(f"Getting graph context for query: {query}")
+        results = await self.graph_ops.perform_similarity_search(query=query, user_id=self.user_id)
+        return results

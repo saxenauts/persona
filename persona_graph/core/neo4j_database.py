@@ -15,7 +15,6 @@ class Neo4jConnectionManager:
             self.uri,
             auth=basic_auth(self.username, self.password)
         )
-        # self.ensure_vector_index_task = self.ensure_vector_index()
 
     async def wait_for_neo4j(self, timeout=60):
         start_time = time.time()
@@ -35,6 +34,15 @@ class Neo4jConnectionManager:
 
     async def close(self):
         await self.driver.close()
+
+
+    async def clean_graph(self) -> None:
+        # Delete all nodes and relationships
+        async with self.driver.session() as session:
+            await session.run("MATCH (n) DETACH DELETE n")
+
+        # Drop the vector index
+        await self.drop_vector_index("embeddings_index")
 
     async def check_node_exists(self, node_name: str, node_type: str, user_id: str) -> bool:
         query = """
