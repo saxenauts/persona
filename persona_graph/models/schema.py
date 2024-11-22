@@ -1,5 +1,5 @@
 """
-Schema and Pydantic Models for the Graph Library Ops. TODO put in an apt folder"
+Schema and Pydantic Models for the Graph Library Ops."
 """
 
 from pydantic import BaseModel, Field
@@ -34,7 +34,7 @@ class NodeModel(BaseModel):
                     "current_context": "Research",
                     "frequency": 10
                 },
-                "embedding": [0.1, 0.2, ...]  # Simplified example
+                "embedding": [0.1, 0.2, 0.3]
             }
         }
 
@@ -63,8 +63,8 @@ class GraphUpdateModel(BaseModel):
         json_schema_extra = {
             "example": {
                 "nodes": [
-                    {"name": "Node1", "properties": {"frequency": 1}, "embedding": [0.1, 0.2, ...]},
-                    {"name": "Node2", "properties": {"frequency": 1}, "embedding": [0.1, 0.2, ...]}
+                    {"name": "Node1", "properties": {"frequency": 1}, "embedding": [0.1, 0.2, 0.3]},
+                    {"name": "Node2", "properties": {"frequency": 1}, "embedding": [0.1, 0.2, 0.3]}
                 ],
                 "relationships": [
                     {"source": "Node1", "target": "Node2", "relation": "CONNECTED_TO"}
@@ -133,15 +133,20 @@ class GraphSchema(BaseModel):
     is_seed: bool = False
     created_at: Optional[str] = None
 
-    @classmethod
-    def model_validate(cls, obj):
-        if isinstance(obj, dict) and 'created_at' in obj:
-            obj['created_at'] = str(obj['created_at'])
-        return super().model_validate(obj)
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Gaming Preferences",
+                "description": "Schema for tracking user gaming preferences",
+                "attributes": ["CURRENT_GAME", "FAVORITE_GENRE", "PLAYTIME"],
+                "relationships": ["PLAYS", "PREFERS", "COMPLETED"],
+                "is_seed": False
+            }
+        }
 
 class LearnRequest(BaseModel):
     user_id: str
-    schema: GraphSchema
+    graph_schema: GraphSchema
     description: str
 
 class LearnResponse(BaseModel):
@@ -196,3 +201,60 @@ def create_dynamic_schema(output_schema: Dict[str, Any]) -> Dict[str, Any]:
     }
     
     return schema
+
+class CustomNodeData(BaseModel):
+    name: str
+    perspective: Optional[str] = None
+    properties: Optional[Dict[str, str]] = Field(default_factory=dict)
+    embedding: Optional[List[float]] = Field(None, description="Embedding vector for the node, if applicable")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Quantum Computing",
+                "properties": {
+                    "current_context": "Research",
+                    "frequency": 10
+                },
+                "embedding": [0.1, 0.2, 0.3]
+            }
+        }
+
+class CustomRelationshipData(BaseModel):
+    source: str
+    target: str
+    relation_type: str
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+class CustomGraphUpdate(BaseModel):
+    nodes: List[CustomNodeData]
+    relationships: List[CustomRelationshipData]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "nodes": [
+                    {
+                        "name": "SpotifyListening",
+                        "data": {
+                            "track_name": "Bohemian Rhapsody",
+                            "artist": "Queen",
+                            "listen_count": 42,
+                            "last_played": "2024-03-15T14:30:00Z"
+                        },
+                        "labels": ["Music", "UserActivity"]
+                    }
+                ],
+                "relationships": [
+                    {
+                        "source": "SpotifyListening",
+                        "target": "user123",
+                        "relation_type": "LISTENED_BY",
+                        "data": {
+                            "timestamp": "2024-03-15T14:30:00Z",
+                            "duration_ms": 354000
+                        }
+                    }
+                ]
+            }
+        }

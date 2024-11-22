@@ -16,10 +16,10 @@ class LearnService:
         The schema will be used by the constructor when processing user data.
         """
         # Store the new schema
-        schema_id = await self.graph_ops.store_schema(learn_request.schema)
+        schema_id = await self.graph_ops.store_schema(learn_request.graph_schema)
         
         return LearnResponse(
             status="Success",
             schema_id=schema_id,
-            details=f"Schema '{learn_request.schema.name}' stored successfully. It will be used in future graph construction."
+            details=f"Schema '{learn_request.graph_schema.name}' stored successfully. It will be used in future graph construction."
         )

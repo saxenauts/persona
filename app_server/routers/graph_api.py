@@ -12,8 +12,8 @@ from persona_graph.services.ingest_service import IngestService
 from persona_graph.services.rag_service import RAGService
 from persona_graph.services.learn_service import LearnService
 from persona_graph.services.ask_service import AskService
-from persona_graph.services.byoa import PersonalizeServiceBYOA
-from persona_graph.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, PersonalizeRequest, PersonalizeResponse, GraphSchema
+from persona_graph.services.custom_data_service import CustomDataService
+from persona_graph.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
 
 
 router = APIRouter()
@@ -93,14 +93,22 @@ async def ask_insights(ask_request: AskRequest):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
 
-@router.post("/byoa", response_model=PersonalizeResponse, status_code=status.HTTP_200_OK)
-async def personalize_user(personalize_request: PersonalizeRequest):
+@router.post("/custom-data/{user_id}", status_code=status.HTTP_200_OK)
+async def update_custom_data(user_id: str, update: CustomGraphUpdate):
+    """
+    Update or create custom structured data in the graph
+    """
     try:
-        response = await PersonalizeServiceBYOA.personalize_user(personalize_request)
-        return response
+        graph_ops = await GraphOps().__aenter__()
+        custom_service = CustomDataService(graph_ops)
+        result = await custom_service.update_custom_data(user_id, update)
+        return result
     except Exception as e:
-          raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await graph_ops.__aexit__(None, None, None)
 
 
 # Test the constructor flow
@@ -185,7 +193,7 @@ async def test_learn_flow():
         # Create learn request
         learn_request = LearnRequest(
             user_id="test_user",
-            schema=test_schema,
+            graph_schema=test_schema,
             description="Understanding user's food preferences and eating patterns"
         )
 
@@ -254,6 +262,64 @@ async def test_ask_flow():
 
     except Exception as e:
         print(f"Error during ask test flow: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        if graph_ops:
+            print("Closing graph ops...")
+            await graph_ops.__aexit__(None, None, None)
+
+
+@router.post("/test-custom-data-flow", status_code=status.HTTP_200_OK)
+async def test_custom_data_flow():
+    """
+    Test the custom data flow with gaming preferences
+    """
+    graph_ops = None
+    try:
+        # Initialize GraphOps
+        graph_ops = await GraphOps().__aenter__()
+        custom_service = CustomDataService(graph_ops)
+
+        # Create test data
+        test_update = CustomGraphUpdate(
+            nodes=[
+                CustomNodeData(
+                    name="current_gaming_preference",
+                    properties={
+                        "favorite_genre": "RPG",
+                        "current_game": "Baldur's Gate 3",
+                        "hours_played": 120,
+                        "last_played": "2024-03-15T14:30:00Z"
+                    }
+                )
+            ],
+            relationships=[
+                RelationshipModel(
+                    source="current_gaming_preference",
+                    target="test_user",
+                    relation="PREFERENCE_OF"
+                )
+            ]
+        )
+
+        # Test the custom data service
+        result = await custom_service.update_custom_data("test_user", test_update)
+        
+        # Verify data was stored by retrieving the node
+        node_data = await graph_ops.get_node_data("current_gaming_preference", "test_user")
+        
+        if not node_data:
+            raise ValueError("Custom data was not stored successfully")
+
+        return {
+            "status": "Success",
+            "update_result": result,
+            "stored_data": node_data
+        }
+
+    except Exception as e:
+        print(f"Error during custom data test flow: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:
