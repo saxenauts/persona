@@ -213,3 +213,50 @@ async def test_learn_flow():
         if graph_ops:
             print("Closing graph ops...")
             await graph_ops.__aexit__(None, None, None)
+
+
+
+@router.post("/test-ask-flow", status_code=status.HTTP_200_OK)
+async def test_ask_flow():
+    graph_ops = None
+    try:
+        # Initialize GraphOps
+        graph_ops = await GraphOps().__aenter__()
+        ask_service = AskService(graph_ops)
+
+        # Create a test ask request for food preferences
+        test_request = AskRequest(
+            user_id="test_user",
+            query="What are this user's top 3 favorite topics in space?",
+            output_schema={
+                "favorite_topics": [
+                    {
+                        "topic": "Boosters",  # example
+                        "evidence": ["Talks about boosters a lot", "Watches SpaceX launches"]  # example
+                    }
+                ],
+                "analysis": {
+                    "primary_topic": "Boosters",  # example
+                    "frequency": "3 times per week",  # example
+                    "evidence": ["Talks about boosters a lot", "Watches SpaceX launches"]  # example
+                }
+            }
+        )
+
+        # Test the ask service
+        response = await ask_service.ask_insights(test_request)
+        
+        return {
+            "status": "Success",
+            "query": test_request.query,
+            "result": response.result
+        }
+
+    except Exception as e:
+        print(f"Error during ask test flow: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        if graph_ops:
+            print("Closing graph ops...")
+            await graph_ops.__aexit__(None, None, None)

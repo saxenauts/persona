@@ -1,22 +1,26 @@
-from persona_graph.core.graph_ops import GraphOps, GraphContextRetriever
-from persona_graph.llm.llm_graph import generate_response_with_context
+from persona_graph.core.rag_interface import RAGInterface
 from persona_graph.models.schema import AskRequest, AskResponse
-
-# TODO: Feed a schema to the LLM to generate the response. 
+from persona_graph.core.graph_ops import GraphOps
+from persona_graph.llm.llm_graph import generate_structured_insights
+from typing import Dict, Any
+import instructor
+from openai import AsyncOpenAI
 
 class AskService:
     def __init__(self, graph_ops: GraphOps):
         self.graph_ops = graph_ops
-        self.graph_context_retriever = GraphContextRetriever(self.graph_ops)
-
+        self.rag = RAGInterface(None)  # Will be set per request
+        
     async def ask_insights(self, ask_request: AskRequest) -> AskResponse:
-        user_id = ask_request.user_id
-        query = ask_request.query
-
-        # Retrieve relevant context from the graph
-        context = await self.graph_context_retriever.get_graph_context(query)
-
-        # Generate structured insights using LLM
-        insights = await generate_response_with_context(query, context)
-
-        return AskResponse(insights=insights)
+        """
+        Generate structured insights based on the requested schema
+        """
+        self.rag.user_id = ask_request.user_id
+        
+        # Get context using existing RAG functionality
+        context = await self.rag.get_context(ask_request.query)
+        
+        instructor_response = await generate_structured_insights(ask_request, context)
+        
+        # Convert the instructor response to a dictionary
+        return AskResponse(result=instructor_response)

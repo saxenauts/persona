@@ -1,8 +1,8 @@
 import json
 import openai
-from typing import List, Tuple, Dict
-from persona_graph.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES
-from persona_graph.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure
+from typing import List, Tuple, Dict, Any
+from persona_graph.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES, GENERATE_STRUCTURED_INSIGHTS
+from persona_graph.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure, AskResponse, AskRequest, AskResponseInstructor, create_dynamic_schema
 from app_server.config import config
 import instructor
 from instructor import OpenAISchema
@@ -117,3 +117,38 @@ async def detect_communities(subgraphs_text: str) -> CommunityStructure:
     except Exception as e:
         print(f"Error in community detection: {str(e)}")
         return CommunityStructure(communityHeaders=[])
+    
+
+async def generate_structured_insights(ask_request: AskRequest, context: str) -> Dict[str, Any]:
+    """
+    Generate structured insights based on the provided context and query using OpenAI's JSON mode
+    """
+    json_schema = create_dynamic_schema(ask_request.output_schema)
+    
+    prompt = f"""
+    Based on this context from the knowledge graph:
+    {context}
+    
+    Answer this query about the user: {ask_request.query}
+    
+    Provide your response following the example structure:
+    {json.dumps(ask_request.output_schema, indent=2)}
+    """
+
+    print("Prompt: ", prompt)
+
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": GENERATE_STRUCTURED_INSIGHTS},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        
+        return json.loads(response.choices[0].message.content)
+        
+    except Exception as e:
+        print(f"Error in generate_structured_insights: {e}")
+        return {k: [] if isinstance(v, list) else {} for k, v in ask_request.output_schema.items()}
