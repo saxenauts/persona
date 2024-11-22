@@ -6,7 +6,6 @@ Luna Memory's BYOA (Bring Your Own Algorithm) system allows you to transform sta
 
 - Learn anything about your users through natural language
 - Ask complex questions about user behavior and preferences
-- Let users define their own personalization algorithms
 - Generate new business insights from existing data
 
 ## Real-World Example: CalorieSnap App
@@ -42,7 +41,7 @@ ORDER BY frequency DESC;
 
 ### Luna Memory Enhancement
 
-#### 1. Learning User Patterns
+#### 1. Learn Anything - Learning User Patterns
 
 ```json
 POST /learn
@@ -105,7 +104,7 @@ POST /learn
 }
 ```
 
-#### 2. Generating Business Insights
+#### 2. Ask Anything - Generating User Insights
 
 ```json
 POST /ask
@@ -155,49 +154,7 @@ POST /ask
 }
 ```
 
-#### 3. User-Defined Personalization
-
-```json
-POST /byoa/user
-{
-    "user_id": "user_123",
-    "expression": "I want healthy recipes that taste like my favorite restaurant dishes but are easier to make at home",
-    "context": {
-        "time_available": 30,
-        "cooking_skill": "intermediate",
-        "kitchen_equipment": ["basic", "instant_pot"]
-    }
-}
-
-// Luna's personalized response
-{
-    "recommendations": [
-        {
-            "recipe": "15-minute Salmon Bowl",
-            "match_reasoning": {
-                "flavor_profile": "Matches user's preference for Nobu's Black Cod",
-                "health_adaptations": [
-                    "40% less sodium",
-                    "Added vegetables",
-                    "Portion-optimized"
-                ],
-                "convenience_factors": [
-                    "Single pan",
-                    "Prep time: 15 mins",
-                    "Basic ingredients"
-                ]
-            },
-            "user_context": {
-                "previous_success": "Has successfully made similar rice bowls",
-                "ingredient_familiarity": "85%",
-                "predicted_satisfaction": "92%"
-            }
-        }
-    ]
-}
-```
-
-## Business Value Demonstration
+## Business Value
 
 ### 1. Dynamic Learning
 - **Traditional:** Fixed categories, manual feature engineering
@@ -219,58 +176,3 @@ POST /byoa/user
   - Identifies upsell opportunities
   - Predicts churn risk
   - Discovers new market segments
-
-### 4. User Empowerment
-- **Traditional:** Fixed feature set
-- **Luna Memory:** Users define their own algorithms
-  - Natural language interface
-  - Contextual understanding
-  - Adaptive recommendations
-
-## Integration Example
-
-```javascript
-// Frontend implementation
-async function handleFoodLog(imageData, userId) {
-    // 1. Regular calorie logging
-    const basicLog = await logFoodItem(imageData);
-    
-    // 2. Luna Memory enhancement
-    const lunaInsights = await luna.learn({
-        user_id: userId,
-        interaction_type: "food_log",
-        data: {
-            ...basicLog,
-            context: {
-                time_of_day: new Date(),
-                user_mood: await getUserMoodData(),
-                location_type: "home/restaurant"
-            }
-        }
-    });
-    
-    // 3. Generate personalized recommendations
-    const recommendations = await luna.ask({
-        user_id: userId,
-        question: "What should we recommend to this user right now?",
-        context: {
-            time_of_day: new Date(),
-            recent_interactions: lunaInsights
-        }
-    });
-    
-    return {
-        basicLog,
-        personalizedRecommendations: recommendations
-    };
-}
-```
-
-## Getting Started
-
-1. Get your API key from Luna Memory dashboard
-2. Define your initial learning objectives
-3. Start sending interaction data
-4. Query for insights and recommendations
-
-Need help? Contact us at developer-support@lunamemory.ai

@@ -160,13 +160,6 @@ class AskResponse(BaseModel):
 class AskResponseInstructor(OpenAISchema):
     result: Dict[str, Any]
 
-class PersonalizeRequest(BaseModel):
-    user_id: str
-    personalization_criteria: Dict[str, Any]
-
-class PersonalizeResponse(BaseModel):
-    status: str
-    details: str
 
 def create_dynamic_schema(output_schema: Dict[str, Any]) -> Dict[str, Any]:
     """
