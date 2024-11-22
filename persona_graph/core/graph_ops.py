@@ -2,7 +2,7 @@ from persona_graph.core.neo4j_database import Neo4jConnectionManager
 from persona_graph.llm.embeddings import generate_embeddings
 from persona_graph.models.schema import (
     NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse, 
-    CommunityStructure, Subgraph, Node, Relationship
+    CommunityStructure, Subgraph, Node, Relationship, GraphSchema
 )
 from typing import List, Dict, Any
 import asyncio
@@ -333,6 +333,12 @@ class GraphOps:
         
         # Create community structure in graph
         await self.make_communities(user_id, community_structure, subgraphs)
+
+    async def store_schema(self, schema: GraphSchema) -> str:
+        return await self.neo4j_manager.store_schema(schema)
+
+    async def get_all_schemas(self) -> List[GraphSchema]:
+        return await self.neo4j_manager.get_all_schemas()
 
 
 

@@ -122,3 +122,45 @@ class CommunityHeader(OpenAISchema):
 
 class CommunityStructure(OpenAISchema):
     communityHeaders: List[CommunityHeader]
+
+# BYOA - Learn Anything Ask Anything Personalize Anything
+
+class GraphSchema(BaseModel):
+    name: str
+    description: str
+    attributes: List[str]
+    relationships: List[str]
+    is_seed: bool = False
+    created_at: Optional[str] = None
+
+    @classmethod
+    def model_validate(cls, obj):
+        if isinstance(obj, dict) and 'created_at' in obj:
+            obj['created_at'] = str(obj['created_at'])
+        return super().model_validate(obj)
+
+class LearnRequest(BaseModel):
+    user_id: str
+    schema: GraphSchema
+    description: str
+
+class LearnResponse(BaseModel):
+    status: str
+    schema_id: str
+    details: str
+
+class AskRequest(BaseModel):
+    user_id: str
+    query: str
+
+class AskResponse(BaseModel):
+    insights: Dict[str, Any]
+
+class PersonalizeRequest(BaseModel):
+    user_id: str
+    personalization_criteria: Dict[str, Any]
+
+class PersonalizeResponse(BaseModel):
+    status: str
+    details: str
+

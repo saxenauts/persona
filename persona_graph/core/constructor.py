@@ -9,32 +9,17 @@ from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 import asyncio
 
-# Schema constants
-# Static for now
-NODE_TYPES = [
-    'CORE_PSYCHE',
-    'STABLE_INTEREST', 
-    'TEMPORAL_INTEREST',
-    'ACTIVE_INTEREST'
-]
-
-RELATIONSHIP_TYPES = [
-    'PART_OF',          # Hierarchical relationships
-    'RELATES_TO',       # Cross-domain connections
-    'LEADS_TO',         # Learning progression
-    'INFLUENCED_BY',    # Impact relationships
-    'SIMILAR_TO'        # Similarity connections
-]
-
-
 class GraphConstructor:
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.graph_ops = None
+        self.schemas = []
 
     async def __aenter__(self):
         self.graph_ops = await GraphOps().__aenter__()
         self.graph_context_retriever = GraphContextRetriever(self.graph_ops)
+        # Load all schemas
+        self.schemas = await self.graph_ops.get_all_schemas()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -79,23 +64,22 @@ class GraphConstructor:
         return preprocessed
     
     async def get_schema_context(self) -> str:
-        """
-        Returns the static graph schema types and existing core/stable nodes as LLM context.
-        """
-        # Get existing core and stable nodes
-        print(f"Getting schema context for user {self.user_id}")
+        """Returns all schemas as LLM context"""
+        context = "# Graph Schemas\n\n"
         
-        context = "# Graph Schema\n\n"
-        
-        # Add node types
-        context += "## Node Types\n"
-        for node_type in NODE_TYPES:
-            context += f"- {node_type}\n"
-        
-        # Add relationship types
-        context += "\n## Relationship Types\n"
-        for rel_type in RELATIONSHIP_TYPES:
-            context += f"- {rel_type}\n"
+        for schema in self.schemas:
+            context += f"## Schema: {schema.name}\n"
+            context += f"Description: {schema.description}\n\n"
+            
+            context += "### Attributes (Node Types)\n"
+            for attr in schema.attributes:
+                context += f"- {attr}\n"
+            
+            context += "\n### Relationships\n"
+            for rel in schema.relationships:
+                context += f"- {rel}\n"
+            
+            context += "\n---\n\n"
         
         return context
 

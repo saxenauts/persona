@@ -10,10 +10,17 @@ from persona_graph.models.schema import UserCreate, IngestData, RAGQuery, RAGRes
 from persona_graph.services.user_service import UserService
 from persona_graph.services.ingest_service import IngestService
 from persona_graph.services.rag_service import RAGService
-import random
+from persona_graph.services.learn_service import LearnService
+from persona_graph.services.ask_service import AskService
+from persona_graph.services.byoa import PersonalizeServiceBYOA
+from persona_graph.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, PersonalizeRequest, PersonalizeResponse, GraphSchema
+
 
 router = APIRouter()
 
+@router.get("/version")
+def get_version():
+    return {"version": "1.0.0"}
 
 @router.post("/users", status_code=201)
 async def create_user(user: UserCreate):
@@ -47,11 +54,6 @@ async def rag_query(user_id: str, query: RAGQuery):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/version")
-def get_version():
-    return {"version": "1.0.0"}  # Replace with your actual version number
-
-
 @router.post("/rag-query", status_code=status.HTTP_200_OK)
 async def rag_query(query: str, user_id: str):
     try:
@@ -75,6 +77,30 @@ async def rag_query_vector(query: str, user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         await rag.close()
+
+@router.post("/learn", response_model=LearnResponse, status_code=status.HTTP_200_OK)
+async def learn_user(learn_request: LearnRequest):
+    try:
+        response = await LearnService.learn_user(learn_request)
+        return response
+    except Exception as e:
+          raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/ask", response_model=AskResponse, status_code=status.HTTP_200_OK)
+async def ask_insights(ask_request: AskRequest):
+    try:
+        response = await AskService.ask_insights(ask_request)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/byoa", response_model=PersonalizeResponse, status_code=status.HTTP_200_OK)
+async def personalize_user(personalize_request: PersonalizeRequest):
+    try:
+        response = await PersonalizeServiceBYOA.personalize_user(personalize_request)
+        return response
+    except Exception as e:
+          raise HTTPException(status_code=500, detail=str(e))
 
 
 # Test the constructor flow
@@ -128,3 +154,62 @@ async def test_constructor_flow():
         if graph_constructor:
             print("Closing graph constructor...")
             await graph_constructor.__aexit__(None, None, None)
+
+
+@router.post("/test-learn-flow", status_code=status.HTTP_200_OK)
+async def test_learn_flow():
+    graph_ops = None
+    try:
+        # Initialize GraphOps
+        graph_ops = await GraphOps().__aenter__()
+        learn_service = LearnService(graph_ops)
+
+        # Create a test schema
+        test_schema = GraphSchema(
+            name="Food Preferences",
+            description="Learn about user's food preferences and eating patterns",
+            attributes=[
+                'FAVORITE_CUISINE',
+                'DIETARY_RESTRICTION',
+                'MEAL_TIMING',
+                'FLAVOR_PREFERENCE'
+            ],
+            relationships=[
+                'PAIRS_WELL_WITH',
+                'AVOIDS_WITH',
+                'PREFERS_BEFORE',
+                'PREFERS_AFTER'
+            ]
+        )
+
+        # Create learn request
+        learn_request = LearnRequest(
+            user_id="test_user",
+            schema=test_schema,
+            description="Understanding user's food preferences and eating patterns"
+        )
+
+        # Test the learn service
+        response = await learn_service.learn_user(learn_request)
+        
+        # Verify schema was stored by trying to retrieve it
+        all_schemas = await graph_ops.get_all_schemas()
+        stored_schema = next((s for s in all_schemas if s.name == test_schema.name), None)
+
+        if not stored_schema:
+            raise ValueError("Schema was not stored successfully")
+
+        return {
+            "status": "Success",
+            "schema_id": response.schema_id,
+            "stored_schema": stored_schema.model_dump()
+        }
+
+    except Exception as e:
+        print(f"Error during learn test flow: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        if graph_ops:
+            print("Closing graph ops...")
+            await graph_ops.__aexit__(None, None, None)

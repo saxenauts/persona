@@ -5,6 +5,7 @@ import time
 from persona_graph.llm.embeddings import generate_embeddings
 import json
 from app_server.config import config
+from persona_graph.models.schema import GraphSchema
 
 class Neo4jConnectionManager:
     def __init__(self):
@@ -312,3 +313,31 @@ class Neo4jConnectionManager:
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
         print(f"User {user_id} and all associated nodes deleted successfully.")
+
+    async def get_all_schemas(self) -> List[GraphSchema]:
+        query = """
+        MATCH (s:Schema)
+        RETURN s
+        ORDER BY s.created_at DESC
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query)
+            schemas = []
+            for record in await result.data():
+                schema_dict = dict(record['s'])
+                # Convert datetime to string
+                if 'created_at' in schema_dict:
+                    schema_dict['created_at'] = str(schema_dict['created_at'])
+                schemas.append(GraphSchema(**schema_dict))
+            return schemas
+    
+    async def store_schema(self, schema: GraphSchema) -> str:
+        query = """
+        CREATE (s:Schema {name: $name, description: $description, attributes: $attributes, relationships: $relationships, is_seed: $is_seed, created_at: datetime()})
+        RETURN s.name AS schema_id
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, schema.dict(exclude={'created_at'}))
+            record = await result.single()
+            return record['schema_id']
+        
