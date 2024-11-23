@@ -1,3 +1,7 @@
+def read_instructions():
+    return INSTRUCTIONS
+
+INSTRUCTIONS = """
 # Innernet User Memory Instructions
 
 ## Domain: Fashion Persona
@@ -37,3 +41,4 @@ The system should be able to answer queries such as:
 - "How has the user's style evolved over the past year?"
 - "What are three new brands this user might like?"
 - "Suggest an outfit for a casual weekend outing based on the user's preferences."
+"""

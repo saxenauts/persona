@@ -1,7 +1,7 @@
 import openai
 from typing import List, Dict, Any
 import json
-from app.config import config
+from app_server.config import config
 
 # openai.api_key = config.MACHINE_LEARNING.OPENAI_KEY
 openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_KEY)

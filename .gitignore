@@ -2,4 +2,8 @@ __pycache__
 *.pyc
 .env
 neo4j-data/
-app/config_local.py
+persona_graph/config_local.py
+docs/tree.md
+.venv
+.pytest_cache
+.DS_Store

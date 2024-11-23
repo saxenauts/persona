@@ -2,9 +2,10 @@ from typing import List, Dict, Any, Union, Tuple
 from neo4j import AsyncGraphDatabase, basic_auth
 import asyncio
 import time
-from app.openai.embeddings import generate_embeddings
+from persona_graph.llm.embeddings import generate_embeddings
 import json
-from app.config import config
+from app_server.config import config
+from persona_graph.models.schema import GraphSchema
 
 class Neo4jConnectionManager:
     def __init__(self):
@@ -15,7 +16,6 @@ class Neo4jConnectionManager:
             self.uri,
             auth=basic_auth(self.username, self.password)
         )
-        self.ensure_vector_index_task = self.ensure_vector_index()
 
     async def wait_for_neo4j(self, timeout=60):
         start_time = time.time()
@@ -35,6 +35,15 @@ class Neo4jConnectionManager:
 
     async def close(self):
         await self.driver.close()
+
+
+    async def clean_graph(self) -> None:
+        # Delete all nodes and relationships
+        async with self.driver.session() as session:
+            await session.run("MATCH (n) DETACH DELETE n")
+
+        # Drop the vector index
+        await self.drop_vector_index("embeddings_index")
 
     async def check_node_exists(self, node_name: str, node_type: str, user_id: str) -> bool:
         query = """
@@ -176,7 +185,7 @@ class Neo4jConnectionManager:
         CALL db.index.vector.queryNodes($indexName, 5, $embedding)
         YIELD node, score
         WHERE node.UserId = $user_id
-        RETURN id(node) AS nodeId, node.name AS nodeName, score
+        RETURN elementId(node) AS nodeId, node.name AS nodeName, score
         ORDER BY score DESC
         """
         results = []
@@ -281,6 +290,7 @@ class Neo4jConnectionManager:
         query = """
         MERGE (u:User {id: $user_id})
         """
+        print("URI: ", self.uri)
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
         print(f"User {user_id} created successfully.")
@@ -303,3 +313,31 @@ class Neo4jConnectionManager:
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
         print(f"User {user_id} and all associated nodes deleted successfully.")
+
+    async def get_all_schemas(self) -> List[GraphSchema]:
+        query = """
+        MATCH (s:Schema)
+        RETURN s
+        ORDER BY s.created_at DESC
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query)
+            schemas = []
+            for record in await result.data():
+                schema_dict = dict(record['s'])
+                # Convert datetime to string
+                if 'created_at' in schema_dict:
+                    schema_dict['created_at'] = str(schema_dict['created_at'])
+                schemas.append(GraphSchema(**schema_dict))
+            return schemas
+    
+    async def store_schema(self, schema: GraphSchema) -> str:
+        query = """
+        CREATE (s:Schema {name: $name, description: $description, attributes: $attributes, relationships: $relationships, is_seed: $is_seed, created_at: datetime()})
+        RETURN s.name AS schema_id
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, schema.dict(exclude={'created_at'}))
+            record = await result.single()
+            return record['schema_id']
+        
