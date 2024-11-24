@@ -30,7 +30,7 @@ class Database(BaseModel):
 
     @property
     def URI(self) -> str:
-        """Database URI for asyncpg"""
+        """Database URI for asyncpg."""
         return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.HOSTNAME}:{self.PORT}/{self.NAME}"
 
     @property
@@ -40,9 +40,9 @@ class Database(BaseModel):
 
 class Neo4j(BaseModel):
     """Neo4j configuration"""
-    URI: str = Field(environ.get("NEO4J_URI", "neo4j://neo4j:7687"), description="Neo4j URI")
-    USER: str = Field("neo4j", description="Neo4j username")
-    PASSWORD: str = Field("passwordz", description="Neo4j password")
+    URI: str = Field(environ.get("URI_NEO4J", ""), description="Neo4j URI")
+    USER: str = Field(environ.get("USER_NEO4J", ""), description="Neo4j username")
+    PASSWORD: str = Field(environ.get("PASSWORD_NEO4J", ""), description="Neo4j password")
 
 class ML(BaseModel):
     """Machine Learning configuration"""
