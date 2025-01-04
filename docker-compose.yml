@@ -1,7 +1,7 @@
 version: '3.9'
 services:
   neo4j:
-    container_name: persona-graph-neo4j
+    container_name: luna9-neo4j
     image: neo4j:latest
     restart: always
     env_file:
@@ -13,7 +13,7 @@ services:
       - ./neo4j-data:/data
   
   app:
-    container_name: persona-graph-app
+    container_name: luna9-app
     build: .
     volumes:
       - ./persona_graph:/app/persona_graph

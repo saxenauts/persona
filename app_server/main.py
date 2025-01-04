@@ -6,6 +6,7 @@ from persona_graph.core.graph_ops import GraphOps
 from persona_graph.core.migrations import ensure_seed_schemas
 
 from app_server.routers.graph_api import router as graph_ops_router
+from app_server.routers.chat_api import router as chat_api_router
 from app_server.config import BaseConfig
 
 config = BaseConfig()
@@ -27,3 +28,4 @@ async def startup_event():
 
 
 app.include_router(graph_ops_router, prefix="/api/v1")
+app.include_router(chat_api_router, prefix="/api/v1")
