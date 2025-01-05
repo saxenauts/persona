@@ -12,6 +12,9 @@ class Neo4jConnectionManager:
         self.uri = config.NEO4J.URI
         self.username = config.NEO4J.USER
         self.password = config.NEO4J.PASSWORD
+        print("URI: ", self.uri)
+        print("Username: ", self.username)
+        print("Password: ", self.password)
         self.driver = AsyncGraphDatabase.driver(
             self.uri,
             auth=basic_auth(self.username, self.password)

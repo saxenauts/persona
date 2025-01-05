@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Dict, Any
-from persona_graph.chat import ChatAPI
+from persona_graph.chat.interface import ChatAPI
 from persona_graph.chat.models import Message, Conversation
 from pydantic import BaseModel
 

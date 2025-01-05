@@ -93,7 +93,7 @@ class Neo4jChatStorage(ChatStorageInterface):
                     start_time=start_time.isoformat(),
                     end_time=end_time.isoformat()
                 )
-                messages = []
+                messages = [] # TODO: fix this
                 async for record in result:
                     message_data = record["m"]
                     messages.append(Message(
@@ -105,4 +105,77 @@ class Neo4jChatStorage(ChatStorageInterface):
                 return messages
         except Exception as e:
             print(f"Error retrieving messages by timerange: {e}")
-            return [] 
+            return []
+
+    async def store_message(self, user_id: str, conversation_id: str, message: Message) -> bool:
+        """Store a single message in a conversation"""
+        query = """
+        MATCH (c:Conversation {id: $conversation_id, user_id: $user_id})
+        CREATE (m:Message {
+            id: $message_id,
+            role: $role,
+            content: $content,
+            timestamp: datetime($timestamp),
+            metadata: $metadata
+        })
+        CREATE (c)-[:CONTAINS]->(m)
+        RETURN m.id
+        """
+        try:
+            async with self.neo4j_manager.driver.session() as session:
+                result = await session.run(
+                    query,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    message_id=str(uuid.uuid4()),
+                    role=message.role,
+                    content=message.content,
+                    timestamp=message.timestamp.isoformat(),
+                    metadata=message.metadata
+                )
+                return bool(result.single())
+        except Exception as e:
+            print(f"Error storing message: {e}")
+            return False
+
+    async def get_conversation(self, user_id: str, conversation_id: str) -> Optional[Conversation]:
+        """Retrieve a complete conversation"""
+        query = """
+        MATCH (c:Conversation {id: $conversation_id, user_id: $user_id})
+        OPTIONAL MATCH (c)-[:CONTAINS]->(m:Message)
+        RETURN c, collect(m) as messages
+        """
+        try:
+            async with self.neo4j_manager.driver.session() as session:
+                result = await session.run(
+                    query,
+                    user_id=user_id,
+                    conversation_id=conversation_id
+                )
+                record = await result.single()
+                if not record:
+                    return None
+
+                conv_data = record["c"]
+                messages = []
+                
+                for msg_data in record["messages"]:
+                    if msg_data:  # Skip if message is null (from OPTIONAL MATCH)
+                        messages.append(Message(
+                            role=msg_data["role"],
+                            content=msg_data["content"],
+                            timestamp=datetime.fromisoformat(msg_data["timestamp"]),
+                            metadata=msg_data["metadata"]
+                        ))
+
+                return Conversation(
+                    id=conv_data["id"],
+                    user_id=conv_data["user_id"],
+                    messages=sorted(messages, key=lambda x: x.timestamp),
+                    created_at=datetime.fromisoformat(conv_data["created_at"]),
+                    updated_at=datetime.fromisoformat(conv_data["updated_at"]),
+                    metadata=conv_data["metadata"]
+                )
+        except Exception as e:
+            print(f"Error retrieving conversation: {e}")
+            return None 
