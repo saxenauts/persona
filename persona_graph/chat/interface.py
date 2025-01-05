@@ -33,26 +33,33 @@ class ChatStorageInterface(ABC):
 
 class ChatAPI:
     """High-level API for chat operations"""
-    def __init__(self, 
-                 storage_backend: str = "neo4j",
-                 connection_string: str = None,
-                 engine = None,
-                 schema: str = "luna_chat"):
+    @classmethod
+    async def create(cls, 
+                    storage_backend: str = "sqlite",
+                    connection_string: str = None,
+                    engine = None,
+                    schema: str = "luna_chat",
+                    db_path: str = "chat.db"):
+        """Factory method to create and initialize ChatAPI"""
+        self = cls()
         
-        if storage_backend == "neo4j":
-            from .neo4j_handler import Neo4jChatStorage
-            self.storage = Neo4jChatStorage()
-        elif storage_backend == "postgres":
+        if storage_backend == "postgres":
             from .postgres_handler import PostgresChatStorage
             self.storage = PostgresChatStorage(
                 connection_string=connection_string,
                 engine=engine,
                 schema=schema
             )
+            await self.storage.init_schema()
+        elif storage_backend == "sqlite":
+            from .sqlite_handler import SqliteChatStorage
+            self.storage = SqliteChatStorage(db_path=db_path)
+            await self.storage.init_schema()
         else:
             raise ValueError(f"Unsupported storage backend: {storage_backend}")
         
         self.processor = ChatProcessor(self.storage)
+        return self
 
     async def create_conversation(self, user_id: str, metadata: Dict[str, Any] = None) -> str:
         """Create a new conversation"""
@@ -61,7 +68,12 @@ class ChatAPI:
     async def add_message(self, user_id: str, conversation_id: str, 
                          role: str, content: str, metadata: Dict[str, Any] = None) -> bool:
         """Add a message to a conversation"""
-        message = Message(role=role, content=content, metadata=metadata or {})
+        message = Message(
+            role=role, 
+            content=content, 
+            metadata=metadata or {},
+            timestamp=datetime.utcnow()
+        )
         return await self.processor.add_message(user_id, conversation_id, message)
 
     async def get_conversation(self, user_id: str, conversation_id: str) -> Optional[Conversation]:

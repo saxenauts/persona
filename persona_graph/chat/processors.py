@@ -4,14 +4,28 @@ from .models import Message, Conversation
 import tiktoken
 from collections import deque
 
+
 class ChatProcessor:
-    def __init__(self, max_tokens: int = 4000):
-        self.max_tokens = max_tokens
+    def __init__(self, storage):
+        self.storage = storage
+        self.max_tokens = 4000
         self.tokenizer = tiktoken.get_encoding("cl100k_base")  # GPT-4 tokenizer
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in a text string"""
         return len(self.tokenizer.encode(text))
+    
+    async def add_message(self, user_id: str, conversation_id: str, message: Message) -> bool:
+        """Add a message to an existing conversation"""
+        try:
+            return await self.storage.store_message(
+                user_id,
+                conversation_id,
+                message
+            )
+        except Exception as e:
+            print(f"Error processing message: {e}")
+            return False
 
     async def truncate_conversation(self, conversation: Conversation, max_tokens: Optional[int] = None) -> Conversation:
         """Truncate conversation to fit within token limit while preserving recent context"""

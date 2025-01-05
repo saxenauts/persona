@@ -5,7 +5,11 @@ from persona_graph.chat.models import Message, Conversation
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/chat")
-chat_api = ChatAPI()
+
+@router.on_event("startup")
+async def startup_event():
+    global chat_api
+    chat_api = await ChatAPI.create()
 
 class CreateConversationRequest(BaseModel):
     user_id: str
