@@ -1,7 +1,7 @@
-from persona_graph.core.rag_interface import RAGInterface
-from persona_graph.models.schema import AskRequest, AskResponse
-from persona_graph.core.graph_ops import GraphOps
-from persona_graph.llm.llm_graph import generate_structured_insights
+from luna9.core.rag_interface import RAGInterface
+from luna9.models.schema import AskRequest, AskResponse
+from luna9.core.graph_ops import GraphOps
+from luna9.llm.llm_graph import generate_structured_insights
 from typing import Dict, Any
 import instructor
 from openai import AsyncOpenAI

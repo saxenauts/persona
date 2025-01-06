@@ -1,9 +1,9 @@
 import pytest
 from unittest.mock import AsyncMock
-from persona_graph.services.learn_service import LearnService
-from persona_graph.services.custom_data_service import CustomDataService
-from persona_graph.core.graph_ops import GraphOps
-from persona_graph.models.schema import LearnRequest, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData, NodesAndRelationshipsResponse, NodeModel, RelationshipModel
+from luna9.services.learn_service import LearnService
+from luna9.services.custom_data_service import CustomDataService
+from luna9.core.graph_ops import GraphOps
+from luna9.models.schema import LearnRequest, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData, NodesAndRelationshipsResponse, NodeModel, RelationshipModel
 
 @pytest.fixture
 def mock_graph_ops():

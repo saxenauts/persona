@@ -1,19 +1,19 @@
 from fastapi import APIRouter, HTTPException, status
-from persona_graph.core.graph_ops import GraphOps
-from persona_graph.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
-from persona_graph.core.constructor import GraphConstructor
-from persona_graph.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOOL_CHAT
-from persona_graph.models.schema import UnstructuredData
-from persona_graph.core.constructor import GraphContextRetriever
-from persona_graph.core.rag_interface import RAGInterface
-from persona_graph.models.schema import UserCreate, IngestData, RAGQuery, RAGResponse
-from persona_graph.services.user_service import UserService
-from persona_graph.services.ingest_service import IngestService
-from persona_graph.services.rag_service import RAGService
-from persona_graph.services.learn_service import LearnService
-from persona_graph.services.ask_service import AskService
-from persona_graph.services.custom_data_service import CustomDataService
-from persona_graph.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
+from luna9.core.graph_ops import GraphOps
+from luna9.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
+from luna9.core.constructor import GraphConstructor
+from luna9.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOOL_CHAT
+from luna9.models.schema import UnstructuredData
+from luna9.core.constructor import GraphContextRetriever
+from luna9.core.rag_interface import RAGInterface
+from luna9.models.schema import UserCreate, IngestData, RAGQuery, RAGResponse
+from luna9.services.user_service import UserService
+from luna9.services.ingest_service import IngestService
+from luna9.services.rag_service import RAGService
+from luna9.services.learn_service import LearnService
+from luna9.services.ask_service import AskService
+from luna9.services.custom_data_service import CustomDataService
+from luna9.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
 
 
 router = APIRouter()

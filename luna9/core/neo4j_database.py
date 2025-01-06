@@ -2,10 +2,10 @@ from typing import List, Dict, Any, Union, Tuple
 from neo4j import AsyncGraphDatabase, basic_auth
 import asyncio
 import time
-from persona_graph.llm.embeddings import generate_embeddings
+from luna9.llm.embeddings import generate_embeddings
 import json
 from app_server.config import config
-from persona_graph.models.schema import GraphSchema
+from luna9.models.schema import GraphSchema
 
 class Neo4jConnectionManager:
     def __init__(self):

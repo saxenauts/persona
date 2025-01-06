@@ -1,4 +1,4 @@
-from persona_graph.core.rag_interface import RAGInterface
+from luna9.core.rag_interface import RAGInterface
 
 class RAGService:
     @staticmethod

@@ -1,5 +1,5 @@
-from persona_graph.models.schema import GraphSchema
-from persona_graph.core.graph_ops import GraphOps
+from luna9.models.schema import GraphSchema
+from luna9.core.graph_ops import GraphOps
 
 # Seed schema constants
 NODE_TYPES = [

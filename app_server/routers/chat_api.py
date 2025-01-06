@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Dict, Any
-from persona_graph.chat.interface import ChatAPI
-from persona_graph.chat.models import Message, Conversation
+from luna9.chat.interface import ChatAPI
+from luna9.chat.models import Message, Conversation
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/chat")

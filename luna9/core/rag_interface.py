@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
-from persona_graph.core.graph_ops import GraphOps, GraphContextRetriever
-from persona_graph.llm.llm_graph import generate_response_with_context
-from persona_graph.models.schema import Node
+from luna9.core.graph_ops import GraphOps, GraphContextRetriever
+from luna9.llm.llm_graph import generate_response_with_context
+from luna9.models.schema import Node
 
 class RAGInterface:
     def __init__(self, user_id: str):

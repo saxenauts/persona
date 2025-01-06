@@ -1,7 +1,7 @@
-from persona_graph.core.graph_ops import GraphOps, GraphContextRetriever
-from persona_graph.llm.llm_graph import get_nodes, get_relationships
-from persona_graph.llm.embeddings import generate_embeddings
-from persona_graph.models.schema import (
+from luna9.core.graph_ops import GraphOps, GraphContextRetriever
+from luna9.llm.llm_graph import get_nodes, get_relationships
+from luna9.llm.embeddings import generate_embeddings
+from luna9.models.schema import (
     NodeModel, RelationshipModel, GraphUpdateModel,
     UnstructuredData, NodesAndRelationshipsResponse, Node, Relationship
 )

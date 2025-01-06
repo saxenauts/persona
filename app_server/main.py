@@ -1,9 +1,9 @@
 # main.py
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from persona_graph.core.neo4j_database import Neo4jConnectionManager
-from persona_graph.core.graph_ops import GraphOps
-from persona_graph.core.migrations import ensure_seed_schemas
+from luna9.core.neo4j_database import Neo4jConnectionManager
+from luna9.core.graph_ops import GraphOps
+from luna9.core.migrations import ensure_seed_schemas
 
 from app_server.routers.graph_api import router as graph_ops_router
 from app_server.routers.chat_api import router as chat_api_router

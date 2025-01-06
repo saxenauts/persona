@@ -1,13 +1,13 @@
-from persona_graph.core.neo4j_database import Neo4jConnectionManager
-from persona_graph.llm.embeddings import generate_embeddings
-from persona_graph.models.schema import (
+from luna9.core.neo4j_database import Neo4jConnectionManager
+from luna9.llm.embeddings import generate_embeddings
+from luna9.models.schema import (
     NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse, 
     CommunityStructure, Subgraph, Node, Relationship, GraphSchema
 )
 from typing import List, Dict, Any
 import asyncio
 import json
-from persona_graph.llm.llm_graph import detect_communities
+from luna9.llm.llm_graph import detect_communities
 from collections import defaultdict
 
 class GraphOps:

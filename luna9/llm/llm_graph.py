@@ -1,13 +1,13 @@
 import json
 import openai
 from typing import List, Tuple, Dict, Any
-from persona_graph.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES, GENERATE_STRUCTURED_INSIGHTS
-from persona_graph.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure, AskResponse, AskRequest, AskResponseInstructor, create_dynamic_schema
+from luna9.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES, GENERATE_STRUCTURED_INSIGHTS
+from luna9.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure, AskResponse, AskRequest, AskResponseInstructor, create_dynamic_schema
 from app_server.config import config
 import instructor
 from instructor import OpenAISchema
 from pydantic import Field
-from persona_graph.utils.instructions_reader import INSTRUCTIONS
+from luna9.utils.instructions_reader import INSTRUCTIONS
 
 # Initialize the OpenAI client globally if not already set up elsewhere in your application
 openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_KEY)

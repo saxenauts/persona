@@ -1,5 +1,5 @@
 import pytest
-from persona_graph.core.rag_interface import RAGInterface
+from luna9.core.rag_interface import RAGInterface
 
 @pytest.mark.asyncio
 async def test_rag_query(neo4j_manager):

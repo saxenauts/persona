@@ -42,7 +42,8 @@ class ChatAPI:
                     db_path: str = "chat.db"):
         """Factory method to create and initialize ChatAPI"""
         self = cls()
-        
+
+        print(f"Creating ChatAPI with storage backend: {storage_backend}")
         if storage_backend == "postgres":
             from .postgres_handler import PostgresChatStorage
             self.storage = PostgresChatStorage(
