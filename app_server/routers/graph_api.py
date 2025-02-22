@@ -1,19 +1,19 @@
 from fastapi import APIRouter, HTTPException, status
-from luna9.core.graph_ops import GraphOps
-from luna9.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
-from luna9.core.constructor import GraphConstructor
-from luna9.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOOL_CHAT
-from luna9.models.schema import UnstructuredData
-from luna9.core.constructor import GraphContextRetriever
-from luna9.core.rag_interface import RAGInterface
-from luna9.models.schema import UserCreate, IngestData, RAGQuery, RAGResponse
-from luna9.services.user_service import UserService
-from luna9.services.ingest_service import IngestService
-from luna9.services.rag_service import RAGService
-from luna9.services.learn_service import LearnService
-from luna9.services.ask_service import AskService
-from luna9.services.custom_data_service import CustomDataService
-from luna9.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
+from persona.core.graph_ops import GraphOps
+from persona.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
+from persona.core.constructor import GraphConstructor
+from persona.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOOL_CHAT
+from persona.models.schema import UnstructuredData
+from persona.core.constructor import GraphContextRetriever
+from persona.core.rag_interface import RAGInterface
+from persona.models.schema import UserCreate, IngestData, RAGQuery, RAGResponse
+from persona.services.user_service import UserService
+from persona.services.ingest_service import IngestService
+from persona.services.rag_service import RAGService
+from persona.services.learn_service import LearnService
+from persona.services.ask_service import AskService
+from persona.services.custom_data_service import CustomDataService
+from persona.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
 
 
 router = APIRouter()
@@ -22,7 +22,7 @@ router = APIRouter()
 def get_version():
     return {"version": "1.0.0"}
 
-@router.post("/users", status_code=201)
+@router.post("/user/create", status_code=201, description="Create a new user in the system")
 async def create_user(user: UserCreate):
     try:
         await UserService.create_user(user.user_id)
@@ -30,53 +30,46 @@ async def create_user(user: UserCreate):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.delete("/users/{user_id}")
-async def delete_user(user_id: str):
+@router.post("/user/delete", status_code=200, description="Delete an existing user from the system")
+async def delete_user(user: UserCreate):
     try:
-        await UserService.delete_user(user_id)
-        return {"message": f"User {user_id} deleted successfully"}
+        await UserService.delete_user(user.user_id)
+        return {"message": f"User {user.user_id} deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.post("/ingest/{user_id}")
-async def ingest_data(user_id: str, data: IngestData):
+@router.post("/ingest", status_code=201)
+async def ingest_data(data: IngestData):
     try:
-        await IngestService.ingest_data(user_id, data.content)
+        await IngestService.ingest_data(data.user_id, data.content)
         return {"message": "Data ingested successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/rag/{user_id}/query", response_model=RAGResponse)
-async def rag_query(user_id: str, query: RAGQuery):
+@router.post("/rag/query", response_model=RAGResponse)
+async def rag_query(query: RAGQuery):
     try:
-        result = await RAGService.query(user_id, query.query)
+        print(f"Processing RAG query for user {query.user_id}: {query.query}")
+        result = await RAGService.query(query.user_id, query.query)
         return RAGResponse(answer=result)
     except Exception as e:
+        print(f"Error in RAG query: {str(e)}")
+        if "Neo4j" in str(e):
+            raise HTTPException(
+                status_code=503,
+                detail="Database connection error. Please ensure Neo4j is running and accessible."
+            )
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/rag-query", status_code=status.HTTP_200_OK)
-async def rag_query(query: str, user_id: str):
-    try:
-        rag = RAGInterface(user_id)
-        response = await rag.query(query)
-        return {"query": query, "response": response}
-    except Exception as e:
-        print(f"Error during RAG query: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        await rag.close()
-
 @router.post("/rag-query-vector", status_code=status.HTTP_200_OK)
-async def rag_query_vector(query: str, user_id: str):
+async def rag_query_vector(query: RAGQuery):
     try:
-        rag = RAGInterface(user_id)
-        response = await rag.query_vector_only(query)
-        return {"query": query, "response": response}
+        async with RAGInterface(query.user_id) as rag:
+            response = await rag.query_vector_only(query.query)
+            return {"query": query.query, "response": response}
     except Exception as e:
         print(f"Error during vector-only RAG query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        await rag.close()
 
 @router.post("/learn", response_model=LearnResponse, status_code=status.HTTP_200_OK)
 async def learn_user(learn_request: LearnRequest):
@@ -84,7 +77,7 @@ async def learn_user(learn_request: LearnRequest):
         response = await LearnService.learn_user(learn_request)
         return response
     except Exception as e:
-          raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/ask", response_model=AskResponse, status_code=status.HTTP_200_OK)
 async def ask_insights(ask_request: AskRequest):
@@ -93,17 +86,16 @@ async def ask_insights(ask_request: AskRequest):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
 
-@router.post("/custom-data/{user_id}", status_code=status.HTTP_200_OK)
-async def update_custom_data(user_id: str, update: CustomGraphUpdate):
+@router.post("/custom-data", status_code=status.HTTP_200_OK)
+async def update_custom_data(update: CustomGraphUpdate):
     """
     Update or create custom structured data in the graph
     """
     try:
         graph_ops = await GraphOps().__aenter__()
         custom_service = CustomDataService(graph_ops)
-        result = await custom_service.update_custom_data(user_id, update)
+        result = await custom_service.update_custom_data(update.user_id, update)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

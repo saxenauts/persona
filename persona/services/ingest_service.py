@@ -1,5 +1,5 @@
-from luna9.core.constructor import GraphConstructor
-from luna9.models.schema import UnstructuredData
+from persona.core.constructor import GraphConstructor
+from persona.models.schema import UnstructuredData
 
 class IngestService:
     @staticmethod

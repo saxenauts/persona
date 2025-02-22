@@ -1,14 +1,14 @@
-# Luna9 - Intelligent User Memory
+# Persona - Intelligent User Memory
 
-![Luna9 Banner](docs/assets/banner.svg)
+![Persona Banner](docs/assets/banner.svg)
 
 ## Overview
 
-Luna is a language dependent digital identity system that evolves with a user's digital footprint.
+Persona is a language dependent digital identity system that evolves with a user's digital footprint.
 
 It creates and maintains a dynamic knowledge graph for each user, it provides contextually rich information to any programming interface, particularly LLM-based systems, enabling next-generation personalization and user-centric experiences.
 
-At its core, Luna aims to create a memetic digital organism that can evolve and grow with the user, representing the user's mindspace digitally.
+At its core, Persona aims to create a memetic digital organism that can evolve and grow with the user, representing the user's mindspace digitally.
 
 ## Vision 
 
@@ -20,11 +20,11 @@ We use language to connect different parts of our lives. With LLMs it's possible
 
 Read the motivation and design decisions in depth [here](https://saxenauts.io/blog/persona-graph)
 
-Read the docs [here](http://docs.luna9.dev), see the example of transforming a simple app and supercharge it with personalization. 
+Read the docs [here](http://docs.persona.dev), see the example of transforming a simple app and supercharge it with personalization. 
 
-Luna is designed to build graph from unstructured user data like interaction logs, emails, chats, etc. 
+Persona is designed to build graph from unstructured user data like interaction logs, emails, chats, etc. 
 
-While Luna can support storing conversational history, it's not the primary purpose. There are better tools for that like Mem0.ai, MemGPT, etc.
+While Persona can support storing conversational history, it's not the primary purpose. There are better tools for that like Mem0.ai, MemGPT, etc.
 
 
 ## Features
@@ -44,8 +44,8 @@ While Luna can support storing conversational history, it's not the primary purp
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/saxenauts/luna9.git
-   cd luna9
+   git clone https://github.com/saxenauts/persona.git
+   cd persona
    ```
 
 2. **Set Up Environment Variables:**
@@ -75,16 +75,16 @@ While Luna can support storing conversational history, it's not the primary purp
 
 ## Architecture
 
-Luna9 has the following components:
+Persona has the following components:
 
 - **GraphOps:** Abstraction layer for graph database operations. Currently supports Neo4j but extensible.
 - **Constructor:** Constructs the user's knowledge graph.
 - **GraphContextRetriever:** Functions to fetch the relevant context from user's graph.
-- **LLMGraph:** All OpenAI API calls in Luna for graph construction, community detection, etc.
+- **LLMGraph:** All OpenAI API calls in Persona for graph construction, community detection, etc.
 - **Services:** Business logic for ingesting data, creating communities, rag, learning, asking services, and for adding custom data to graph. 
 - **API:** FastAPI server to serve the API endpoints. Easy to extend with new functionalities.
 
-Luna9 uses following technologies:
+Persona uses following technologies:
 
 - **Neo4j:** Graph database to store user's knowledge graph.
 - **Neo4j:** For vector database, we use HNSW. Neo4j uses Apache Lucene for their vector Index. 
@@ -99,7 +99,7 @@ We plan to add LLM, Graph & Vector DB abstractions to extend these functionaliti
 
 Detailed API documentation is available at `http://localhost:8000/docs` once the services are up and running.
 
-Have a look at [docs](http://docs.luna9.dev) for examples and API usage. 
+Have a look at [docs](http://docs.persona.dev) for examples and API usage. 
 
 
 ### Code Structure
@@ -107,7 +107,7 @@ Have a look at [docs](http://docs.luna9.dev) for examples and API usage.
 - **app_server/**: FastAPI server code.
 - **persona_graph/**: Contains the main application code.
   - **core/**: Core functionalities and database migrations.
-  - **llm/**: All LLM calls in Luna.
+  - **llm/**: All LLM calls in Persona.
   - **models/**: Pydantic models for the application.
   - **services/**: Business logic for different functionalities.
   - **utils/**: Utility functions.

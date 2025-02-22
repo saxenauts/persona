@@ -1,15 +1,28 @@
+[project]
+name = "persona"
+version = "0.1.0"
+description = "Intelligent User Memory System"
+packages = [
+    { include = "persona", from = "." },
+]
+authors = [
+    { name = "Utkarsh Saxena", email = "saxena.utkarsh.us@gmail.com" },
+]
+homepage = "https://github.com/saxenauts/persona"
+repository = "https://github.com/saxenauts/persona"
+
 [tool.poetry]
-name = "luna9"
+name = "persona"
 version = "0.1.0"
 description = "A digital user memory and identity system for personalization"
 authors = ["Utkarsh Saxena"]
 packages = [
-    { include = "luna9", from = "." },
+    { include = "persona", from = "." },
 ]
 
 license = "MIT"
-homepage = "https://github.com/saxenauts/luna"
-repository = "https://github.com/saxenauts/luna"
+homepage = "https://github.com/saxenauts/persona"
+repository = "https://github.com/saxenauts/persona"
 
 [tool.poetry.dependencies]
 python = "~3.12.0"

@@ -13,7 +13,7 @@ WORKDIR /app
 COPY pyproject.toml poetry.lock ./
 
 # Copy the persona-graph package and app_server
-COPY persona_graph/ ./persona_graph/
+COPY persona ./persona/
 COPY app_server/ ./app_server/
 COPY tests/ ./tests/
 

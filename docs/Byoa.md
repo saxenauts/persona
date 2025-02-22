@@ -1,8 +1,8 @@
-# Luna Memory BYOA Documentation
+# Persona Memory BYOA Documentation
 
 ## Overview
 
-Luna Memory's BYOA (Bring Your Own Algorithm) system allows you to transform static user data into dynamic, business-driving insights. Instead of being limited by predefined schemas and fixed business logic, you can:
+Persona Memory's BYOA (Bring Your Own Algorithm) system allows you to transform static user data into dynamic, business-driving insights. Instead of being limited by predefined schemas and fixed business logic, you can:
 
 - Learn anything about your users through natural language
 - Ask complex questions about user behavior and preferences
@@ -10,9 +10,9 @@ Luna Memory's BYOA (Bring Your Own Algorithm) system allows you to transform sta
 
 ## Real-World Example: CalorieSnap App
 
-Let's walk through how Luna Memory transforms a basic calorie tracking app into a sophisticated personalization engine.
+Let's walk through how Persona Memory transforms a basic calorie tracking app into a sophisticated personalization engine.
 
-### Traditional Implementation vs Luna Memory
+### Traditional Implementation vs Persona Memory
 
 **Traditional Approach:**
 ```sql
@@ -39,7 +39,7 @@ ORDER BY frequency DESC;
 - Can't adapt to new business opportunities
 - Limited personalization capabilities
 
-### Luna Memory Enhancement
+### Persona Memory Enhancement
 
 #### 1. Learn Anything - Learning User Patterns
 
@@ -75,7 +75,7 @@ POST /learn
     ]
 }
 
-// What Luna learns automatically
+// What Persona learns automatically
 {
     "insights": {
         "flavor_preference": {
@@ -126,7 +126,7 @@ POST /ask
     }
 }
 
-// Luna's response
+// Persona's response
 {
     "recommendations": [
         {
@@ -158,21 +158,21 @@ POST /ask
 
 ### 1. Dynamic Learning
 - **Traditional:** Fixed categories, manual feature engineering
-- **Luna Memory:** Automatically learns new patterns and adapts to user behavior
+- **Persona Memory:** Automatically learns new patterns and adapts to user behavior
   - Discovers unexpected food combinations
   - Identifies timing patterns
   - Understands context (busy days vs. leisure cooking)
 
 ### 2. Personalization Depth
 - **Traditional:** Rule-based recommendations
-- **Luna Memory:** Deep understanding of user preferences
+- **Persona Memory:** Deep understanding of user preferences
   - Links restaurant preferences to home cooking
   - Understands cooking skill progression
   - Adapts to lifestyle changes
 
 ### 3. Business Intelligence
 - **Traditional:** Predefined reports and metrics
-- **Luna Memory:** Dynamic insight generation
+- **Persona Memory:** Dynamic insight generation
   - Identifies upsell opportunities
   - Predicts churn risk
   - Discovers new market segments

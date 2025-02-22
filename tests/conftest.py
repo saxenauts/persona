@@ -3,7 +3,7 @@ import pytest
 import asyncio
 from fastapi.testclient import TestClient
 from app_server.main import app
-from luna9.core.neo4j_database import Neo4jConnectionManager
+from persona.core.neo4j_database import Neo4jConnectionManager
 from app_server.config import config
 
 @pytest.fixture(scope="session")

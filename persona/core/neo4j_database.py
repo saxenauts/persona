@@ -2,10 +2,10 @@ from typing import List, Dict, Any, Union, Tuple
 from neo4j import AsyncGraphDatabase, basic_auth
 import asyncio
 import time
-from luna9.llm.embeddings import generate_embeddings
+from persona.llm.embeddings import generate_embeddings
 import json
 from app_server.config import config
-from luna9.models.schema import GraphSchema
+
 
 class Neo4jConnectionManager:
     def __init__(self):
@@ -15,30 +15,46 @@ class Neo4jConnectionManager:
         print("URI: ", self.uri)
         print("Username: ", self.username)
         print("Password: ", self.password)
+        self.driver = None
+        self.ensure_vector_index_task = None
+
+    async def initialize(self):
+        """Initialize the connection and wait for Neo4j to be ready"""
+        await self.connect()
+        await self.wait_for_neo4j()
+        await self.ensure_vector_index()
+
+    async def connect(self):
+        """Create the driver connection"""
         self.driver = AsyncGraphDatabase.driver(
             self.uri,
-            auth=basic_auth(self.username, self.password)
+            auth=basic_auth(self.username, self.password),
+            max_connection_lifetime=3600
         )
 
     async def wait_for_neo4j(self, timeout=60):
+        """Wait for Neo4j to be ready"""
         start_time = time.time()
         while True:
             try:
+                if not self.driver:
+                    await self.connect()
                 async with self.driver.session() as session:
                     await session.run("RETURN 1")
                     print("Neo4j is ready.")
-                    await self.ensure_vector_index_task
                     return
             except Exception as e:
+                print(f"Waiting for Neo4j... {str(e)}")
                 elapsed_time = time.time() - start_time
                 if elapsed_time > timeout:
                     print(f"Failed to connect to Neo4j after {timeout} seconds.")
                     raise e
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)  # Increased sleep time
 
     async def close(self):
-        await self.driver.close()
-
+        if self.driver:
+            await self.driver.close()
+            self.driver = None
 
     async def clean_graph(self) -> None:
         # Delete all nodes and relationships
@@ -317,30 +333,4 @@ class Neo4jConnectionManager:
             await session.run(query, user_id=user_id)
         print(f"User {user_id} and all associated nodes deleted successfully.")
 
-    async def get_all_schemas(self) -> List[GraphSchema]:
-        query = """
-        MATCH (s:Schema)
-        RETURN s
-        ORDER BY s.created_at DESC
-        """
-        async with self.driver.session() as session:
-            result = await session.run(query)
-            schemas = []
-            for record in await result.data():
-                schema_dict = dict(record['s'])
-                # Convert datetime to string
-                if 'created_at' in schema_dict:
-                    schema_dict['created_at'] = str(schema_dict['created_at'])
-                schemas.append(GraphSchema(**schema_dict))
-            return schemas
-    
-    async def store_schema(self, schema: GraphSchema) -> str:
-        query = """
-        CREATE (s:Schema {name: $name, description: $description, attributes: $attributes, relationships: $relationships, is_seed: $is_seed, created_at: datetime()})
-        RETURN s.name AS schema_id
-        """
-        async with self.driver.session() as session:
-            result = await session.run(query, schema.dict(exclude={'created_at'}))
-            record = await result.single()
-            return record['schema_id']
-        
+

@@ -1,7 +1,7 @@
 version: '3.9'
 services:
   neo4j:
-    container_name: luna9-neo4j
+    container_name: persona-neo4j
     image: neo4j:latest
     restart: always
     env_file:
@@ -11,12 +11,14 @@ services:
       - "7687:7687"  # Bolt
     volumes:
       - ./neo4j-data:/data
+    networks:
+      - persona-network
   
   app:
-    container_name: luna9-app
+    container_name: persona-app
     build: .
     volumes:
-      - ./persona_graph:/app/persona_graph
+      - ./persona:/app/persona
       - ./app_server:/app/app_server
       - ./tests:/app/tests
     env_file:
@@ -25,3 +27,9 @@ services:
       - "8000:8000"
     depends_on:
       - neo4j
+    networks:
+      - persona-network
+
+networks:
+  persona-network:
+    driver: bridge

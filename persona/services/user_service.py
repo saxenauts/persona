@@ -1,4 +1,4 @@
-from luna9.core.graph_ops import GraphOps
+from persona.core.graph_ops import GraphOps
 
 class UserService:
     @staticmethod

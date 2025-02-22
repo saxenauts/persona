@@ -1,6 +1,6 @@
-from luna9.core.graph_ops import GraphOps
-from luna9.models.schema import CustomGraphUpdate, CustomNodeData, CustomRelationshipData, NodesAndRelationshipsResponse
-from luna9.models.schema import NodeModel, RelationshipModel
+from persona.core.graph_ops import GraphOps
+from persona.models.schema import CustomGraphUpdate, CustomNodeData, CustomRelationshipData, NodesAndRelationshipsResponse
+from persona.models.schema import NodeModel, RelationshipModel
 from typing import Dict, Any
     
 class CustomDataService:

@@ -1,6 +1,6 @@
 import pytest
-from luna9.core.graph_ops import GraphOps
-from luna9.models.schema import NodeModel, RelationshipModel
+from persona.core.graph_ops import GraphOps
+from persona.models.schema import NodeModel, RelationshipModel
 from unittest.mock import AsyncMock
 
 @pytest.fixture
