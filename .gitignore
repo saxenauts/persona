@@ -7,3 +7,4 @@ docs/tree.md
 .venv
 .pytest_cache
 .DS_Store
+tests/assets/

@@ -1,23 +1,39 @@
+[project]
+name = "persona"
+version = "0.1.0"
+description = "Intelligent User Memory System"
+packages = [
+    { include = "persona", from = "." },
+]
+authors = [
+    { name = "Utkarsh Saxena", email = "saxena.utkarsh.us@gmail.com" },
+]
+homepage = "https://github.com/saxenauts/persona"
+repository = "https://github.com/saxenauts/persona"
+
 [tool.poetry]
-name = "persona-graph"
+name = "persona"
 version = "0.1.0"
 description = "A digital user memory and identity system for personalization"
 authors = ["Utkarsh Saxena"]
 packages = [
-    { include = "persona_graph", from = "." },
+    { include = "persona", from = "." },
 ]
-readme = "README.md"
+
 license = "MIT"
-homepage = "https://github.com/saxenauts/persona-graph"
-repository = "https://github.com/saxenauts/persona-graph"
+homepage = "https://github.com/saxenauts/persona"
+repository = "https://github.com/saxenauts/persona"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "~3.12.0"
 fastapi = "^0.111.0"
 neo4j = "^5.20.0"
 openai = "^1.30.3"
 pydantic-settings = "^2.2.1"
 instructor = "^1.3.7"
+tiktoken = "^0.8.0"
+sqlalchemy = "^2.0.36"
+aiosqlite = "^0.20.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.3.1"
@@ -27,4 +43,3 @@ httpx = "^0.24.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-package-mode = false

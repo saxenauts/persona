@@ -1,6 +1,6 @@
-from persona_graph.llm.llm_graph import get_nodes, get_relationships
-from persona_graph.core.graph_ops import GraphOps
-from persona_graph.models.schema import LearnRequest, LearnResponse, GraphUpdateModel
+from persona.llm.llm_graph import get_nodes, get_relationships
+from persona.core.graph_ops import GraphOps
+from persona.models.schema import LearnRequest, LearnResponse, GraphUpdateModel
 
 # TODO: This is not the right implementation. Make the graph constructor take in the schema
 # and then use that schema to extract the nodes and relationships from the user's interactions.

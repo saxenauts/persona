@@ -2,14 +2,14 @@
 from neo4j import AsyncGraphDatabase, basic_auth, Neo4jDriver
 from contextlib import asynccontextmanager
 
-class DatabaseConfig:
-    NEO4J_URI = "neo4j://localhost:7687"
+class GraphDatabaseConfig:
+    NEO4J_URI = "neo4j://neo4j:7687"
     NEO4J_USERNAME = "neo4j"
     NEO4J_PASSWORD = "password"
 
 driver: Neo4jDriver = AsyncGraphDatabase.driver(
-    DatabaseConfig.NEO4J_URI,
-    auth=basic_auth(DatabaseConfig.NEO4J_USERNAME, DatabaseConfig.NEO4J_PASSWORD)
+    GraphDatabaseConfig.NEO4J_URI,
+    auth=basic_auth(GraphDatabaseConfig.NEO4J_USERNAME, GraphDatabaseConfig.NEO4J_PASSWORD)
 )
 
 @asynccontextmanager

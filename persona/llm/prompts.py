@@ -139,59 +139,109 @@ SPACE_SCHOOL_CHAT = """
 """
 
 GET_NODES = """
-You are an expert in user psychology and personal knowledge graphs. Your goal is to extract nodes from user's digital interactions
-that fit within their personal graph schema.
+You are an expert in understanding human psychology and creating meaningful knowledge representations. Your task is to extract significant nodes from user's expressions that capture complete thoughts, memories, or characteristics.
 
-Given the unstructured text about a user's interests, hobbies, and professional engagements, extract all relevant nodes.
-These nodes should reflect concepts, keywords, and phrases that are meaningful within the context of the user's digital footprint. 
-Avoid generic terms and focus on specifics that could represent nodes in a knowledge graph. 
-Return these nodes in a structured JSON format as shown in the example below:
+Guidelines for Node Extraction:
+
+1. Node Types to Extract:
+   - Core Memories: "First time I felt truly seen was during my college theater performance"
+   - Current States: "Building AI products with $100k savings after leaving tech industry"
+   - Stable Traits: "Deeply drawn to solving complex psychological problems"
+   - Key Facts: "Born in Seattle, 1990"
+   - Strong Preferences: "Prefers working in complete solitude before dawn"
+   - Significant Beliefs: "Believes technology should serve human connection, not replace it"
+
+2. Principles for Node Creation:
+   - Make nodes self-contained (they should make sense without additional context)
+   - Combine related fragments into single meaningful nodes
+   - Preserve specific details that might be relevant for connections
+   - Include emotional or psychological context when relevant
+   - Keep factual nodes clear and precise
+
+3. Balance Between Node Types:
+   - Facts: "Lives in Berlin since 2020"
+   - Narratives: "Found purpose in tech after witnessing its healing impact on mental health"
+   - Preferences: "Deeply resonates with ambient electronic music"
+   - States: "Currently building AI tools for psychological well-being"
+
+4. Avoid:
+   - Creating multiple nodes for what could be a single coherent thought
+   - Overly generic nodes that don't capture unique aspects
+   - Splitting interconnected ideas that make more sense together
+   - Creating nodes that require external context to understand
 
 Example Response Format:
 {
   "nodes": [
-    {"name": "Blockchain", "perspective": "Interested in its potential for financial systems"},
-    {"name": "Cryptocurrency", "perspective": "Skeptical but curious about long-term impact"},
-    {"name": "Smart Contracts", "perspective": "Excited about automation possibilities"},
-    {"name": "Decentralization", "perspective": "Sees as a solution to centralized control issues"},
-    {"name": "Ethereum", "perspective": "Prefers over Bitcoin for its versatility"}
+    {"name": "Techno Music"},
+    {"name": "Deeply moved by classical music in empty spaces"},
+    {"name": "Real Madrid"},
+    {"name": "Finds peace in early morning solitude"},
+    {"name": "Capitalism"},
+    {"name": "Anxious about future of AI in society"},
+    {"name": "Values deep, meaningful conversations over small talk"},
+    {"name": "Psychedelic Rock"},
+    {"name": "Misses childhood home's garden"},
+    {"name": "Cryptocurrency"},
+    {"name": "Frustrated by modern dating culture"}
   ]
 }
+
+Important:
+- Each node should be meaningful and self-contained
+- Prefer fewer, richer nodes over many fragmented ones
+- Ensure nodes can stand alone while enabling meaningful connections
+- Focus on elements that define the user's unique characteristics, experiences, or current state
 """
 
 GET_RELATIONSHIPS = """
-You are an expert in user psychology, digital footprint and memetics. Your goal is to construct a personal knowledge graph for a user based on their digital interactions.
-You will be provided with the existing user knowledge graph for context,
-and a list of new nodes extracted from a user's digital interactions.
-Your task is to create a new set of relationships that meaningfully fit into the graph, while also capturing the user's subjective view or personal context related to those nodes.
+You are an expert in understanding human cognitive patterns and meaningful connections. Your task is to identify only the most significant and natural relationships between concepts in a user's cognitive map.
 
-1. Establish relationships between these nodes based on logical connections, thematic relevance, or how they relate in the user's context.
-2. Ensure all relationships are between the nodes created from the extracted nodes only.
-3. Try to capture the user's journey of exploration within topics, showing how interests evolve and branch out.
-4. DO NOT output the existing nodes and relationships, only provide new ones.
+Guidelines for Creating Relationships:
 
-Provide the nodes and relationships in a structured JSON format as illustrated in the example below.
+1. Relationship Types to Consider:
+   - Causal: LEADS_TO, RESULTS_IN (when one thing clearly causes another)
+   - Evolutionary: EVOLVES_INTO, TRANSFORMS_TO (for personal growth/changes)
+   - Emotional: RESONATES_WITH, CONFLICTS_WITH (for emotional connections)
+   - Influential: SHAPES, INSPIRES (for impact relationships)
+   - Factual: LOCATED_IN, PART_OF (for concrete connections)
+   - Temporal: PRECEDES, FOLLOWS (for time-based relationships)
 
+2. Principles for Relationship Creation:
+   - Only create relationships that are strongly justified
+   - Focus on relationships that reveal meaningful patterns
+   - Prefer direct connections over tenuous ones
+   - Consider temporal and causal flows
+   - Look for relationships that help understand the user's journey
+
+3. When to NOT Create Relationships:
+   - When connections feel forced or superficial
+   - Between nodes that are only tangentially related
+   - When the relationship doesn't add meaningful context
+   - When similar relationships already exist
+   - When the connection is too obvious or trivial
 
 Example Response Format:
 {
   "relationships": [
-    {"source": "Blockchain", "relation": "ENABLES", "target": "Cryptocurrency"},
-    {"source": "Blockchain", "relation": "UTILIZES", "target": "Smart Contracts"},
-    {"source": "Blockchain", "relation": "PROMOTES", "target": "Decentralization"},
-    {"source": "Ethereum", "relation": "IMPLEMENTS", "target": "Smart Contracts"},
-    {"source": "Ethereum", "relation": "IS_A_TYPE_OF", "target": "Cryptocurrency"}
+    {
+      "source": "Building AI-driven healing products with $100k savings after tech industry exit",
+      "relation": "MOTIVATED_BY",
+      "target": "Views internet users as interconnected nodes in global consciousness"
+    },
+    {
+      "source": "Fascinated by intersection of memetics and psychological healing",
+      "relation": "SHAPES",
+      "target": "Building AI-driven healing products with $100k savings after tech industry exit"
+    }
   ]
 }
 
-Ensure that your response:
-1. Includes only the provided nodes for generating relationships.
-2. Creates relationships only between the provided nodes.
-3. Reflects the user's evolving interests and exploration path within the topic.
-Important Rules:
-1. ONLY create relationships between nodes that are explicitly provided in the input list.
-2. DO NOT create relationships with nodes that don't exist in the input.
-3. Each relationship must have both source and target nodes from the provided list.
+Important:
+- Quality over quantity - only create truly meaningful relationships
+- Each relationship should reveal something important about the user
+- Consider the user's overall narrative when creating connections
+- Don't force relationships between every pair of nodes
 """
 
 GENERATE_COMMUNITIES = """

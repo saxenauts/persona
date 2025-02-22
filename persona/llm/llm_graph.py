@@ -1,21 +1,20 @@
 import json
 import openai
 from typing import List, Tuple, Dict, Any
-from persona_graph.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES, GENERATE_STRUCTURED_INSIGHTS
-from persona_graph.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure, AskResponse, AskRequest, AskResponseInstructor, create_dynamic_schema
+from persona.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES, GENERATE_STRUCTURED_INSIGHTS
+from persona.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure, AskResponse, AskRequest, AskResponseInstructor, create_dynamic_schema
 from app_server.config import config
 import instructor
 from instructor import OpenAISchema
 from pydantic import Field
-from persona_graph.utils.instructions_reader import INSTRUCTIONS
+from persona.utils.instructions_reader import INSTRUCTIONS
 
 # Initialize the OpenAI client globally if not already set up elsewhere in your application
 openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_KEY)
 client = instructor.from_openai(openai_client)
 
 class Node(OpenAISchema):
-    name: str
-    perspective: str
+    name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
 
 class Relationship(OpenAISchema):
     source: str
@@ -26,12 +25,13 @@ class GraphResponse(OpenAISchema):
     nodes: List[Node] = Field(..., description="List of nodes in the graph")
     relationships: List[Relationship] = Field(default_factory=list, description="List of relationships between nodes")
 
-async def get_nodes(text: str, schema_context: str) -> List[Node]:
+async def get_nodes(text: str, graph_context: str) -> List[Node]:
     """
     Extract nodes from provided text using OpenAI's language model.
+    Returns nodes that can be either simple labels or narrative fragments.
     """
     try:
-        combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nExisting Schema and User Graph Context: {schema_context}\n\nNode Extraction Task: {GET_NODES}"
+        combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nExisting Graph Context: {graph_context}\n\nNode Extraction Task: {GET_NODES}"
         response = await client.chat.completions.create(
             model='gpt-4o-mini', #TODO: Make this a variable controlled by the config. 
             messages=[
@@ -41,7 +41,6 @@ async def get_nodes(text: str, schema_context: str) -> List[Node]:
             temperature=0.5,
             response_model=List[Node]
         )
-        # Extract entities from response, assuming the expected format is JSON
         return response
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON: {e}")
@@ -50,26 +49,24 @@ async def get_nodes(text: str, schema_context: str) -> List[Node]:
         print(f"Error while extracting nodes: {e}")
         return []
 
-async def get_relationships(nodes: List[Node], graph_context: str, schema_context: str) -> List[Relationship]:
+async def get_relationships(nodes: List[Node], graph_context: str) -> List[Relationship]:
     """
     Generate relationships based on the list of nodes and existing graph context using OpenAI's language model.
     """
-    #TODO: Add user psyche context, and new node specific context to the prompt. 
-    nodes_str = ', '.join([node.name + ' (' + node.perspective + ')' for node in nodes])
+    # Format nodes for the prompt
+    nodes_str = ', '.join([f'"{node.name}"' for node in nodes])
     combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nRelationships Generation Task: {GET_RELATIONSHIPS}"
     try:
         response = await client.chat.completions.create(
             model='gpt-4o-mini', #TODO: Make this a variable controlled by the config. 
             messages=[
                 {"role": "system", "content": combined_instructions},
-                {"role": "user", "content": f"Existing Schema:\n{schema_context}\n\nNodes: {nodes_str}\n\nExisting Graph Context:\n{graph_context}"}
-                
+                {"role": "user", "content": f"Nodes: {nodes_str}\n\nExisting Graph Context:\n{graph_context}"}
             ],
             temperature=0.7,
             response_model=List[Relationship]
         )
-        relationships = response
-        return relationships
+        return response
     except Exception as e:
         print(f"Error while generating relationships: {e}")
         return []

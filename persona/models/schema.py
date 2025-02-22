@@ -12,8 +12,7 @@ class UnstructuredData(BaseModel):
     metadata: Optional[Dict[str, str]] = {}
 
 class Node(OpenAISchema):
-    name: str
-    perspective: Optional[str] = None
+    name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
 
 class Relationship(OpenAISchema):
     source: str
@@ -21,19 +20,15 @@ class Relationship(OpenAISchema):
     relation: str
 
 class NodeModel(BaseModel):
-    name: str
-    perspective: Optional[str] = None
+    name: str = Field(..., description="The node content - can be a simple label or narrative fragment")
     properties: Optional[Dict[str, str]] = Field(default_factory=dict)
     embedding: Optional[List[float]] = Field(None, description="Embedding vector for the node, if applicable")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "name": "Quantum Computing",
-                "properties": {
-                    "current_context": "Research",
-                    "frequency": 10
-                },
+                "name": "Finds peace in early morning solitude",
+                "properties": {},
                 "embedding": [0.1, 0.2, 0.3]
             }
         }
@@ -79,27 +74,27 @@ class EntityExtractionResponse(BaseModel):
 
 class NodesAndRelationshipsResponse(BaseModel):
     nodes: List[NodeModel] = Field(..., example=[
-        {"id": "Blockchain", "label": "Technology"},
-        {"id": "Quantum Computing", "label": "Science"},
-        {"id": "Indie Games", "label": "Entertainment"},
-        {"id": "Sustainable Farming", "label": "Agriculture"},
-        {"id": "Virtual Reality", "label": "Technology"}
+        {"name": "Finds peace in early morning solitude"},
+        {"name": "Techno Music"},
+        {"name": "Values deep conversations"},
+        {"name": "Real Madrid"},
+        {"name": "Anxious about future of AI"}
     ])
     relationships: List[RelationshipModel] = Field(..., example=[
-        {"source": "Technology", "relation": "includes", "target": "Blockchain"},
-        {"source": "Science", "relation": "includes", "target": "Quantum Computing"},
-        {"source": "Entertainment", "relation": "includes", "target": "Indie Games"},
-        {"source": "Agriculture", "relation": "includes", "target": "Sustainable Farming"},
-        {"source": "Technology", "relation": "includes", "target": "Virtual Reality"}
+        {"source": "Finds peace in early morning solitude", "relation": "CONTRASTS_WITH", "target": "Anxious about future of AI"},
+        {"source": "Techno Music", "relation": "ENHANCES", "target": "Finds peace in early morning solitude"},
+        {"source": "Values deep conversations", "relation": "REFLECTS", "target": "Anxious about future of AI"}
     ])
 
 class UserCreate(BaseModel):
     user_id: str
 
 class IngestData(BaseModel):
+    user_id: str
     content: str
 
 class RAGQuery(BaseModel):
+    user_id: str
     query: str
 
 class RAGResponse(BaseModel):
@@ -227,12 +222,14 @@ class CustomRelationshipData(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
 
 class CustomGraphUpdate(BaseModel):
+    user_id: str
     nodes: List[CustomNodeData]
     relationships: List[CustomRelationshipData]
 
     class Config:
         json_schema_extra = {
             "example": {
+                "user_id": "user123",
                 "nodes": [
                     {
                         "name": "SpotifyListening",
