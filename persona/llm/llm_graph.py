@@ -3,7 +3,7 @@ import openai
 from typing import List, Tuple, Dict, Any
 from persona.llm.prompts import GET_NODES, GET_RELATIONSHIPS, GENERATE_COMMUNITIES, GENERATE_STRUCTURED_INSIGHTS
 from persona.models.schema import EntityExtractionResponse, NodesAndRelationshipsResponse, CommunityStructure, AskResponse, AskRequest, AskResponseInstructor, create_dynamic_schema
-from app_server.config import config
+from server.config import config
 import instructor
 from instructor import OpenAISchema
 from pydantic import Field

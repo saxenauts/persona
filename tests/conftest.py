@@ -2,9 +2,9 @@ import os
 import pytest
 import asyncio
 from fastapi.testclient import TestClient
-from app_server.main import app
+from server.main import app
 from persona.core.neo4j_database import Neo4jConnectionManager
-from app_server.config import config
+from server.config import config
 
 @pytest.fixture(scope="session")
 def event_loop():

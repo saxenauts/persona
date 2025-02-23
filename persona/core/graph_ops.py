@@ -324,11 +324,6 @@ class GraphOps:
         # Create community structure in graph
         await self.make_communities(user_id, community_structure, subgraphs)
 
-    async def store_schema(self, schema: GraphSchema) -> str:
-        return await self.neo4j_manager.store_schema(schema)
-
-    async def get_all_schemas(self) -> List[GraphSchema]:
-        return await self.neo4j_manager.get_all_schemas()
 
 
 

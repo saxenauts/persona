@@ -4,7 +4,7 @@ import asyncio
 import time
 from persona.llm.embeddings import generate_embeddings
 import json
-from app_server.config import config
+from server.config import config
 
 
 class Neo4jConnectionManager:
@@ -12,9 +12,6 @@ class Neo4jConnectionManager:
         self.uri = config.NEO4J.URI
         self.username = config.NEO4J.USER
         self.password = config.NEO4J.PASSWORD
-        print("URI: ", self.uri)
-        print("Username: ", self.username)
-        print("Password: ", self.password)
         self.driver = None
         self.ensure_vector_index_task = None
 

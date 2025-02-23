@@ -6,7 +6,7 @@ packages = [
     { include = "persona", from = "." },
 ]
 authors = [
-    { name = "Utkarsh Saxena", email = "saxena.utkarsh.us@gmail.com" },
+    { name = "Utkarsh Saxena", email = "utkarsh@buildpersona.ai" },
 ]
 homepage = "https://github.com/saxenauts/persona"
 repository = "https://github.com/saxenauts/persona"
@@ -19,7 +19,6 @@ authors = ["Utkarsh Saxena"]
 packages = [
     { include = "persona", from = "." },
 ]
-
 license = "MIT"
 homepage = "https://github.com/saxenauts/persona"
 repository = "https://github.com/saxenauts/persona"
@@ -35,7 +34,7 @@ tiktoken = "^0.8.0"
 sqlalchemy = "^2.0.36"
 aiosqlite = "^0.20.0"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
 pytest-asyncio = "^0.21.0"
 httpx = "^0.24.1"

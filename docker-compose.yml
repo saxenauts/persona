@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   neo4j:
     container_name: persona-neo4j
@@ -19,12 +18,28 @@ services:
     build: .
     volumes:
       - ./persona:/app/persona
-      - ./app_server:/app/app_server
+      - ./server:/app/server
       - ./tests:/app/tests
     env_file:
       - .env
     ports:
       - "8000:8000"
+    depends_on:
+      - neo4j
+    networks:
+      - persona-network
+
+  test:
+    container_name: persona-test
+    build:
+      context: .
+      dockerfile: tests/Dockerfile.test
+    volumes:
+      - ./persona:/app/persona
+      - ./server:/app/server
+      - ./tests:/app/tests
+    env_file:
+      - .env
     depends_on:
       - neo4j
     networks:

@@ -104,7 +104,7 @@ Have a look at [docs](http://docs.persona.dev) for examples and API usage.
 
 ### Code Structure
 
-- **app_server/**: FastAPI server code.
+- **server/**: FastAPI server code.
 - **persona_graph/**: Contains the main application code.
   - **core/**: Core functionalities and database migrations.
   - **llm/**: All LLM calls in Persona.
