@@ -1,230 +1,179 @@
-# API Documentation
+# API Reference
 
-Persona Graph exposes a set of RESTful APIs to interact with user knowledge graphs. This document provides detailed information about each endpoint, including request formats, parameters, and responses.
+Base URL: `http://localhost:8000/api/v1`
 
-## Base URL
+## Version
+```http
+GET /version
+```
+Returns the current API version.
 
-All API endpoints are prefixed with `/api/v1`. For example, to access the user creation endpoint, use `http://localhost:8000/api/v1/users`.
+## User Management
 
-## Endpoints
+### Create User
+```http
+POST /user/create
+Content-Type: application/json
 
-### 1. Create a New User
+{
+    "user_id": "string"
+}
 
-- **URL:** `/api/v1/users`
-- **Method:** `POST`
-- **Description:** Creates a new user in the system.
+Response: 201 Created
+{
+    "message": "User {user_id} created successfully"
+}
+```
 
-#### Request
+### Delete User
+```http
+POST /user/delete
+Content-Type: application/json
 
-- **Headers:**
-  - `Content-Type: application/json`
+{
+    "user_id": "string"
+}
 
-- **Body:**
+Response: 200 OK
+{
+    "message": "User {user_id} deleted successfully"
+}
+```
 
-  ```json
-  {
-    "user_id": "alice123"
-  }
-  ```
+## Data Operations
 
-#### Response
+### Ingest Data
+```http
+POST /ingest
+Content-Type: application/json
 
-- **Status Code:** `201 Created`
-- **Body:**
+{
+    "user_id": "string",
+    "content": "string"  // Conversation or text content
+}
 
-  ```json
-  {
-    "message": "User alice123 created successfully"
-  }
-  ```
-
-### 2. Delete a User
-
-- **URL:** `/api/v1/users/{user_id}`
-- **Method:** `DELETE`
-- **Description:** Deletes an existing user and all associated data.
-
-#### Request
-
-- **Parameters:**
-  - `user_id` (string): Unique identifier of the user to delete.
-
-#### Response
-
-- **Status Code:** `200 OK`
-- **Body:**
-
-  ```json
-  {
-    "message": "User alice123 deleted successfully"
-  }
-  ```
-
-### 3. Ingest User Data
-
-- **URL:** `/api/v1/ingest/{user_id}`
-- **Method:** `POST`
-- **Description:** Ingests unstructured data into the user's knowledge graph.
-
-#### Request
-
-- **Parameters:**
-  - `user_id` (string): Unique identifier of the user.
-
-- **Headers:**
-  - `Content-Type: application/json`
-
-- **Body:**
-
-  ```json
-  {
-    "content": "Alice is a software engineer who loves hiking and photography."
-  }
-  ```
-
-#### Response
-
-- **Status Code:** `200 OK`
-- **Body:**
-
-  ```json
-  {
+Response: 201 Created
+{
     "message": "Data ingested successfully"
-  }
-  ```
+}
+```
 
-### 4. Perform a RAG Query
+### Add Custom Data
+```http
+POST /custom-data
+Content-Type: application/json
 
-- **URL:** `/api/v1/rag/{user_id}/query`
-- **Method:** `POST`
-- **Description:** Performs a Retrieval-Augmented Generation (RAG) query based on the user's knowledge graph.
+{
+    "user_id": "string",
+    "nodes": [
+        {
+            "name": "string",  // Unique identifier for this node
+            "properties": {
+                "key1": "value1",
+                "key2": "value2"
+            },
+            "target": "string",  // Optional target node
+            "relation": "string" // Optional relationship type
+        }
+    ]
+}
 
-#### Request
+Response: 200 OK
+{
+    "status": "success",
+    "message": "Added {n} nodes and {m} relationships",
+    "nodes": ["node1", "node2"]
+}
+```
 
-- **Parameters:**
-  - `user_id` (string): Unique identifier of the user.
+## Query Operations
 
-- **Headers:**
-  - `Content-Type: application/json`
+### RAG Query
+```http
+POST /rag/query
+Content-Type: application/json
 
-- **Body:**
+{
+    "user_id": "string",
+    "query": "string"
+}
 
-  ```json
-  {
-    "query": "What are Alice's hobbies?"
-  }
-  ```
+Response: 200 OK
+{
+    "answer": "string"
+}
+```
 
-#### Response
+### Vector-Only RAG Query
+```http
+POST /rag-query-vector
+Content-Type: application/json
 
-- **Status Code:** `200 OK`
-- **Body:**
+{
+    "user_id": "string",
+    "query": "string"
+}
 
-  ```json
-  {
-    "answer": "Alice enjoys hiking and photography."
-  }
-  ```
+Response: 200 OK
+{
+    "query": "string",
+    "response": "string"
+}
+```
 
-### 5. Test Constructor Flow
+### Ask Insights
+```http
+POST /ask
+Content-Type: application/json
 
-- **URL:** `/api/v1/test-constructor-flow`
-- **Method:** `POST`
-- **Description:** Tests the graph construction flow by processing predefined data.
+{
+    "user_id": "string",
+    "query": "string",
+    "output_schema": {
+        // Expected output structure with example values
+    }
+}
 
-#### Request
-
-- **Headers:**
-  - `Content-Type: application/json`
-
-#### Response
-
-- **Status Code:** `200 OK`
-- **Body:**
-
-  ```json
-  {
-    "status": "Graph updated successfully",
-    "context": "..."
-  }
-  ```
-
-### 6. RAG Query (Alternative Endpoint)
-
-- **URL:** `/api/v1/rag-query`
-- **Method:** `POST`
-- **Description:** Performs a RAG query based on the user's knowledge graph.
-
-#### Request
-
-- **Headers:**
-  - `Content-Type: application/json`
-
-- **Body:**
-
-  ```json
-  {
-    "query": "What is Python?",
-    "user_id": "alice123"
-  }
-  ```
-
-#### Response
-
-- **Status Code:** `200 OK`
-- **Body:**
-
-  ```json
-  {
-    "query": "What is Python?",
-    "response": "Python is a high-level programming language..."
-  }
-  ```
-
-### 7. RAG Query Vector (Alternative Endpoint)
-
-- **URL:** `/api/v1/rag-query-vector`
-- **Method:** `POST`
-- **Description:** Performs a vector-based RAG query for enhanced similarity search.
-
-#### Request
-
-- **Headers:**
-  - `Content-Type: application/json`
-
-- **Body:**
-
-  ```json
-  {
-    "query": "Describe Python programming.",
-    "user_id": "alice123"
-  }
-  ```
-
-#### Response
-
-- **Status Code:** `200 OK`
-- **Body:**
-
-  ```json
-  {
-    "query": "Describe Python programming.",
-    "response": "Python is a versatile programming language used for..."
-  }
-  ```
+Response: 200 OK
+{
+    "result": {
+        // Response matching output_schema
+    }
+}
+```
 
 ## Error Handling
 
-The API uses standard HTTP status codes to indicate the success or failure of an API request.
+All endpoints may return the following error responses:
 
-- **400 Bad Request:** The request was invalid or cannot be otherwise served.
-- **404 Not Found:** The requested resource could not be found.
-- **500 Internal Server Error:** An unexpected error occurred on the server.
-
-#### Example Error Response
-
+### 400 Bad Request
 ```json
 {
-"detail": "User alice123 does not exist."
+    "detail": "Error message explaining what went wrong"
 }
 ```
+
+### 404 Not Found
+```json
+{
+    "detail": "Resource not found"
+}
+```
+
+### 500 Internal Server Error
+```json
+{
+    "detail": "Internal server error"
+}
+```
+
+### 503 Service Unavailable
+```json
+{
+    "detail": "Database connection error. Please ensure Neo4j is running and accessible."
+}
+```
+
+## Database Connection
+
+The API requires a running Neo4j instance. If Neo4j is not accessible, most endpoints will return a 503 error. Ensure Neo4j is running and properly configured in your environment variables before using the API.
