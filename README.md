@@ -20,7 +20,7 @@ We use language to connect different parts of our lives. With LLMs it's possible
 
 Read the motivation and design decisions in depth [here](https://saxenauts.io/blog/persona-graph)
 
-Read the docs [here](http://docs.persona.dev), see the example of transforming a simple app and supercharge it with personalization. 
+Read the docs [here](http://docs.buildpersona.ai), see the example of transforming a simple app and supercharge it with personalization. 
 
 Persona is designed to build graph from unstructured user data like interaction logs, emails, chats, etc. 
 
@@ -99,7 +99,7 @@ We plan to add LLM, Graph & Vector DB abstractions to extend these functionaliti
 
 Detailed API documentation is available at `http://localhost:8000/docs` once the services are up and running.
 
-Have a look at [docs](http://docs.persona.dev) for examples and API usage. 
+Have a look at [docs](http://docs.buildpersona.ai) for examples and API usage. 
 
 
 ### Code Structure
