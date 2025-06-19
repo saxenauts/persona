@@ -65,13 +65,24 @@ While Persona can support storing conversational history, it's not the primary p
 3. **Start the Services:**
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 4. **Access the API:**
 
    The API will be available at `http://localhost:8000`. Access the API documentation at `http://localhost:8000/docs`.
    Check swagger UI at `http://localhost:8000/docs` to go through the endpoints.
+
+5. **Run Tests**
+
+   Current recommended method to run tests is through container, as the entire setup is container dependant with Neo4J. 
+   Test container is part of the compose group, so tests are already run through 'docker compose up' command.
+   To run tests separately
+
+   ```bash
+   docker compose run --rm test
+   ```
+   Running pytest does not work currently. Will be fixed soon when the entire repo is made docker independent.
 
 ## Architecture
 
@@ -98,6 +109,15 @@ We plan to add LLM, Graph & Vector DB abstractions to extend these functionaliti
 ## API Documentation
 
 Detailed API documentation is available at `http://localhost:8000/docs` once the services are up and running.
+
+The API follows RESTful patterns with the following endpoints:
+
+- `POST /api/v1/users/{user_id}` - Create a new user
+- `DELETE /api/v1/users/{user_id}` - Delete a user
+- `POST /api/v1/users/{user_id}/ingest` - Ingest data for a user
+- `POST /api/v1/users/{user_id}/rag/query` - Query user's knowledge graph
+- `POST /api/v1/users/{user_id}/ask` - Ask structured insights from user's data
+- `POST /api/v1/users/{user_id}/custom-data` - Add custom structured data
 
 Have a look at [docs](http://docs.buildpersona.ai) for examples and API usage. 
 

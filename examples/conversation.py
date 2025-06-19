@@ -39,7 +39,11 @@ def split_conversation(text):
 
 def main():
     # API endpoints
-    BASE_URL = "http://localhost:8000/api/v1"
+    if os.environ.get("DOCKER_ENV") == "1":
+        BASE_URL = "http://host.docker.internal:8000/api/v1"
+    else:
+        BASE_URL = "http://localhost:8000/api/v1"
+    print(f"Using BASE_URL: {BASE_URL}")
     USER_ID = "test_user"
     
     # Get conversation file path relative to this script
@@ -65,10 +69,7 @@ def main():
     try:
         # 1. Create user
         print(f"\n1. Creating user '{USER_ID}'...")
-        response = requests.post(
-            f"{BASE_URL}/user/create",
-            json={"user_id": USER_ID}
-        )
+        response = requests.post(f"{BASE_URL}/users/{USER_ID}")
         response.raise_for_status()
         print("User created successfully")
 
@@ -77,11 +78,8 @@ def main():
         for i, conversation in enumerate(conversation_pairs, 1):
             print(f"\nIngesting batch {i}/{len(conversation_pairs)}...")
             response = requests.post(
-                f"{BASE_URL}/ingest",
-                json={
-                    "user_id": USER_ID,
-                    "content": conversation
-                }
+                f"{BASE_URL}/users/{USER_ID}/ingest",
+                json={"content": conversation}
             )
             response.raise_for_status()
             print(f"Batch {i} ingested successfully")

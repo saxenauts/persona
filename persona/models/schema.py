@@ -90,11 +90,9 @@ class UserCreate(BaseModel):
     user_id: str
 
 class IngestData(BaseModel):
-    user_id: str
     content: str
 
 class RAGQuery(BaseModel):
-    user_id: str
     query: str
 
 class RAGResponse(BaseModel):
@@ -150,7 +148,6 @@ class LearnResponse(BaseModel):
     details: str
 
 class AskRequest(BaseModel):
-    user_id: str
     query: str
     output_schema: Dict[str, Any] = Field(..., description="Expected output structure with example values")
 
@@ -222,35 +219,25 @@ class CustomRelationshipData(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
 
 class CustomGraphUpdate(BaseModel):
-    user_id: str
     nodes: List[CustomNodeData]
     relationships: List[CustomRelationshipData]
 
     class Config:
         json_schema_extra = {
             "example": {
-                "user_id": "user123",
                 "nodes": [
                     {
-                        "name": "SpotifyListening",
-                        "data": {
-                            "track_name": "Bohemian Rhapsody",
-                            "artist": "Queen",
-                            "listen_count": 42,
-                            "last_played": "2024-03-15T14:30:00Z"
-                        },
-                        "labels": ["Music", "UserActivity"]
+                        "name": "Favorite Movie",
+                        "properties": {"genre": "Sci-Fi", "rating": "9/10"},
+                        "perspective": "user preference"
                     }
                 ],
                 "relationships": [
                     {
-                        "source": "SpotifyListening",
-                        "target": "user123",
-                        "relation_type": "LISTENED_BY",
-                        "data": {
-                            "timestamp": "2024-03-15T14:30:00Z",
-                            "duration_ms": 354000
-                        }
+                        "source": "Favorite Movie",
+                        "target": "Interstellar",
+                        "relation_type": "IS",
+                        "data": {"confidence": 0.9}
                     }
                 ]
             }

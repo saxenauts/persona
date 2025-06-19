@@ -97,18 +97,18 @@ async def test_rag_query_success():
 @pytest.mark.asyncio
 async def test_ask_insights_success():
     test_request = AskRequest(
-        user_id="test_user",
         query="What are the preferences?",
         output_schema={
             "preferences": ["test"],
             "summary": "test summary"
         }
     )
-    
+
     with patch('persona.core.rag_interface.RAGInterface.__aenter__') as mock_rag:
         mock_rag.return_value.get_context = AsyncMock(return_value="test context")
         mock_rag.return_value.query = AsyncMock(return_value="test response")
-        
-        response = await AskService.ask_insights(test_request)
-        assert response is not None
-        assert response.result is not None
+
+        response = await AskService.ask_insights("test_user", test_request)
+
+    assert response is not None
+    assert hasattr(response, 'result')

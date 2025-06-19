@@ -8,11 +8,11 @@ from openai import AsyncOpenAI
 
 class AskService:
     @staticmethod
-    async def ask_insights(ask_request: AskRequest) -> AskResponse:
+    async def ask_insights(user_id: str, ask_request: AskRequest) -> AskResponse:
         """
         Generate structured insights based on the requested schema
         """
-        async with RAGInterface(ask_request.user_id) as rag:
+        async with RAGInterface(user_id) as rag:
             # Get context using existing RAG functionality
             context = await rag.get_context(ask_request.query)
             

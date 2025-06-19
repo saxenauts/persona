@@ -31,7 +31,6 @@ async def test_constructor_flow():
 async def test_ask_flow():
     """Test the complete flow of asking insights from the graph"""
     test_request = AskRequest(
-        user_id="test_user",
         query="What programming languages are there?",
         output_schema={
             "languages": ["Python"],
@@ -39,7 +38,7 @@ async def test_ask_flow():
         }
     )
     
-    response = await AskService.ask_insights(test_request)
+    response = await AskService.ask_insights("test_user", test_request)
     assert response is not None
 
 @pytest.mark.asyncio
@@ -49,7 +48,6 @@ async def test_custom_data_flow():
         custom_service = CustomDataService(graph_ops)
         
         test_update = CustomGraphUpdate(
-            user_id="test_user",
             nodes=[
                 CustomNodeData(
                     name="current_gaming_preference",
