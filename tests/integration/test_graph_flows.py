@@ -30,16 +30,17 @@ async def test_constructor_flow():
 @pytest.mark.asyncio
 async def test_ask_flow():
     """Test the complete flow of asking insights from the graph"""
-    test_request = AskRequest(
-        query="What programming languages are there?",
-        output_schema={
-            "languages": ["Python"],
-            "summary": "Found Python programming language"
-        }
-    )
-    
-    response = await AskService.ask_insights("test_user", test_request)
-    assert response is not None
+    async with GraphOps() as graph_ops:
+        test_request = AskRequest(
+            query="What programming languages are there?",
+            output_schema={
+                "languages": ["Python"],
+                "summary": "Found Python programming language"
+            }
+        )
+        
+        response = await AskService.ask_insights("test_user", test_request, graph_ops)
+        assert response is not None
 
 @pytest.mark.asyncio
 async def test_custom_data_flow():

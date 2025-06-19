@@ -90,7 +90,8 @@ class UserCreate(BaseModel):
     user_id: str
 
 class IngestData(BaseModel):
-    content: str
+    title: str = Field(..., description="Title for the ingested data")
+    content: str = Field(..., description="The content to be ingested")
 
 class RAGQuery(BaseModel):
     query: str

@@ -13,16 +13,11 @@ config = BaseConfig()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize Neo4j connection
     neo4j_manager = Neo4jConnectionManager()
     await neo4j_manager.initialize()
-    
-    # Initialize GraphOps with the connected manager
     app.state.graph_ops = GraphOps(neo4j_manager)
-    
+    await app.state.graph_ops.initialize()
     yield
-    
-    # Cleanup
     if hasattr(app.state, "graph_ops"):
         await app.state.graph_ops.close()
 

@@ -4,6 +4,7 @@ import asyncio
 from fastapi.testclient import TestClient
 from server.main import app
 from persona.core.neo4j_database import Neo4jConnectionManager
+from persona.core.graph_ops import GraphOps
 from server.config import config
 
 @pytest.fixture(scope="session")
@@ -14,7 +15,9 @@ def event_loop():
 
 @pytest.fixture(scope="session")
 def test_client():
-    return TestClient(app)
+    # Use TestClient context manager to trigger FastAPI lifespan events
+    with TestClient(app) as client:
+        yield client
 
 @pytest.fixture(scope="session")
 async def neo4j_manager():
