@@ -38,11 +38,13 @@ def split_conversation(text):
     return pairs
 
 def main():
-    # API endpoints
+    # API endpoints - when running inside docker, connect to the app service
     if os.environ.get("DOCKER_ENV") == "1":
-        BASE_URL = "http://host.docker.internal:8000/api/v1"
+        BASE_URL = "http://app:8000/api/v1"
     else:
         BASE_URL = "http://localhost:8000/api/v1"
+    
+    print(f"DOCKER_ENV: {os.environ.get('DOCKER_ENV')}")
     print(f"Using BASE_URL: {BASE_URL}")
     USER_ID = "test_user"
     
@@ -80,11 +82,13 @@ def main():
             response = requests.post(
                 f"{BASE_URL}/users/{USER_ID}/ingest",
                 json={
-                    "title": "",
+                    "title": f"Conversation Batch {i}",
                     "content": conversation,
                     "metadata": {}
                 }
             )
+            if response.status_code != 201:
+                print(f"Error details: {response.text}")
             response.raise_for_status()
             print(f"Batch {i} ingested successfully")
 

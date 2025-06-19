@@ -88,6 +88,16 @@ While Persona can support storing conversational history, it's not the primary p
    
    **Note**: Tests will consume OpenAI API calls. Monitor your usage in the OpenAI dashboard.
 
+6. **Try the Example:**
+
+   Run the conversation example to see Persona in action:
+
+   ```bash
+   docker compose run --rm -e DOCKER_ENV=1 app python examples/conversation.py
+   ```
+
+   This will ingest a sample conversation and build a knowledge graph. You can then explore the results in Neo4j Browser at `http://localhost:7474`.
+
 ## Architecture
 
 Persona has the following components:
