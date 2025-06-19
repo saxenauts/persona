@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Path, Depends, Body
+from fastapi import APIRouter, HTTPException, status, Path, Depends, Body, Response
 from persona.core.graph_ops import GraphOps, GraphContextRetriever
 from persona.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
 from persona.core.constructor import GraphConstructor
@@ -22,14 +22,23 @@ router = APIRouter()
 def get_version():
     return {"version": "1.0.0"}
 
-@router.post("/users/{user_id}", status_code=201, description="Create a new user in the system")
+@router.post("/users/{user_id}")
 async def create_user(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    graph_ops: GraphOps = Depends(get_graph_ops)
+    graph_ops: GraphOps = Depends(get_graph_ops),
+    response: Response = None
 ):
     try:
-        await UserService.create_user(user_id, graph_ops)
-        return {"message": f"User {user_id} created successfully"}
+        result = await UserService.create_user(user_id, graph_ops)
+        
+        # Set appropriate status code based on whether user was created or already existed
+        if result["status"] == "exists":
+            response.status_code = 200  # OK - user already exists
+        else:
+            response.status_code = 201  # Created - new user
+            
+        return result
+            
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -39,10 +48,16 @@ async def delete_user(
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
     try:
+        # Check if user exists first
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+            
         await UserService.delete_user(user_id, graph_ops)
         return {"message": f"User {user_id} deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/users/{user_id}/ingest", status_code=201)
 async def ingest_data(

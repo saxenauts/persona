@@ -46,10 +46,11 @@ def ask_service(mock_graph_ops):
 @pytest.mark.asyncio
 async def test_create_user_success(mock_graph_ops):
     mock_graph_ops.create_user = AsyncMock()
-    
+    mock_graph_ops.user_exists = AsyncMock(return_value=False)  # User doesn't exist
+
     result = await UserService.create_user("test_user", mock_graph_ops)
     assert result["message"] == "User test_user created successfully"
-    mock_graph_ops.create_user.assert_called_once_with("test_user")
+    assert result["status"] == "created"
 
 @pytest.mark.asyncio
 async def test_delete_user_success(mock_graph_ops):

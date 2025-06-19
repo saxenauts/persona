@@ -13,6 +13,9 @@ from persona.models.schema import (
 async def test_constructor_flow():
     """Test the complete flow of constructing the graph"""
     async with GraphOps() as graph_ops:
+        # Create user first
+        await graph_ops.create_user("test_user")
+        
         # Add test nodes
         nodes = [
             {

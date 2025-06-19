@@ -322,12 +322,19 @@ class Neo4jConnectionManager:
             return record and record['exists']
 
     async def delete_user(self, user_id: str) -> None:
-        query = """
+        # First delete all nodes associated with the user
+        query1 = """
         MATCH (n {UserId: $user_id})
         DETACH DELETE n
         """
+        # Then delete the user node itself
+        query2 = """
+        MATCH (u:User {id: $user_id})
+        DELETE u
+        """
         async with self.driver.session() as session:
-            await session.run(query, user_id=user_id)
+            await session.run(query1, user_id=user_id)
+            await session.run(query2, user_id=user_id)
         print(f"User {user_id} and all associated nodes deleted successfully.")
 
 

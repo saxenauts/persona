@@ -13,16 +13,18 @@ def test_version(test_client):
 
 def test_create_user(test_client):
     response = test_client.post("/api/v1/users/test_user")
-    assert response.status_code == 201
-    assert response.json()["message"] == "User test_user created successfully"
+    # User might already exist, so accept both 200 and 201
+    assert response.status_code in [200, 201]
+    assert "User test_user" in response.json()["message"]
 
 def test_duplicate_user_creation(test_client):
     # First create a user
     test_client.post("/api/v1/users/test_user_dup")
     # Try to create the same user again
     response = test_client.post("/api/v1/users/test_user_dup")
-    # The API currently returns 201 for duplicate users, so we'll match that behavior
-    assert response.status_code == 201
+    # Should return 200 for existing user
+    assert response.status_code == 200
+    assert "already exists" in response.json()["message"]
 
 def test_ingest_data(test_client):
     # Ensure user exists
@@ -58,11 +60,13 @@ def test_rag_query_vector(test_client):
     assert "response" in response.json()
 
 def test_delete_user(test_client):
+    # First create a user to delete
+    test_client.post("/api/v1/users/test_user")
     response = test_client.delete("/api/v1/users/test_user")
     assert response.status_code == 200
     assert "deleted successfully" in response.json()["message"]
 
 def test_delete_nonexistent_user(test_client):
     response = test_client.delete("/api/v1/users/nonexistent_user")
-    assert response.status_code == 200  # API returns 200 even for non-existent users
-    assert "deleted successfully" in response.json()["message"]
+    # Should return 404 for non-existent user
+    assert response.status_code == 404

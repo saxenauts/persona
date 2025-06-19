@@ -46,13 +46,9 @@ class GraphOps:
 
     async def add_nodes_batch_embeddings(self, nodes: List[NodeModel], user_id: str):
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add nodes.")
+            print(f"User {user_id} does not exist. Cannot add embeddings.")
             return
 
-        # Create nodes with just names, no properties
-        node_dicts = [{"name": node.name} for node in nodes]
-        await self.neo4j_manager.create_nodes(node_dicts, user_id)
-        
         # Generate embeddings for all nodes in one batch
         node_names = [node.name for node in nodes]
         embeddings = generate_embeddings(node_names)  # This will now embed the full narrative/label
@@ -80,7 +76,11 @@ class GraphOps:
 
         node_data = await self.neo4j_manager.get_node_data(node_name, user_id)
         if node_data:
-            return NodeModel(name=node_data["name"])
+            return NodeModel(
+                name=node_data["name"],
+                perspective=node_data.get("perspective"),
+                properties=node_data.get("properties", {})
+            )
         return NodeModel(name=node_name)
 
     async def get_node_relationships(self, node_name: str, user_id: str) -> List[RelationshipModel]:
@@ -145,7 +145,11 @@ class GraphOps:
             return []
 
         nodes = await self.neo4j_manager.get_all_nodes(user_id)
-        return [NodeModel(name=node['name']) for node in nodes]
+        return [NodeModel(
+            name=node['name'],
+            perspective=node.get('perspective'),
+            properties=node.get('properties', {})
+        ) for node in nodes]
 
     async def get_all_relationships(self, user_id: str) -> List[RelationshipModel]:
         if not await self.user_exists(user_id):
