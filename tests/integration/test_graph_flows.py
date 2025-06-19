@@ -13,6 +13,9 @@ from persona.models.schema import (
 async def test_constructor_flow():
     """Test the complete flow of constructing the graph"""
     async with GraphOps() as graph_ops:
+        # Create user first
+        await graph_ops.create_user("test_user")
+        
         # Add test nodes
         nodes = [
             {
@@ -30,17 +33,17 @@ async def test_constructor_flow():
 @pytest.mark.asyncio
 async def test_ask_flow():
     """Test the complete flow of asking insights from the graph"""
-    test_request = AskRequest(
-        user_id="test_user",
-        query="What programming languages are there?",
-        output_schema={
-            "languages": ["Python"],
-            "summary": "Found Python programming language"
-        }
-    )
-    
-    response = await AskService.ask_insights(test_request)
-    assert response is not None
+    async with GraphOps() as graph_ops:
+        test_request = AskRequest(
+            query="What programming languages are there?",
+            output_schema={
+                "languages": ["Python"],
+                "summary": "Found Python programming language"
+            }
+        )
+        
+        response = await AskService.ask_insights("test_user", test_request, graph_ops)
+        assert response is not None
 
 @pytest.mark.asyncio
 async def test_custom_data_flow():
@@ -49,7 +52,6 @@ async def test_custom_data_flow():
         custom_service = CustomDataService(graph_ops)
         
         test_update = CustomGraphUpdate(
-            user_id="test_user",
             nodes=[
                 CustomNodeData(
                     name="current_gaming_preference",

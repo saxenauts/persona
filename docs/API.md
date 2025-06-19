@@ -12,12 +12,8 @@ Returns the current API version.
 
 ### Create User
 ```http
-POST /user/create
+POST /users/{user_id}
 Content-Type: application/json
-
-{
-    "user_id": "string"
-}
 
 Response: 201 Created
 {
@@ -27,12 +23,7 @@ Response: 201 Created
 
 ### Delete User
 ```http
-POST /user/delete
-Content-Type: application/json
-
-{
-    "user_id": "string"
-}
+DELETE /users/{user_id}
 
 Response: 200 OK
 {
@@ -44,11 +35,10 @@ Response: 200 OK
 
 ### Ingest Data
 ```http
-POST /ingest
+POST /users/{user_id}/ingest
 Content-Type: application/json
 
 {
-    "user_id": "string",
     "content": "string"  // Conversation or text content
 }
 
@@ -60,11 +50,10 @@ Response: 201 Created
 
 ### Add Custom Data
 ```http
-POST /custom-data
+POST /users/{user_id}/custom-data
 Content-Type: application/json
 
 {
-    "user_id": "string",
     "nodes": [
         {
             "name": "string",  // Unique identifier for this node
@@ -90,11 +79,10 @@ Response: 200 OK
 
 ### RAG Query
 ```http
-POST /rag/query
+POST /users/{user_id}/rag/query
 Content-Type: application/json
 
 {
-    "user_id": "string",
     "query": "string"
 }
 
@@ -106,11 +94,10 @@ Response: 200 OK
 
 ### Vector-Only RAG Query
 ```http
-POST /rag-query-vector
+POST /users/{user_id}/rag/query-vector
 Content-Type: application/json
 
 {
-    "user_id": "string",
     "query": "string"
 }
 
@@ -123,11 +110,10 @@ Response: 200 OK
 
 ### Ask Insights
 ```http
-POST /ask
+POST /users/{user_id}/ask
 Content-Type: application/json
 
 {
-    "user_id": "string",
     "query": "string",
     "output_schema": {
         // Expected output structure with example values

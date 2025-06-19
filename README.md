@@ -34,12 +34,13 @@ While Persona can support storing conversational history, it's not the primary p
 - **Contextual Query Processing using RAG:** Enhances query responses by leveraging the user's knowledge graph.
 
 
+## Prerequisites
+
+- **Docker & Docker Compose**: Required for running Neo4j and the application
+- **OpenAI API Key**: Required for LLM operations (will consume API calls during testing)
+- **Python 3.12+**: For local development (optional, for running examples locally)
+
 ## Installation and Setup
-
-### Prerequisites
-
-- **Docker:** Ensure Docker is installed on your system. [Download Docker](https://www.docker.com/get-started)
-- **Docker Compose:** Ensure Docker Compose is installed. [Install Docker Compose](https://docs.docker.com/compose/install/)
 
 1. **Clone the Repository:**
 
@@ -50,7 +51,7 @@ While Persona can support storing conversational history, it's not the primary p
 
 2. **Set Up Environment Variables:**
 
-   Use `.env.example` to create a `.env` file in the root directory with the following content:
+   Create a `.env` file in the root directory with the following content:
 
    ```env
    URI_NEO4J=neo4j://neo4j:7687
@@ -62,16 +63,30 @@ While Persona can support storing conversational history, it's not the primary p
    NEO4J_AUTH=neo4j/your_secure_password
    ```
 
+   **Important**: Replace `your_openai_api_key` with a valid OpenAI API key. The application will consume API calls for LLM operations.
+
 3. **Start the Services:**
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 4. **Access the API:**
 
    The API will be available at `http://localhost:8000`. Access the API documentation at `http://localhost:8000/docs`.
    Check swagger UI at `http://localhost:8000/docs` to go through the endpoints.
+
+5. **Run Tests**
+
+   Current recommended method to run tests is through container, as the entire setup is container dependant with Neo4j. 
+   Test container is part of the compose group, so tests are already run through 'docker compose up' command.
+   To run tests separately:
+
+   ```bash
+   docker compose run --rm test
+   ```
+   
+   **Note**: Tests will consume OpenAI API calls. Monitor your usage in the OpenAI dashboard.
 
 ## Architecture
 
@@ -99,13 +114,22 @@ We plan to add LLM, Graph & Vector DB abstractions to extend these functionaliti
 
 Detailed API documentation is available at `http://localhost:8000/docs` once the services are up and running.
 
+The API follows RESTful patterns with the following endpoints:
+
+- `POST /api/v1/users/{user_id}` - Create a new user
+- `DELETE /api/v1/users/{user_id}` - Delete a user
+- `POST /api/v1/users/{user_id}/ingest` - Ingest data for a user
+- `POST /api/v1/users/{user_id}/rag/query` - Query user's knowledge graph
+- `POST /api/v1/users/{user_id}/ask` - Ask structured insights from user's data
+- `POST /api/v1/users/{user_id}/custom-data` - Add custom structured data
+
 Have a look at [docs](http://docs.buildpersona.ai) for examples and API usage. 
 
 
 ### Code Structure
 
 - **server/**: FastAPI server code.
-- **persona_graph/**: Contains the main application code.
+- **persona/**: Contains the main application code.
   - **core/**: Core functionalities and database migrations.
   - **llm/**: All LLM calls in Persona.
   - **models/**: Pydantic models for the application.

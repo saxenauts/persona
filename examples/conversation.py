@@ -39,7 +39,11 @@ def split_conversation(text):
 
 def main():
     # API endpoints
-    BASE_URL = "http://localhost:8000/api/v1"
+    if os.environ.get("DOCKER_ENV") == "1":
+        BASE_URL = "http://host.docker.internal:8000/api/v1"
+    else:
+        BASE_URL = "http://localhost:8000/api/v1"
+    print(f"Using BASE_URL: {BASE_URL}")
     USER_ID = "test_user"
     
     # Get conversation file path relative to this script
@@ -65,10 +69,7 @@ def main():
     try:
         # 1. Create user
         print(f"\n1. Creating user '{USER_ID}'...")
-        response = requests.post(
-            f"{BASE_URL}/user/create",
-            json={"user_id": USER_ID}
-        )
+        response = requests.post(f"{BASE_URL}/users/{USER_ID}")
         response.raise_for_status()
         print("User created successfully")
 
@@ -77,10 +78,11 @@ def main():
         for i, conversation in enumerate(conversation_pairs, 1):
             print(f"\nIngesting batch {i}/{len(conversation_pairs)}...")
             response = requests.post(
-                f"{BASE_URL}/ingest",
+                f"{BASE_URL}/users/{USER_ID}/ingest",
                 json={
-                    "user_id": USER_ID,
-                    "content": conversation
+                    "title": "",
+                    "content": conversation,
+                    "metadata": {}
                 }
             )
             response.raise_for_status()
@@ -90,13 +92,13 @@ def main():
         print("1. Open Neo4j Browser at http://localhost:7474")
         print("2. Login with default credentials (neo4j/password)")
         print("3. Try this query to see your conversation graph:")
-        print("   MATCH (n)-[r]->(m) WHERE n.user_id = 'test_user' RETURN n,r,m")
+        print("   MATCH (n:NodeName {UserId: 'test_user'})-[r]-(m:NodeName {UserId: 'test_user'}) RETURN n,r,m")
 
     except requests.exceptions.RequestException as e:
         print(f"\nError: {str(e)}")
         if "Connection refused" in str(e):
             print("\nMake sure the Persona server is running:")
-            print("1. Start all services: docker-compose up -d")
+            print("1. Start all services: docker compose up -d")
             print("2. Wait a few seconds for services to be ready")
             print("3. Run this script again")
 

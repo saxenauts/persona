@@ -5,6 +5,9 @@ import time
 from persona.llm.embeddings import generate_embeddings
 import json
 from server.config import config
+from server.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class Neo4jConnectionManager:
@@ -38,13 +41,13 @@ class Neo4jConnectionManager:
                     await self.connect()
                 async with self.driver.session() as session:
                     await session.run("RETURN 1")
-                    print("Neo4j is ready.")
+                    logger.info("Neo4j is ready.")
                     return
             except Exception as e:
-                print(f"Waiting for Neo4j... {str(e)}")
+                logger.debug(f"Waiting for Neo4j... {str(e)}")
                 elapsed_time = time.time() - start_time
                 if elapsed_time > timeout:
-                    print(f"Failed to connect to Neo4j after {timeout} seconds.")
+                    logger.error(f"Failed to connect to Neo4j after {timeout} seconds.")
                     raise e
                 await asyncio.sleep(2)  # Increased sleep time
 
@@ -80,13 +83,13 @@ class Neo4jConnectionManager:
             query = f"DROP INDEX `{index_name}`"
             async with self.driver.session() as session:
                 await session.run(query)
-            print(f"Vector index '{index_name}' dropped.")
+            logger.info(f"Vector index '{index_name}' dropped.")
         else:
-            print(f"Vector index '{index_name}' does not exist. Skipping drop operation.")
+            logger.debug(f"Vector index '{index_name}' does not exist. Skipping drop operation.")
 
     async def create_nodes(self, nodes: List[Dict[str, Any]], user_id: str) -> None:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot create nodes.")
+            logger.warning(f"User {user_id} does not exist. Cannot create nodes.")
             return
         async with self.driver.session() as session:
             for node in nodes:
@@ -104,7 +107,7 @@ class Neo4jConnectionManager:
 
     async def create_relationships(self, relationships: List[Dict[str, Any]], user_id: str) -> None:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot create relationships.")
+            logger.warning(f"User {user_id} does not exist. Cannot create relationships.")
             return
         async with self.driver.session() as session:
             for relationship in relationships:
@@ -141,13 +144,13 @@ class Neo4jConnectionManager:
             """
             async with self.driver.session() as session:
                 await session.run(query)
-            print(f"Vector index '{index_name}' created.")
+            logger.info(f"Vector index '{index_name}' created.")
         else:
-            print(f"Vector index '{index_name}' already exists.")
+            logger.debug(f"Vector index '{index_name}' already exists.")
 
     async def add_embedding_to_vector_index(self, node_name: str, embedding: List[float], user_id: str) -> None:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add embedding.")
+            logger.warning(f"User {user_id} does not exist. Cannot add embedding.")
             return
         query = """
         MATCH (n {name: $node_name, UserId: $user_id})
@@ -181,9 +184,9 @@ class Neo4jConnectionManager:
                 }}
                 """
                 await session.run(query)
-                print("Vector index 'embeddings_index' created.")
+                logger.info("Vector index 'embeddings_index' created.")
             else:
-                print("Vector index 'embeddings_index' already exists.")
+                logger.debug("Vector index 'embeddings_index' already exists.")
 
     async def query_text_similarity(self, keyword_embedding: List[float], user_id: str, index_name: str = "embeddings_index") -> List[Dict[str, Any]]:
         """
@@ -226,10 +229,10 @@ class Neo4jConnectionManager:
 
     async def update_node_embeddings(self, node_name: str, embedding: List[float], user_id: str) -> None:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot update embeddings.")
+            logger.warning(f"User {user_id} does not exist. Cannot update embeddings.")
             return
         if not self._validate_embedding(embedding):
-            print(f"Invalid embedding format for node {node_name}. Embedding must be a list of floats.")
+            logger.error(f"Invalid embedding format for node {node_name}. Embedding must be a list of floats.")
             return
 
         async with self.driver.session() as session:
@@ -241,7 +244,7 @@ class Neo4jConnectionManager:
         SET n.embedding = $embedding
         RETURN n.embedding IS NOT NULL AS successFlag
         """
-        print("embedding", embedding)
+        logger.debug(f"Setting embedding for node {node_name} with embedding size: {len(embedding)}")
         result = await session.run(query, embedding=embedding, node_name=node_name, user_id=user_id)
         result_data = await result.single()
         return result_data['successFlag'] if result_data else False
@@ -306,10 +309,10 @@ class Neo4jConnectionManager:
         query = """
         MERGE (u:User {id: $user_id})
         """
-        print("URI: ", self.uri)
+        logger.debug(f"Creating user {user_id} with URI: {self.uri}")
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
-        print(f"User {user_id} created successfully.")
+        logger.info(f"User {user_id} created successfully.")
 
     async def user_exists(self, user_id: str) -> bool:
         query = """
@@ -322,12 +325,19 @@ class Neo4jConnectionManager:
             return record and record['exists']
 
     async def delete_user(self, user_id: str) -> None:
-        query = """
+        # First delete all nodes associated with the user
+        query1 = """
         MATCH (n {UserId: $user_id})
         DETACH DELETE n
         """
+        # Then delete the user node itself
+        query2 = """
+        MATCH (u:User {id: $user_id})
+        DELETE u
+        """
         async with self.driver.session() as session:
-            await session.run(query, user_id=user_id)
-        print(f"User {user_id} and all associated nodes deleted successfully.")
+            await session.run(query1, user_id=user_id)
+            await session.run(query2, user_id=user_id)
+        logger.info(f"User {user_id} and all associated nodes deleted successfully.")
 
 
