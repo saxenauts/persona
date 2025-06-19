@@ -82,9 +82,6 @@ class NodesAndRelationshipsResponse(BaseModel):
 class UserCreate(BaseModel):
     user_id: str
 
-class IngestData(BaseModel):
-    content: str
-
 class RAGQuery(BaseModel):
     query: str
 

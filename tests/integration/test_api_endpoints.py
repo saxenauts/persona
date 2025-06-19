@@ -35,7 +35,8 @@ def test_ingest_data(test_client):
         "/api/v1/users/test_user_api/ingest",
         json={
             "title": "Space Exploration",
-            "content": "This is a test content about space exploration."
+            "content": "This is a test content about space exploration.",
+            "metadata": {}
         }
     )
     if response.status_code != 201:

@@ -6,7 +6,7 @@ from persona.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOO
 from persona.models.schema import UnstructuredData
 from persona.core.constructor import GraphContextRetriever
 from persona.core.rag_interface import RAGInterface
-from persona.models.schema import UserCreate, IngestData, RAGQuery, RAGResponse
+from persona.models.schema import UserCreate, RAGQuery, RAGResponse
 from persona.services.user_service import UserService
 from persona.services.ingest_service import IngestService
 from persona.services.rag_service import RAGService
@@ -47,15 +47,11 @@ async def delete_user(
 @router.post("/users/{user_id}/ingest", status_code=201)
 async def ingest_data(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    data: IngestData = Body(...),
+    data: UnstructuredData = Body(...),
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
     try:
-        # Convert IngestData to UnstructuredData for service layer
-        from persona.models.schema import UnstructuredData
-        unstructured_data = UnstructuredData(title=data.title, content=data.content)
-        
-        await IngestService.ingest_data(user_id, unstructured_data, graph_ops)
+        await IngestService.ingest_data(user_id, data, graph_ops)
         return {"message": "Data ingested successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

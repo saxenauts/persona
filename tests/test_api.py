@@ -31,7 +31,8 @@ def test_ingest_data(test_client):
         "/api/v1/users/test_user/ingest",
         json={
             "title": "Python Programming",
-            "content": "Python is a great programming language for AI and web development."
+            "content": "Python is a great programming language for AI and web development.",
+            "metadata": {}
         }
     )
     if response.status_code != 201:

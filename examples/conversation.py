@@ -79,7 +79,11 @@ def main():
             print(f"\nIngesting batch {i}/{len(conversation_pairs)}...")
             response = requests.post(
                 f"{BASE_URL}/users/{USER_ID}/ingest",
-                json={"content": conversation}
+                json={
+                    "title": "",
+                    "content": conversation,
+                    "metadata": {}
+                }
             )
             response.raise_for_status()
             print(f"Batch {i} ingested successfully")
