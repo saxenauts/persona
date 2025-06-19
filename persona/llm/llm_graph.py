@@ -10,7 +10,7 @@ from pydantic import Field
 from persona.utils.instructions_reader import INSTRUCTIONS
 
 # Initialize the OpenAI client globally if not already set up elsewhere in your application
-openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_KEY)
+openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
 client = instructor.from_openai(openai_client)
 
 class Node(OpenAISchema):

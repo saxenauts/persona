@@ -3,8 +3,8 @@ from typing import List, Dict, Any
 import json
 from server.config import config
 
-# openai.api_key = config.MACHINE_LEARNING.OPENAI_KEY
-openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_KEY)
+# openai.api_key = config.MACHINE_LEARNING.OPENAI_API_KEY
+openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
 
 def generate_embeddings(texts, model="text-embedding-3-small"):
     try:
