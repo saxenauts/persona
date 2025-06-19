@@ -9,7 +9,7 @@ This document describes the modules under `persona/llm` that implement the integ
 - Returns 1536 dimensional vectors used for Neo4j's vector index.
 
 ```python
-openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_KEY)
+openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
 
 def generate_embeddings(texts, model="text-embedding-3-small"):
     response = openai_client.embeddings.create(input=texts, model=model, dimensions=1536)
@@ -25,7 +25,7 @@ def generate_embeddings(texts, model="text-embedding-3-small"):
 - Defines `Node` and `Relationship` schema objects and functions that drive graph construction and querying.
 
 ```python
-openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_KEY)
+openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
 client = instructor.from_openai(openai_client)
 
 class Node(OpenAISchema):
@@ -49,7 +49,7 @@ response = await client.chat.completions.create(
 
 ## Configuration
 
-The OpenAI API key is loaded from the environment via `server.config`. Ensure `OPENAI_KEY` is defined in `.env` before running the application.
+The OpenAI API key is loaded from the environment via `server.config`. Ensure `OPENAI_API_KEY` is defined in `.env` before running the application.
 
 ## Summary
 
