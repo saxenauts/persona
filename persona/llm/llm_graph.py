@@ -8,6 +8,9 @@ import instructor
 from instructor import OpenAISchema
 from pydantic import Field
 from persona.utils.instructions_reader import INSTRUCTIONS
+from server.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Initialize the OpenAI client globally if not already set up elsewhere in your application
 openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
@@ -43,10 +46,10 @@ async def get_nodes(text: str, graph_context: str) -> List[Node]:
         )
         return response
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
+        logger.error(f"Error decoding JSON in get_nodes: {e}")
         return []
     except Exception as e:
-        print(f"Error while extracting nodes: {e}")
+        logger.error(f"Error while extracting nodes: {e}")
         return []
 
 async def get_relationships(nodes: List[Node], graph_context: str) -> List[Relationship]:
@@ -68,7 +71,7 @@ async def get_relationships(nodes: List[Node], graph_context: str) -> List[Relat
         )
         return response
     except Exception as e:
-        print(f"Error while generating relationships: {e}")
+        logger.error(f"Error while generating relationships: {e}")
         return []
 
 async def generate_response_with_context(query: str, context: str) -> str:
@@ -109,10 +112,10 @@ async def detect_communities(subgraphs_text: str) -> CommunityStructure:
             temperature=0.7,
             response_model=CommunityStructure
         )
-        print("Community Detection Response: ", response)
+        logger.debug(f"Community Detection Response: {response}")
         return response
     except Exception as e:
-        print(f"Error in community detection: {str(e)}")
+        logger.error(f"Error in community detection: {str(e)}")
         return CommunityStructure(communityHeaders=[])
     
 
@@ -132,7 +135,7 @@ async def generate_structured_insights(ask_request: AskRequest, context: str) ->
     {json.dumps(ask_request.output_schema, indent=2)}
     """
 
-    print("Prompt: ", prompt)
+    logger.debug(f"Structured insights prompt: {prompt}")
 
     try:
         response = await openai_client.chat.completions.create(
@@ -147,5 +150,5 @@ async def generate_structured_insights(ask_request: AskRequest, context: str) ->
         return json.loads(response.choices[0].message.content)
         
     except Exception as e:
-        print(f"Error in generate_structured_insights: {e}")
+        logger.error(f"Error in generate_structured_insights: {e}")
         return {k: [] if isinstance(v, list) else {} for k, v in ask_request.output_schema.items()}

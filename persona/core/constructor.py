@@ -8,6 +8,9 @@ from persona.models.schema import (
 from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 import asyncio
+from server.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class GraphConstructor:
     def __init__(self, user_id: str):
@@ -39,7 +42,7 @@ class GraphConstructor:
         # Extract new nodes from the content
         new_nodes = await self.extract_nodes(text)
         if not new_nodes:
-            print("No new nodes generated from the unstructured data.")
+            logger.info("No new nodes generated from the unstructured data.")
             return
 
         # Get existing graph context

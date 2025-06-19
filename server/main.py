@@ -5,11 +5,16 @@ from persona.core.neo4j_database import Neo4jConnectionManager
 from persona.core.graph_ops import GraphOps
 from fastapi.middleware.cors import CORSMiddleware
 from server.routers.graph_api import router as graph_api_router
+from server.logging_config import setup_logging, get_logger
 import asyncio
 
 from server.config import BaseConfig
 
 config = BaseConfig()
+
+# Initialize logging
+setup_logging(log_level="INFO")
+logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

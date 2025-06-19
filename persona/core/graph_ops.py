@@ -9,6 +9,9 @@ import asyncio
 import json
 from persona.llm.llm_graph import detect_communities
 from collections import defaultdict
+from server.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class GraphOps:
     def __init__(self, neo4j_manager: Neo4jConnectionManager = None):
@@ -33,7 +36,7 @@ class GraphOps:
 
     async def add_nodes(self, nodes: List[NodeModel], user_id: str):
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add nodes.")
+            logger.warning(f"User {user_id} does not exist. Cannot add nodes.")
             return
 
         # Create nodes with just names, no properties
@@ -46,7 +49,7 @@ class GraphOps:
 
     async def add_nodes_batch_embeddings(self, nodes: List[NodeModel], user_id: str):
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add embeddings.")
+            logger.warning(f"User {user_id} does not exist. Cannot add embeddings.")
             return
 
         # Generate embeddings for all nodes in one batch
@@ -58,12 +61,12 @@ class GraphOps:
             if embedding:
                 await self.neo4j_manager.add_embedding_to_vector_index(node_name, embedding, user_id)
             else:
-                print(f"Failed to generate embedding for node: {node_name}")
+                logger.error(f"Failed to generate embedding for node: {node_name}")
 
 
     async def add_relationships(self, relationships: List[RelationshipModel], user_id: str):
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot add relationships.")
+            logger.warning(f"User {user_id} does not exist. Cannot add relationships.")
             return
 
         relationship_dicts = [rel.dict() for rel in relationships]
@@ -71,7 +74,7 @@ class GraphOps:
 
     async def get_node_data(self, node_name: str, user_id: str) -> NodeModel:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot get node data.")
+            logger.warning(f"User {user_id} does not exist. Cannot get node data.")
             return NodeModel(name=node_name)
 
         node_data = await self.neo4j_manager.get_node_data(node_name, user_id)
@@ -85,7 +88,7 @@ class GraphOps:
 
     async def get_node_relationships(self, node_name: str, user_id: str) -> List[RelationshipModel]:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot get node relationships.")
+            logger.warning(f"User {user_id} does not exist. Cannot get node relationships.")
             return []
 
         relationships = await self.neo4j_manager.get_node_relationships(node_name, user_id)
@@ -97,15 +100,15 @@ class GraphOps:
         Perform a similarity search on the graph based on a text query. 
         """
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot perform similarity search.")
+            logger.warning(f"User {user_id} does not exist. Cannot perform similarity search.")
             return {"query": query, "results": []}
 
-        print(f"Generating embedding for query: '{query}' for user ID: '{user_id}'")
+        logger.debug(f"Generating embedding for query: '{query}' for user ID: '{user_id}'")
         query_embeddings = generate_embeddings([query])
         if not query_embeddings[0]:
             return {"query": query, "results": []}
 
-        print(f"Performing similarity search for the query: '{query}' for user ID: '{user_id}'")
+        logger.debug(f"Performing similarity search for the query: '{query}' for user ID: '{user_id}'")
         results = await self.neo4j_manager.query_text_similarity(query_embeddings[0], user_id)
 
         return {
@@ -124,7 +127,7 @@ class GraphOps:
         Update the graph with new nodes and relationships
         """
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot update graph.")
+            logger.warning(f"User {user_id} does not exist. Cannot update graph.")
             return
 
         if graph_update.nodes:
@@ -132,16 +135,16 @@ class GraphOps:
         if graph_update.relationships:
             await self.add_relationships(graph_update.relationships, user_id)
         if not graph_update.nodes and not graph_update.relationships:
-            print("No nodes or relationships to update.")        
+            logger.debug("No nodes or relationships to update.")        
 
     async def close(self):
         """Close the Neo4j connection"""
-        print("Closing Neo4j connection...")
+        logger.info("Closing Neo4j connection...")
         await self.neo4j_manager.close()
 
     async def get_all_nodes(self, user_id: str) -> List[NodeModel]:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot get all nodes.")
+            logger.warning(f"User {user_id} does not exist. Cannot get all nodes.")
             return []
 
         nodes = await self.neo4j_manager.get_all_nodes(user_id)
@@ -153,7 +156,7 @@ class GraphOps:
 
     async def get_all_relationships(self, user_id: str) -> List[RelationshipModel]:
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot get all relationships.")
+            logger.warning(f"User {user_id} does not exist. Cannot get all relationships.")
             return []
 
         relationships = await self.neo4j_manager.get_all_relationships(user_id)
@@ -179,13 +182,13 @@ class GraphOps:
         Perform similarity search using pre-computed embedding
         """
         if not await self.user_exists(user_id):
-            print(f"User {user_id} does not exist. Cannot perform similarity search.")
+            logger.warning(f"User {user_id} does not exist. Cannot perform similarity search.")
             return {"query": query, "results": []}
 
         try:
-            print(f"Performing similarity search for: {query}")
+            logger.debug(f"Performing similarity search for: {query}")
             results = await self.neo4j_manager.query_text_similarity(embedding, user_id)
-            print(f"Found {len(results)} similar nodes for '{query}'")
+            logger.debug(f"Found {len(results)} similar nodes for '{query}'")
             
             return {
                 "query": query,
@@ -198,7 +201,7 @@ class GraphOps:
                 ]
             }
         except Exception as e:
-            print(f"Error in similarity search for {query}: {str(e)}")
+            logger.error(f"Error in similarity search for {query}: {str(e)}")
             return {"query": query, "results": []}
         
 
@@ -349,7 +352,7 @@ class GraphContextRetriever:
         """
         context = {}
         for node in start_nodes:
-            print(node)
+            logger.debug(f"Exploring node: {node}")
             await self.explore_node(node['nodeName'], context, max_hops, user_id)
         return context
 
@@ -406,10 +409,10 @@ class GraphContextRetriever:
         # Check if there are any existing nodes in the graph
         existing_nodes = await self.graph_ops.get_all_nodes(user_id)
         if not existing_nodes:
-            print("No existing nodes in graph (t=0). Skipping context retrieval.")
+            logger.debug("No existing nodes in graph (t=0). Skipping context retrieval.")
             return context
         
-        print(f"Found {len(existing_nodes)} existing nodes in graph")
+        logger.debug(f"Found {len(existing_nodes)} existing nodes in graph")
         
         # Start exploring from the provided nodes directly
         subgraph = {}
@@ -472,6 +475,6 @@ class GraphContextRetriever:
         return context
 
     async def get_graph_context(self, query: str):
-        print(f"Getting graph context for query: {query}")
+        logger.debug(f"Getting graph context for query: {query}")
         results = await self.graph_ops.perform_similarity_search(query=query, user_id=self.user_id)
         return results
