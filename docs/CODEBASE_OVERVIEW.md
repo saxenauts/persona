@@ -41,9 +41,9 @@ Automated tests executed via `pytest`. The `tests/docker-compose.yml` file spins
 
 ## Data Flow
 
-1. **Ingestion** – Text is submitted to the `/api/v1/ingest` endpoint. `IngestService` invokes the `GraphConstructor` which calls `persona.llm.llm_graph` to extract nodes and relationships. These are persisted via `GraphOps`.
-2. **Retrieval** – A question is sent to `/api/v1/rag/query`. `RAGService` uses `GraphOps` to retrieve relevant nodes, gathers context with `GraphContextRetriever`, and sends it to the LLM for an answer.
-3. **Custom Data** – The `/api/v1/custom/update` endpoint allows clients to post structured nodes or relationships directly.
+1. **Ingestion** – Text is submitted to the `/api/v1/users/{user_id}/ingest` endpoint. `IngestService` invokes the `GraphConstructor` which calls `persona.llm.llm_graph` to extract nodes and relationships. These are persisted via `GraphOps`.
+2. **Retrieval** – A question is sent to `/api/v1/users/{user_id}/rag/query`. `RAGService` uses `GraphOps` to retrieve relevant nodes, gathers context with `GraphContextRetriever`, and sends it to the LLM for an answer.
+3. **Custom Data** – The `/api/v1/users/{user_id}/custom-data` endpoint allows clients to post structured nodes or relationships directly.
 
 ## Running the Project
 

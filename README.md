@@ -34,12 +34,13 @@ While Persona can support storing conversational history, it's not the primary p
 - **Contextual Query Processing using RAG:** Enhances query responses by leveraging the user's knowledge graph.
 
 
+## Prerequisites
+
+- **Docker & Docker Compose**: Required for running Neo4j and the application
+- **OpenAI API Key**: Required for LLM operations (will consume API calls during testing)
+- **Python 3.12+**: For local development (optional, for running examples locally)
+
 ## Installation and Setup
-
-### Prerequisites
-
-- **Docker:** Ensure Docker is installed on your system. [Download Docker](https://www.docker.com/get-started)
-- **Docker Compose:** Ensure Docker Compose is installed. [Install Docker Compose](https://docs.docker.com/compose/install/)
 
 1. **Clone the Repository:**
 
@@ -50,7 +51,7 @@ While Persona can support storing conversational history, it's not the primary p
 
 2. **Set Up Environment Variables:**
 
-   Use `.env.example` to create a `.env` file in the root directory with the following content:
+   Create a `.env` file in the root directory with the following content:
 
    ```env
    URI_NEO4J=neo4j://neo4j:7687
@@ -61,6 +62,8 @@ While Persona can support storing conversational history, it's not the primary p
 
    NEO4J_AUTH=neo4j/your_secure_password
    ```
+
+   **Important**: Replace `your_openai_api_key` with a valid OpenAI API key. The application will consume API calls for LLM operations.
 
 3. **Start the Services:**
 
@@ -75,14 +78,15 @@ While Persona can support storing conversational history, it's not the primary p
 
 5. **Run Tests**
 
-   Current recommended method to run tests is through container, as the entire setup is container dependant with Neo4J. 
+   Current recommended method to run tests is through container, as the entire setup is container dependant with Neo4j. 
    Test container is part of the compose group, so tests are already run through 'docker compose up' command.
-   To run tests separately
+   To run tests separately:
 
    ```bash
    docker compose run --rm test
    ```
-   Running pytest does not work currently. Will be fixed soon when the entire repo is made docker independent.
+   
+   **Note**: Tests will consume OpenAI API calls. Monitor your usage in the OpenAI dashboard.
 
 ## Architecture
 
@@ -125,7 +129,7 @@ Have a look at [docs](http://docs.buildpersona.ai) for examples and API usage.
 ### Code Structure
 
 - **server/**: FastAPI server code.
-- **persona_graph/**: Contains the main application code.
+- **persona/**: Contains the main application code.
   - **core/**: Core functionalities and database migrations.
   - **llm/**: All LLM calls in Persona.
   - **models/**: Pydantic models for the application.
