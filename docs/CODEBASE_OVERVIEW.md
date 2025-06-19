@@ -27,8 +27,9 @@ The `persona` package holds all domain logic. Important subpackages include:
 
 Contains the FastAPI application. Key files are:
 
-- `main.py`: entry point that creates the app instance.
+- `main.py`: entry point that creates the app instance with lifespan management.
 - `routers/graph_api.py`: defines the `/api/v1` endpoints which call into the service layer.
+- `dependencies.py`: FastAPI dependency injection for GraphOps and other shared resources.
 - `config.py`: loads environment variables such as database credentials and OpenAI keys.
 
 ### docs/
@@ -38,6 +39,19 @@ Additional documentation including API reference and development guides.
 ### tests/
 
 Automated tests executed via `pytest`. The `tests/docker-compose.yml` file spins up Neo4j for the suite.
+
+## Architecture Patterns
+
+### GraphOps Dependency Injection
+
+The application uses a **single global GraphOps instance** managed through FastAPI's dependency injection system:
+
+1. **Initialization**: A single `GraphOps` instance is created during FastAPI startup in the lifespan context manager
+2. **Storage**: The instance is stored in `app.state.graph_ops` for global access
+3. **Injection**: Services receive the GraphOps instance via FastAPI's `Depends(get_graph_ops)` dependency
+4. **Benefits**: Eliminates connection overhead, ensures consistent resource lifecycle, and simplifies testing
+
+This pattern ensures that all database operations share the same Neo4j connection pool and avoids the overhead of creating new connections for each request.
 
 ## Data Flow
 

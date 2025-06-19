@@ -62,6 +62,46 @@ persona/
    - Request validation with Pydantic models
    - Response formatting
 
+4. **Dependency Injection** (`server/dependencies.py`)
+   - FastAPI dependency injection for shared resources
+   - GraphOps instance management
+   - Ensures consistent resource lifecycle
+
+## Architecture Patterns
+
+### GraphOps Dependency Injection
+
+The application uses a **single global GraphOps instance** to manage database connections efficiently:
+
+**For API Routes:**
+```python
+from server.dependencies import get_graph_ops
+
+@router.post("/users/{user_id}")
+async def create_user(
+    user_id: str,
+    graph_ops: GraphOps = Depends(get_graph_ops)
+):
+    return await UserService.create_user(user_id, graph_ops)
+```
+
+**For Services:**
+```python
+class UserService:
+    @staticmethod
+    async def create_user(user_id: str, graph_ops: GraphOps):
+        await graph_ops.create_user(user_id)
+        return {"message": f"User {user_id} created successfully"}
+```
+
+**Benefits:**
+- Eliminates connection overhead (no new GraphOps instances per request)
+- Ensures consistent resource lifecycle
+- Simplifies testing with dependency injection
+- Shares Neo4j connection pool across all operations
+
+**Important:** Always inject GraphOps as a parameter rather than creating new instances within services.
+
 ## Development Workflow
 
 1. **Create a Feature Branch**
