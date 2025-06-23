@@ -1,24 +1,28 @@
-FROM python:3.12-slim
+FROM python:3.12
 
-# Set the working directory
-WORKDIR /app
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 # Install poetry
 RUN pip install poetry
 
-# Copy only the dependency files to leverage Docker cache
-COPY poetry.lock pyproject.toml ./
+WORKDIR /app
 
-# Install dependencies
-RUN poetry config virtualenvs.create false && \
-    poetry install --no-root --no-dev
+# Copy only the dependency files first to leverage Docker caching
+COPY pyproject.toml poetry.lock ./
 
-# Copy the rest of the application code
-COPY . .
+# Install dependencies (including dev) before copying the rest of the code
+RUN poetry config virtualenvs.create false \
+    && poetry install --with dev
 
-# Copy the test runner script
-COPY tests/run_tests.sh .
-RUN chmod +x run_tests.sh
+# Copy the project files
+COPY persona ./persona/
+COPY server/ ./server/
+COPY tests/ ./tests/
 
-# Set the entrypoint to our test runner script
-CMD ["./run_tests.sh"] 
+# Make the test runner script executable
+RUN chmod +x tests/run_tests.sh
+
+# Command to run our centralized test script
+CMD ["tests/run_tests.sh"] 
