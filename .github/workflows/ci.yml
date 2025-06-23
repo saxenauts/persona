@@ -5,13 +5,25 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    
+    # Define environment variables for the job
+    env:
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+      NEO4J_URI: bolt://localhost:7687
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Create .env file for Docker Compose
+        run: touch .env
 
       - name: Set up Docker Compose
         run: |
