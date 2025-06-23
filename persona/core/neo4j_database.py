@@ -152,6 +152,8 @@ class Neo4jConnectionManager:
         if not await self.user_exists(user_id):
             logger.warning(f"User {user_id} does not exist. Cannot add embedding.")
             return
+        
+        # Use the official Neo4j procedure for setting vector properties
         query = """
         MATCH (n {name: $node_name, UserId: $user_id})
         CALL db.create.setNodeVectorProperty(n, 'embedding', $embedding)

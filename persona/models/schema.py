@@ -21,6 +21,7 @@ class Relationship(OpenAISchema):
 
 class NodeModel(BaseModel):
     name: str = Field(..., description="The node content - can be a simple label or narrative fragment")
+    perspective: Optional[str] = Field(None, description="Additional perspective or context for the node")
     properties: Optional[Dict[str, str]] = Field(default_factory=dict)
     embedding: Optional[List[float]] = Field(None, description="Embedding vector for the node, if applicable")
 
@@ -28,6 +29,7 @@ class NodeModel(BaseModel):
         json_schema_extra = {
             "example": {
                 "name": "Finds peace in early morning solitude",
+                "perspective": "This reflects a desire for quiet contemplation",
                 "properties": {},
                 "embedding": [0.1, 0.2, 0.3]
             }
