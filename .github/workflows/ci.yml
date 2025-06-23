@@ -15,9 +15,9 @@ jobs:
 
       - name: Set up Docker Compose
         run: |
-          docker-compose -f docker-compose.yml up -d neo4j
+          docker compose -f docker-compose.yml up -d neo4j
           # Give Neo4j a moment to start up
           sleep 15
       
       - name: Run tests and quality checks
-        run: docker-compose -f docker-compose.yml run --rm test 
+        run: docker compose -f docker-compose.yml run --rm test 
