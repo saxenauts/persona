@@ -1,0 +1,23 @@
+name: Persona CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          docker-compose -f docker-compose.yml up -d neo4j
+          # Give Neo4j a moment to start up
+          sleep 15
+      
+      - name: Run tests and quality checks
+        run: docker-compose -f docker-compose.yml run --rm test 
