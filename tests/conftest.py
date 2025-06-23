@@ -24,21 +24,11 @@ def test_client():
 
 @pytest.fixture(scope="session")
 async def neo4j_manager():
-    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    
-    manager = Neo4jConnectionManager(
-        uri=neo4j_uri,
-        user=config.NEO4J.USER,
-        password=config.NEO4J.PASSWORD
-    )
-    
-    # Test connection and wait for Neo4j
-    try:
-        await manager.wait_for_neo4j()
-    except Exception as e:
-        pytest.fail(f"Neo4j connection failed: {str(e)}")
+    manager = Neo4jConnectionManager()
+    await manager.initialize()
     
     yield manager
+    
     await manager.close()
 
 @pytest.fixture(scope="function")
@@ -192,3 +182,26 @@ async def integration_graph_ops(neo4j_manager):
     
     # Clean up
     await graph_ops.close()
+
+@pytest.fixture(scope="function")
+async def isolated_graph_ops(neo4j_manager):
+    """
+    Provides a GraphOps instance and a unique user_id for isolated integration tests.
+    Creates the user before the test and guarantees cleanup of the user and all 
+    their associated data after the test.
+    
+    Yields:
+        tuple[GraphOps, str]: A tuple containing the GraphOps instance and the user_id.
+    """
+    user_id = f"test-user-{uuid.uuid4()}"
+    
+    # Correctly resolve the async generator fixture
+    async for manager in neo4j_manager:
+        graph_ops = GraphOps(manager)
+        await graph_ops.create_user(user_id)
+        
+        try:
+            yield graph_ops, user_id
+        finally:
+            # This will delete the user node and all associated data
+            await graph_ops.delete_user(user_id)

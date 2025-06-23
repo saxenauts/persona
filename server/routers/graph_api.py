@@ -15,11 +15,20 @@ from persona.services.custom_data_service import CustomDataService
 from persona.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
 from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
+import re
 
 logger = get_logger(__name__)
 
 
 router = APIRouter()
+
+# Regex for validating user IDs. Allows alphanumeric chars, hyphens, and underscores.
+# This provides a basic level of sanitization to prevent injection or invalid characters.
+USER_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+def is_valid_user_id(user_id: str) -> bool:
+    """Check if the user ID matches the allowed pattern."""
+    return bool(USER_ID_REGEX.match(user_id))
 
 @router.get("/version")
 def get_version():
@@ -32,6 +41,9 @@ async def create_user(
     response: Response = None
 ):
     try:
+        if not is_valid_user_id(user_id):
+            raise ValueError("Invalid user ID format.")
+
         logger.info(f"Creating user: {user_id}")
         result = await UserService.create_user(user_id, graph_ops)
         
@@ -47,7 +59,7 @@ async def create_user(
             
     except ValueError as e:
         logger.warning(f"Invalid user ID format: {user_id} - {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Invalid user ID: {str(e)}")
+        raise HTTPException(status_code=422, detail=f"Invalid user ID format: {str(e)}")
     except Exception as e:
         logger.error(f"Failed to create user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error occurred while creating user")
@@ -58,6 +70,9 @@ async def delete_user(
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
     try:
+        if not is_valid_user_id(user_id):
+            raise ValueError("Invalid user ID format.")
+
         logger.info(f"Deleting user: {user_id}")
         
         # Check if user exists first
@@ -70,6 +85,9 @@ async def delete_user(
         return {"message": f"User {user_id} deleted successfully"}
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid user ID provided for deletion: {user_id} - {str(e)}")
+        raise HTTPException(status_code=422, detail=f"Invalid user ID format: {str(e)}")
     except Exception as e:
         logger.error(f"Failed to delete user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error occurred while deleting user")
