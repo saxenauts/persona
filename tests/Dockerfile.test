@@ -9,20 +9,17 @@ RUN pip install poetry
 
 WORKDIR /app
 
-# Copy only the dependency files first to leverage Docker caching
+# Copy only the dependency files first
 COPY pyproject.toml poetry.lock ./
-
-# Install dependencies (including dev) before copying the rest of the code
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-root --with dev
 
 # Copy the project files
 COPY persona ./persona/
 COPY server/ ./server/
 COPY tests/ ./tests/
 
-# Make the test runner script executable
-RUN chmod +x tests/run_tests.sh
+# Install dependencies and the package
+RUN poetry config virtualenvs.create false \
+    && poetry install --with dev
 
-# Command to run our centralized test script
-CMD ["tests/run_tests.sh"] 
+# Command to run tests
+CMD ["pytest", "-v", "tests/"] 
