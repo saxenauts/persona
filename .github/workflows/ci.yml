@@ -32,4 +32,9 @@ jobs:
           sleep 15
       
       - name: Run tests and quality checks
-        run: docker compose -f docker-compose.yml run --rm test 
+        run: |
+          docker compose -f docker-compose.yml run \
+            -e NEO4J_USER \
+            -e NEO4J_PASSWORD \
+            -e NEO4J_URI \
+            --rm test 
