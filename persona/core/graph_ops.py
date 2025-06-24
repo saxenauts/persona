@@ -39,8 +39,12 @@ class GraphOps:
             logger.warning(f"User {user_id} does not exist. Cannot add nodes.")
             return
 
-        # Create nodes with just names, no properties
-        node_dicts = [{"name": node.name} for node in nodes]
+        # Create nodes with names, properties, and perspectives
+        node_dicts = [{
+            "name": node.name,
+            "perspective": node.perspective or "",
+            "properties": node.properties or {}
+        } for node in nodes]
         await self.neo4j_manager.create_nodes(node_dicts, user_id)
         
         # Generate and add embeddings for new nodes

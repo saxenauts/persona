@@ -54,7 +54,7 @@ While Persona can support storing conversational history, it's not the primary p
    Create a `.env` file in the root directory with the following content:
 
    ```env
-   URI_NEO4J=neo4j://neo4j:7687
+   URI_NEO4J=bolt://neo4j:7687
    USER_NEO4J=neo4j
    PASSWORD_NEO4J=your_secure_password
 
