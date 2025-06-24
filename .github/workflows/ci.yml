@@ -14,27 +14,38 @@ jobs:
     
     # Define environment variables for the job
     env:
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: testpassword
-      NEO4J_URI: bolt://localhost:7687
+      USER_NEO4J: neo4j
+      PASSWORD_NEO4J: password
+      URI_NEO4J: bolt://neo4j:7687
+      OPENAI_API_KEY: fake-key-for-testing
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Create .env file for Docker Compose
-        run: touch .env
+        run: |
+          cat > .env << EOF
+          USER_NEO4J=${{ env.USER_NEO4J }}
+          PASSWORD_NEO4J=${{ env.PASSWORD_NEO4J }}
+          URI_NEO4J=${{ env.URI_NEO4J }}
+          NEO4J_AUTH=${{ env.USER_NEO4J }}/${{ env.PASSWORD_NEO4J }}
+          OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
+          EOF
 
-      - name: Set up Docker Compose
+      - name: Start Neo4j and wait for readiness
         run: |
           docker compose -f docker-compose.yml up -d neo4j
-          # Give Neo4j a moment to start up
-          sleep 15
+          echo "Waiting for Neo4j to be ready..."
+          for i in {1..30}; do
+            if docker compose -f docker-compose.yml exec neo4j cypher-shell -u ${{ env.USER_NEO4J }} -p ${{ env.PASSWORD_NEO4J }} "RETURN 1;" >/dev/null 2>&1; then
+              echo "Neo4j is ready!"
+              break
+            fi
+            echo "Attempt $i/30: Neo4j not ready yet, waiting..."
+            sleep 2
+          done
       
       - name: Run tests and quality checks
         run: |
-          docker compose -f docker-compose.yml run \
-            -e NEO4J_USER \
-            -e NEO4J_PASSWORD \
-            -e NEO4J_URI \
-            --rm test 
+          docker compose -f docker-compose.yml run --rm test 
