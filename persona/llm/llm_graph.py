@@ -36,7 +36,7 @@ async def get_nodes(text: str, graph_context: str) -> List[Node]:
     try:
         combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nExisting Graph Context: {graph_context}\n\nNode Extraction Task: {GET_NODES}"
         response = await client.chat.completions.create(
-            model='gpt-4o-mini', #TODO: Make this a variable controlled by the config. 
+            model='gpt-4.1-mini', #TODO: Make this a variable controlled by the config. 
             messages=[
                 {"role": "system", "content": combined_instructions},
                 {"role": "user", "content": text}
@@ -61,7 +61,7 @@ async def get_relationships(nodes: List[Node], graph_context: str) -> List[Relat
     combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nRelationships Generation Task: {GET_RELATIONSHIPS}"
     try:
         response = await client.chat.completions.create(
-            model='gpt-4o-mini', #TODO: Make this a variable controlled by the config. 
+            model='gpt-4.1-mini', #TODO: Make this a variable controlled by the config. 
             messages=[
                 {"role": "system", "content": combined_instructions},
                 {"role": "user", "content": f"Nodes: {nodes_str}\n\nExisting Graph Context:\n{graph_context}"}
@@ -87,7 +87,7 @@ async def generate_response_with_context(query: str, context: str) -> str:
     """
 
     response = await openai_client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4.1-mini",
         messages=[
             {"role": "user", "content": prompt},
             {"role": "system", "content": "You are a helpful assistant that answers queries about a user based on the provided context from their graph."},
@@ -104,7 +104,7 @@ async def detect_communities(subgraphs_text: str) -> CommunityStructure:
     """
     try:
         response = await client.chat.completions.create(
-            model='gpt-4o-mini',
+            model='gpt-4.1-mini',
             messages=[
                 {"role": "system", "content": GENERATE_COMMUNITIES},
                 {"role": "user", "content": subgraphs_text}
@@ -139,7 +139,7 @@ async def generate_structured_insights(ask_request: AskRequest, context: str) ->
 
     try:
         response = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": GENERATE_STRUCTURED_INSIGHTS},
                 {"role": "user", "content": prompt}
