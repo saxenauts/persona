@@ -18,6 +18,7 @@ client = instructor.from_openai(openai_client)
 
 class Node(OpenAISchema):
     name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
+    type: str = Field(..., description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', 'Goal', 'Event', 'Relationship', etc.)")
 
 class Relationship(OpenAISchema):
     source: str

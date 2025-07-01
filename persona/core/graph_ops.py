@@ -39,10 +39,10 @@ class GraphOps:
             logger.warning(f"User {user_id} does not exist. Cannot add nodes.")
             return
 
-        # Create nodes with names, properties, and perspectives
+        # Create nodes with names, properties, and types
         node_dicts = [{
             "name": node.name,
-            "perspective": node.perspective or "",
+            "type": node.type or "",
             "properties": node.properties or {}
         } for node in nodes]
         await self.neo4j_manager.create_nodes(node_dicts, user_id)
@@ -85,7 +85,7 @@ class GraphOps:
         if node_data:
             return NodeModel(
                 name=node_data["name"],
-                perspective=node_data.get("perspective"),
+                type=node_data.get("type"),
                 properties=node_data.get("properties", {})
             )
         return NodeModel(name=node_name)
@@ -154,7 +154,7 @@ class GraphOps:
         nodes = await self.neo4j_manager.get_all_nodes(user_id)
         return [NodeModel(
             name=node['name'],
-            perspective=node.get('perspective'),
+            type=node.get('type'),
             properties=node.get('properties', {})
         ) for node in nodes]
 
@@ -291,16 +291,14 @@ class GraphOps:
             # Create header node
             await self.neo4j_manager.create_nodes([{
                 'name': header.header,
-                'perspective': "Community header representing " + header.header,
-                'type': 'community_head'
+                'type': 'CommunityHeader'
             }], user_id)
             
             for subheader in header.subheaders:
                 # Create subheader node
                 await self.neo4j_manager.create_nodes([{
                     'name': subheader.subheader,
-                    'perspective': f"Subheader under {header.header}",
-                    'type': 'subheader'
+                    'type': 'CommunitySubheader'
                 }], user_id)
                 
                 # Connect header to subheader

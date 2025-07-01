@@ -61,8 +61,8 @@ class GraphConstructor:
             # Filter for stronger relationships (you might want to add a confidence score)
             relationships.extend(mixed_relationships)
         
-        # Create the graph update - nodes with no properties
-        nodes = [NodeModel(name=node.name) for node in new_nodes]
+        # Create the graph update - nodes with type information
+        nodes = [NodeModel(name=node.name, type=node.type) for node in new_nodes]
         
         relationships = [RelationshipModel(
             source=rel.source,

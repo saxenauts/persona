@@ -139,32 +139,39 @@ SPACE_SCHOOL_CHAT = """
 """
 
 GET_NODES = """
-You are an expert in understanding human psychology and creating meaningful knowledge representations. Your task is to extract significant nodes from user's expressions that capture complete thoughts, memories, or characteristics.
+You are a persona extraction expert and your task is to extract information nodes that map the user's cognitive framework.
+You will be given streams of unstructured data, like conversations and interactions logs, and you have to output the extracted nodes as JSON. 
 
-Guidelines for Node Extraction:
+These nodes will be self contained lingustic fragments that collect the narratives and memories that make up a human personality. 
+The nodes will be indexed in a knowledge graph and a vector database hybrid system. 
+The hybrid database will act as a evolving, self organizing system that represents a holistic user persona.
 
-1. Node Types to Extract:
+Principles for Node Extraction:
+
+INCLUDE exactly these fields per node:
+- name: Short, unique handle (5-20 words) suitable for embedding, and representative of a cognitive fragment. 
+- type: One of: Identity · Memory · Preference · Trait · Narrative · Goal · Event · State · Relationship · Belief · Other types shared below. 
+
+
+Node Types to Extract, with some examples and elaborations:
+   - Identity: (name, age, location, occupation, education, demographic etc.)
    - Core Memories: "First time I felt truly seen was during my college theater performance"
-   - Current States: "Building AI products with $100k savings after leaving tech industry"
-   - Stable Traits: "Deeply drawn to solving complex psychological problems"
+   - Current Narratives: "Building AI products with $100k savings after leaving tech industry"
+   - Preferences/Interests: (e.g hobbies, likes, dislikes, favorites)
+   - Traits/Habits: (e.g. personality traits, habits, skills, tendencies the user shows)
+   - Goals/Plans: (e.g. stated objectives or aspirations)
+   - Past Events/Experiences: notable stories or events the user mentions about themselves
+   - Relationships: (eg. people or places important to the user, like family, friends, hometown, etc. mentioned by the user)
    - Key Facts: "Born in Seattle, 1990"
-   - Strong Preferences: "Prefers working in complete solitude before dawn"
-   - Significant Beliefs: "Believes technology should serve human connection, not replace it"
+   - Strong Preferences: "Prefers working in complete solitude before dawn" (this is a preference, not a fact)
+   - Beliefs/Values: "Believes technology should serve human connection, not replace it" (this is a belief, not a fact)
 
-2. Principles for Node Creation:
-   - Make nodes self-contained (they should make sense without additional context)
-   - Combine related fragments into single meaningful nodes
-   - Preserve specific details that might be relevant for connections
-   - Include emotional or psychological context when relevant
+Guidelines for Node Creation:
+   - Node names should be self-contained as a memory or narrative fragment (they should make sense without additional context)
    - Keep factual nodes clear and precise
+   - Node types follow an open schema to accomodate human complexity, but recommended to keep them constrained to the types shared above. 
 
-3. Balance Between Node Types:
-   - Facts: "Lives in Berlin since 2020"
-   - Narratives: "Found purpose in tech after witnessing its healing impact on mental health"
-   - Preferences: "Deeply resonates with ambient electronic music"
-   - States: "Currently building AI tools for psychological well-being"
-
-4. Avoid:
+Avoid:
    - Creating multiple nodes for what could be a single coherent thought
    - Overly generic nodes that don't capture unique aspects
    - Splitting interconnected ideas that make more sense together
@@ -173,25 +180,15 @@ Guidelines for Node Extraction:
 Example Response Format:
 {
   "nodes": [
-    {"name": "Techno Music"},
-    {"name": "Deeply moved by classical music in empty spaces"},
-    {"name": "Real Madrid"},
-    {"name": "Finds peace in early morning solitude"},
-    {"name": "Capitalism"},
-    {"name": "Anxious about future of AI in society"},
-    {"name": "Values deep, meaningful conversations over small talk"},
-    {"name": "Psychedelic Rock"},
-    {"name": "Misses childhood home's garden"},
-    {"name": "Cryptocurrency"},
-    {"name": "Frustrated by modern dating culture"}
+    { "name": "Born in 1990 in Seattle", "type": "Identity" },
+    { "name": "Prefers working in complete solitude before dawn", "type": "Preference" },
+    { "name": "Believes technology should serve human connection, not replace it", "type": "Belief" },
+    { "name": "Training for a marathon next spring", "type": "Goal" },
+    { "name": "Burned out after overworking last year", "type": "Event" },
+    { "name": "Has a younger sister named Alice", "type": "Relationship" }
   ]
 }
 
-Important:
-- Each node should be meaningful and self-contained
-- Prefer fewer, richer nodes over many fragmented ones
-- Ensure nodes can stand alone while enabling meaningful connections
-- Focus on elements that define the user's unique characteristics, experiences, or current state
 """
 
 GET_RELATIONSHIPS = """

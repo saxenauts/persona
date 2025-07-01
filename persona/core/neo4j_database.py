@@ -93,15 +93,21 @@ class Neo4jConnectionManager:
             return
         async with self.driver.session() as session:
             for node in nodes:
+                # Add the node type as a secondary label if provided
+                node_type = node.get("type", "").replace(" ", "").replace("/", "")  # Clean the type for label usage
+                labels = "NodeName"
+                if node_type:
+                    labels = f"NodeName:{node_type}"
+                
                 query = (
-                    "MERGE (n:NodeName {name: $name, UserId: $user_id}) "
-                    "SET n.perspective = $perspective, n.properties = $properties"
+                    f"MERGE (n:{labels} {{name: $name, UserId: $user_id}}) "
+                    "SET n.type = $type, n.properties = $properties"
                 )
                 properties = json.dumps(node.get("properties", {}))  # Serialize properties to JSON string
                 await session.run(query, {
                     "name": node["name"],
                     "user_id": user_id,
-                    "perspective": node.get("perspective", ""),
+                    "type": node.get("type", ""),
                     "properties": properties
                 })
 
@@ -258,7 +264,7 @@ class Neo4jConnectionManager:
     async def get_node_data(self, node_name: str, user_id: str) -> Dict[str, Any]:
         query = """
         MATCH (n:NodeName {name: $node_name, UserId: $user_id})
-        RETURN n.name AS name, n.perspective AS perspective, n.properties AS properties
+        RETURN n.name AS name, n.type AS type, n.properties AS properties
         """
         async with self.driver.session() as session:
             result = await session.run(query, node_name=node_name, user_id=user_id)
@@ -266,7 +272,7 @@ class Neo4jConnectionManager:
             if record:
                 return {
                     "name": record["name"],
-                    "perspective": record["perspective"],
+                    "type": record["type"],
                     "properties": json.loads(record["properties"]) if record["properties"] else {}
                 }
             return None
@@ -292,11 +298,18 @@ class Neo4jConnectionManager:
     async def get_all_nodes(self, user_id: str) -> List[Dict[str, Any]]:
         query = """
         MATCH (n:NodeName {UserId: $user_id})
-        RETURN n.name AS name, n.perspective AS perspective
+        RETURN n.name AS name, n.type AS type, n.properties AS properties
         """
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
-            return await result.data()
+            data = await result.data()
+            # Parse the properties JSON string back to dict
+            for record in data:
+                if record.get('properties'):
+                    record['properties'] = json.loads(record['properties'])
+                else:
+                    record['properties'] = {}
+            return data
 
     async def get_all_relationships(self, user_id: str) -> List[Dict[str, Any]]:
         query = """

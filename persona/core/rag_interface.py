@@ -25,7 +25,7 @@ class RAGInterface:
         if not self.graph_ops:
             await self.__aenter__()
         similar_nodes = await self.graph_ops.text_similarity_search(query=query, user_id=self.user_id, limit=top_k)
-        nodes = [Node(name=node['nodeName']) for node in similar_nodes['results']]
+        nodes = [Node(name=node['nodeName'], type="Unknown") for node in similar_nodes['results']]
         logger.debug(f"Nodes for RAG query: {nodes}")
         context = await self.graph_context_retriever.get_relevant_graph_context(user_id=self.user_id, nodes=nodes, max_hops=max_hops)
         return context
@@ -45,7 +45,7 @@ class RAGInterface:
         if not self.graph_ops:
             await self.__aenter__()
         similar_nodes = await self.graph_ops.text_similarity_search(query=query, user_id=self.user_id, limit=5)
-        nodes = str([Node(name=node['nodeName']) for node in similar_nodes['results']])
+        nodes = str([Node(name=node['nodeName'], type="Unknown") for node in similar_nodes['results']])
         logger.debug(f"Vector context for RAG query: {nodes}")
         response = await generate_response_with_context(query, nodes)
         return response
@@ -58,7 +58,7 @@ class RAGInterface:
             formatted += f"## {node['nodeName']}\n"
             formatted += f"Similarity Score: {node['score']}\n"
             node_data = await self.graph_ops.get_node_data(node['nodeName'], self.user_id)
-            formatted += f"Perspective: {node_data.perspective}\n"
+            formatted += f"Type: {node_data.type}\n"
             formatted += f"Properties: {', '.join([f'{k}: {v}' for k, v in node_data.properties.items()])}\n\n"
         logger.debug(f"Formatted vector context: {formatted}")
         return formatted

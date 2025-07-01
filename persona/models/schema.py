@@ -13,6 +13,7 @@ class UnstructuredData(BaseModel):
 
 class Node(OpenAISchema):
     name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
+    type: str = Field(..., description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', 'Goal', 'Event', 'Relationship', etc.)")
 
 class Relationship(OpenAISchema):
     source: str
@@ -21,7 +22,7 @@ class Relationship(OpenAISchema):
 
 class NodeModel(BaseModel):
     name: str = Field(..., description="The node content - can be a simple label or narrative fragment")
-    perspective: Optional[str] = Field(None, description="Additional perspective or context for the node")
+    type: Optional[str] = Field(None, description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', etc.)")
     properties: Optional[Dict[str, str]] = Field(default_factory=dict)
     embedding: Optional[List[float]] = Field(None, description="Embedding vector for the node, if applicable")
 
@@ -29,7 +30,7 @@ class NodeModel(BaseModel):
         json_schema_extra = {
             "example": {
                 "name": "Finds peace in early morning solitude",
-                "perspective": "This reflects a desire for quiet contemplation",
+                "type": "Preference",
                 "properties": {},
                 "embedding": [0.1, 0.2, 0.3]
             }
