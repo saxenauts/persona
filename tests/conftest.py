@@ -112,7 +112,7 @@ def mock_llm_graph_calls(monkeypatch):
     # Return a dummy node to allow ingestion pipeline to proceed
     dummy_node = Node(name="Dummy Node", type="Test")
     monkeypatch.setattr("persona.llm.llm_graph.get_nodes", lambda *args, **kwargs: [dummy_node])
-    monkeypatch.setattr("persona.llm.llm_graph.get_relationships", lambda *args, **kwargs: [])
+    monkeypatch.setattr("persona.llm.llm_graph.get_relationships", lambda *args, **kwargs: ([], {}))
     
     # Mock the generate_response_with_context function used by RAG
     monkeypatch.setattr(

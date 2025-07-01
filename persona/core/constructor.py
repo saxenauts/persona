@@ -58,7 +58,7 @@ class GraphConstructor:
         # Phase 2: Only connect with existing nodes if there's strong relevance
         if existing_context and len(new_nodes) > 0:
             mixed_relationships = await self.generate_cross_relationships(new_nodes, existing_context)
-            # Filter for stronger relationships (you might want to add a confidence score)
+            # Filter for stronger relationships (we might want to add a confidence score)
             relationships.extend(mixed_relationships)
         
         # Create the graph update - nodes with type information
@@ -101,14 +101,16 @@ class GraphConstructor:
         Only creates relationships that are strongly justified.
         """
         graph_context = await self.get_relevant_graph_context(user_id=self.user_id, nodes=nodes)
-        return await get_relationships(nodes, graph_context)
+        relationships, _ = await get_relationships(nodes, graph_context)  # Ignore the ID mapping
+        return relationships
 
     async def generate_cross_relationships(self, new_nodes: List[Node], existing_context: str) -> List[Relationship]:
         """
         Generate relationships between new and existing nodes.
         Only creates relationships when there's a strong, meaningful connection.
         """
-        return await get_relationships(new_nodes, existing_context)
+        relationships, _ = await get_relationships(new_nodes, existing_context)  # Ignore the ID mapping
+        return relationships
 
     async def discover_new_relationships(self, new_context: str, existing_context: str) -> List[Relationship]:
         """
@@ -120,11 +122,12 @@ class GraphConstructor:
             return []
             
         # Convert NodeModel instances to Node instances for the LLM
-        nodes_for_llm = [Node(name=node.name) for node in existing_nodes]
+        nodes_for_llm = [Node(name=node.name, type="Unknown") for node in existing_nodes]  # Add required type field
         
         # Use the new context to find new relationships
         combined_context = f"New Information:\n{new_context}\n\nExisting Knowledge:\n{existing_context}"
-        return await get_relationships(nodes_for_llm, combined_context)
+        relationships, _ = await get_relationships(nodes_for_llm, combined_context)  # Ignore the ID mapping
+        return relationships
 
     async def get_relevant_graph_context(self, user_id: str, nodes: List[Node], max_hops: int = 2) -> str:
         """

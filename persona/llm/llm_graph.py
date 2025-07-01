@@ -25,6 +25,11 @@ class Relationship(OpenAISchema):
     relation: str
     target: str
 
+class RelationshipWithID(OpenAISchema):
+    source_id: str = Field(..., description="Temporary ID of the source node (e.g., 'Node1')")
+    relation: str = Field(..., description="Type of relationship")
+    target_id: str = Field(..., description="Temporary ID of the target node (e.g., 'Node2')")
+
 class GraphResponse(OpenAISchema):
     nodes: List[Node] = Field(..., description="List of nodes in the graph")
     relationships: List[Relationship] = Field(default_factory=list, description="List of relationships between nodes")
@@ -53,27 +58,58 @@ async def get_nodes(text: str, graph_context: str) -> List[Node]:
         logger.error(f"Error while extracting nodes: {e}")
         return []
 
-async def get_relationships(nodes: List[Node], graph_context: str) -> List[Relationship]:
+async def get_relationships(nodes: List[Node], graph_context: str) -> Tuple[List[Relationship], Dict[str, str]]:
     """
     Generate relationships based on the list of nodes and existing graph context using OpenAI's language model.
+    Returns a tuple of (relationships, id_mapping) where id_mapping maps temporary IDs to node names.
     """
-    # Format nodes for the prompt
-    nodes_str = ', '.join([f'"{node.name}"' for node in nodes])
+    if not nodes:
+        return [], {}
+    
+    # Create temporary ID mapping
+    id_mapping = {}
+    nodes_with_ids = []
+    
+    for i, node in enumerate(nodes):
+        temp_id = f"Node{i+1}"
+        id_mapping[temp_id] = node.name
+        nodes_with_ids.append(f'{temp_id}: "{node.name}"')
+    
+    # Format nodes for the prompt with temporary IDs
+    nodes_str = '\n'.join(nodes_with_ids)
     combined_instructions = f"App Objective: {INSTRUCTIONS}\n\nRelationships Generation Task: {GET_RELATIONSHIPS}"
+    
     try:
         response = await client.chat.completions.create(
             model='gpt-4.1-mini', #TODO: Make this a variable controlled by the config. 
             messages=[
                 {"role": "system", "content": combined_instructions},
-                {"role": "user", "content": f"Nodes: {nodes_str}\n\nExisting Graph Context:\n{graph_context}"}
+                {"role": "user", "content": f"Nodes:\n{nodes_str}\n\nExisting Graph Context:\n{graph_context}"}
             ],
             temperature=0.7,
-            response_model=List[Relationship]
+            response_model=List[RelationshipWithID]
         )
-        return response
+        
+        # Convert RelationshipWithID back to Relationship using the mapping
+        converted_relationships = []
+        for rel_with_id in response:
+            source_name = id_mapping.get(rel_with_id.source_id)
+            target_name = id_mapping.get(rel_with_id.target_id)
+            
+            if source_name and target_name:
+                converted_relationships.append(Relationship(
+                    source=source_name,
+                    relation=rel_with_id.relation,
+                    target=target_name
+                ))
+            else:
+                logger.warning(f"Invalid relationship with IDs: {rel_with_id.source_id} -> {rel_with_id.target_id}")
+        
+        return converted_relationships, id_mapping
+        
     except Exception as e:
         logger.error(f"Error while generating relationships: {e}")
-        return []
+        return [], {}
 
 async def generate_response_with_context(query: str, context: str) -> str:
     prompt = f"""

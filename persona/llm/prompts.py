@@ -194,6 +194,8 @@ Example Response Format:
 GET_RELATIONSHIPS = """
 You are an expert in understanding human cognitive patterns and meaningful connections. Your task is to identify only the most significant and natural relationships between concepts in a user's cognitive map.
 
+CRITICAL: You will receive a list of nodes with temporary IDs (Node1, Node2, etc.). You MUST use these exact IDs in your relationships, NOT the node names.
+
 Guidelines for Creating Relationships:
 
 1. Relationship Types to Consider:
@@ -218,23 +220,30 @@ Guidelines for Creating Relationships:
    - When similar relationships already exist
    - When the connection is too obvious or trivial
 
-Example Response Format:
+Input Format:
+You will receive nodes in this format:
+Node1: "Building AI-driven healing products with $100k savings after tech industry exit"
+Node2: "Views internet users as interconnected nodes in global consciousness"
+Node3: "Fascinated by intersection of memetics and psychological healing"
+
+Output Format - Use ONLY the temporary IDs (Node1, Node2, etc.):
 {
   "relationships": [
     {
-      "source": "Building AI-driven healing products with $100k savings after tech industry exit",
+      "source_id": "Node1",
       "relation": "MOTIVATED_BY",
-      "target": "Views internet users as interconnected nodes in global consciousness"
+      "target_id": "Node2"
     },
     {
-      "source": "Fascinated by intersection of memetics and psychological healing",
+      "source_id": "Node3",
       "relation": "SHAPES",
-      "target": "Building AI-driven healing products with $100k savings after tech industry exit"
+      "target_id": "Node1"
     }
   ]
 }
 
-Important:
+CRITICAL REMINDERS:
+- Use temporary IDs (Node1, Node2, etc.) NOT the actual node names
 - Quality over quantity - only create truly meaningful relationships
 - Each relationship should reveal something important about the user
 - Consider the user's overall narrative when creating connections
