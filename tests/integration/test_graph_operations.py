@@ -119,10 +119,10 @@ async def test_vector_index_end_to_end():
             try:
                 # Add some test nodes 
                 test_nodes = [
-                    NodeModel(name="Machine Learning Algorithm", perspective="A computational method for pattern recognition"),
-                    NodeModel(name="Deep Learning Network", perspective="A neural network with multiple hidden layers"),
-                    NodeModel(name="Cooking Recipe", perspective="Instructions for preparing delicious pasta"),
-                    NodeModel(name="Travel Destination", perspective="A beautiful place to visit in Europe")
+                    NodeModel(name="Machine Learning Algorithm", type="Goal"),
+                    NodeModel(name="Deep Learning Network", type="Goal"),
+                    NodeModel(name="Cooking Recipe", type="Preference"),
+                    NodeModel(name="Travel Destination", type="Preference")
                 ]
                 
                 # Add nodes using GraphOps abstraction (this should trigger embedding generation and storage)
@@ -132,7 +132,7 @@ async def test_vector_index_end_to_end():
                 for node in test_nodes:
                     node_data = await graph_ops.get_node_data(node.name, user_id)
                     assert node_data.name == node.name, f"Node {node.name} should exist"
-                    assert node_data.perspective == node.perspective, f"Node {node.name} should have correct perspective"
+                    assert node_data.type == node.type, f"Node {node.name} should have correct type"
                 
                 # Test similarity search using GraphOps abstraction
                 # We test with exact node names since embeddings are generated from node names
@@ -168,7 +168,7 @@ async def test_vector_index_end_to_end():
                 try:
                     # Add different nodes for the other user
                     other_nodes = [
-                        NodeModel(name="Other Algorithm", perspective="A different algorithm"),
+                        NodeModel(name="Other Algorithm", type="Goal"),
                     ]
                     await graph_ops.add_nodes(other_nodes, other_user_id)
                     
