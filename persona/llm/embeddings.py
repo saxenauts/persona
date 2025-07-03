@@ -10,6 +10,12 @@ logger = get_logger(__name__)
 openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
 
 def generate_embeddings(texts, model="text-embedding-3-small"):
+    """
+    Generates embeddings for a list of texts using OpenAI's API.
+    This is a synchronous function.
+    """
+    if not texts:
+        return []
     try:
         # Takes in a list of strings and returns a list of embeddings
         response = openai_client.embeddings.create(input=texts, model=model, dimensions=1536)

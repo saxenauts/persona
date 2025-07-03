@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from os import environ
 from dotenv import load_dotenv
@@ -32,13 +32,20 @@ class ML(BaseModel):
     OPENAI_API_KEY: str = Field(environ.get("OPENAI_API_KEY", ""), description="OpenAI API key")
 
 class BaseConfig(BaseSettings):
-    """Base configuration for the application"""
+    """
+    Defines the application's configuration settings.
+    Utilizes pydantic-settings to automatically read from environment variables
+    or a .env file.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="allow"
+    )
+
+    # General settings
+    app_name: str = "Persona"
     INFO: Info = Info()
     NEO4J: Neo4j = Neo4j()
     MACHINE_LEARNING: ML = ML()
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 config = BaseConfig()

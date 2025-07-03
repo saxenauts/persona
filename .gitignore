@@ -8,3 +8,7 @@ docs/tree.md
 .pytest_cache
 .DS_Store
 tests/assets/
+
+# Evals directories
+evals/data/
+evals/results/

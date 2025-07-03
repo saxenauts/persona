@@ -1114,6 +1114,46 @@ dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
+name = "pycurl"
+version = "7.45.6"
+description = "PycURL -- A Python Interface To The cURL library"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "pycurl-7.45.6-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:c31b390f1e2cd4525828f1bb78c1f825c0aab5d1588228ed71b22c4784bdb593"},
+    {file = "pycurl-7.45.6-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:942b352b69184cb26920db48e0c5cb95af39874b57dbe27318e60f1e68564e37"},
+    {file = "pycurl-7.45.6-cp310-cp310-manylinux_2_28_aarch64.whl", hash = "sha256:3441ee77e830267aa6e2bb43b29fd5f8a6bd6122010c76a6f0bf84462e9ea9c7"},
+    {file = "pycurl-7.45.6-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:2a21e13278d7553a04b421676c458449f6c10509bebf04993f35154b06ee2b20"},
+    {file = "pycurl-7.45.6-cp310-cp310-win32.whl", hash = "sha256:d0b5501d527901369aba307354530050f56cd102410f2a3bacd192dc12c645e3"},
+    {file = "pycurl-7.45.6-cp310-cp310-win_amd64.whl", hash = "sha256:abe1b204a2f96f2eebeaf93411f03505b46d151ef6d9d89326e6dece7b3a008a"},
+    {file = "pycurl-7.45.6-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:6f57ad26d6ab390391ad5030790e3f1a831c1ee54ad3bf969eb378f5957eeb0a"},
+    {file = "pycurl-7.45.6-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:c6fd295f03c928da33a00f56c91765195155d2ac6f12878f6e467830b5dce5f5"},
+    {file = "pycurl-7.45.6-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:334721ce1ccd71ff8e405470768b3d221b4393570ccc493fcbdbef4cd62e91ed"},
+    {file = "pycurl-7.45.6-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:0cd6b7794268c17f3c660162ed6381769ce0ad260331ef49191418dfc3a2d61a"},
+    {file = "pycurl-7.45.6-cp311-cp311-win32.whl", hash = "sha256:357ea634395310085b9d5116226ac5ec218a6ceebf367c2451ebc8d63a6e9939"},
+    {file = "pycurl-7.45.6-cp311-cp311-win_amd64.whl", hash = "sha256:878ae64484db18f8f10ba99bffc83fefb4fe8f5686448754f93ec32fa4e4ee93"},
+    {file = "pycurl-7.45.6-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:c872d4074360964697c39c1544fe8c91bfecbff27c1cdda1fee5498e5fdadcda"},
+    {file = "pycurl-7.45.6-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:56d1197eadd5774582b259cde4364357da71542758d8e917f91cc6ed7ed5b262"},
+    {file = "pycurl-7.45.6-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:8a99e56d2575aa74c48c0cd08852a65d5fc952798f76a34236256d5589bf5aa0"},
+    {file = "pycurl-7.45.6-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:c04230b9e9cfdca9cf3eb09a0bec6cf2f084640f1f1ca1929cca51411af85de2"},
+    {file = "pycurl-7.45.6-cp312-cp312-win32.whl", hash = "sha256:ae893144b82d72d95c932ebdeb81fc7e9fde758e5ecd5dd10ad5b67f34a8b8ee"},
+    {file = "pycurl-7.45.6-cp312-cp312-win_amd64.whl", hash = "sha256:56f841b6f2f7a8b2d3051b9ceebd478599dbea3c8d1de8fb9333c895d0c1eea5"},
+    {file = "pycurl-7.45.6-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:7c09b7180799af70fc1d4eed580cfb1b9f34fda9081f73a3e3bc9a0e5a4c0e9b"},
+    {file = "pycurl-7.45.6-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:361bf94b2a057c7290f9ab84e935793ca515121fc012f4b6bef6c3b5e4ea4397"},
+    {file = "pycurl-7.45.6-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:bb9eff0c7794af972da769a887c87729f1bcd8869297b1c01a2732febbb75876"},
+    {file = "pycurl-7.45.6-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:26839d43dc7fff6b80e0067f185cc1d0e9be2ae6e2e2361ae8488cead5901c04"},
+    {file = "pycurl-7.45.6-cp313-cp313-win32.whl", hash = "sha256:a721c2696a71b1aa5ecf82e6d0ade64bc7211b7317f1c9c66e82f82e2264d8b4"},
+    {file = "pycurl-7.45.6-cp313-cp313-win_amd64.whl", hash = "sha256:f0198ebcda8686b3a0c66d490a687fa5fd466f8ecc2f20a0ed0931579538ae3d"},
+    {file = "pycurl-7.45.6-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:a554a2813d415a7bb9a996a6298f3829f57e987635dcab9f1197b2dccd0ab3b2"},
+    {file = "pycurl-7.45.6-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:9f721e3394e5bd7079802ec1819b19c5be4842012268cc45afcb3884efb31cf0"},
+    {file = "pycurl-7.45.6-cp39-cp39-manylinux_2_28_aarch64.whl", hash = "sha256:81005c0f681d31d5af694d1d3c18bbf1bed0bc8b2bb10fb7388cb1378ba9bd6a"},
+    {file = "pycurl-7.45.6-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:3fc0b505c37c7c54d88ced27e1d9e3241130987c24bf1611d9bbd9a3e499e07c"},
+    {file = "pycurl-7.45.6-cp39-cp39-win32.whl", hash = "sha256:1309fc0f558a80ca444a3a5b0bdb1572a4d72b195233f0e65413b4d4dd78809b"},
+    {file = "pycurl-7.45.6-cp39-cp39-win_amd64.whl", hash = "sha256:2d1a49418b8b4c61f52e06d97b9c16142b425077bd997a123a2ba9ef82553203"},
+    {file = "pycurl-7.45.6.tar.gz", hash = "sha256:2b73e66b22719ea48ac08a93fc88e57ef36d46d03cb09d972063c9aa86bb74e6"},
+]
+
+[[package]]
 name = "pydantic"
 version = "2.8.2"
 description = "Data validation using Python type hints"
@@ -2150,4 +2190,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.12.0"
-content-hash = "49b2cb766632e459f5adac68758826fe5ea462465e1cef43004e63e7be9411a2"
+content-hash = "8fd4d5f25f90e35118210171e3d38d3c911a30421cfb79ed6f85282a792cddc7"
