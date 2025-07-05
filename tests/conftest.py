@@ -47,10 +47,10 @@ def api_test_user():
     """Sync fixture for API tests that provides a user ID without Neo4j cleanup."""
     return f"test-user-{uuid.uuid4()}"
 
-# OpenAI mocks - these should ALWAYS be active to prevent real API calls
+# LLM Client mocks - these should ALWAYS be active to prevent real API calls
 @pytest.fixture(autouse=True)
-def mock_openai_clients(monkeypatch):
-    """Mock OpenAI client objects and functions - always active to prevent real API calls from any context."""
+def mock_llm_clients(monkeypatch):
+    """Mock LLM client objects and functions - always active to prevent real API calls from any context."""
     
     def deterministic_embedding(texts):
         """Generate deterministic, realistic embeddings based on text content"""
@@ -78,58 +78,49 @@ def mock_openai_clients(monkeypatch):
         deterministic_embedding
     )
     
-    # Mock sync OpenAI client for embeddings
-    mock_sync_client = MagicMock()
-    mock_embeddings = MagicMock()
+    # Mock the new LLM client system
+    from persona.llm.providers.base import ChatResponse
     
-    def mock_create_embeddings(**kwargs):
-        texts = kwargs.get('input', [])
-        if isinstance(texts, str):
-            texts = [texts]
-        embeddings = deterministic_embedding(texts)
-        return MagicMock(
-            data=[MagicMock(embedding=emb) for emb in embeddings]
-        )
-    
-    mock_embeddings.create = mock_create_embeddings
-    mock_sync_client.embeddings = mock_embeddings
-    
-    # Mock async OpenAI client for LLM calls
-    mock_async_client = AsyncMock()
-    mock_async_completions = AsyncMock()
-    mock_async_completions.create = AsyncMock(return_value=MagicMock(
-        choices=[MagicMock(message=MagicMock(content="This is a mocked LLM response from client."))]
+    # Create mock chat client
+    mock_chat_client = AsyncMock()
+    mock_chat_client.chat = AsyncMock(return_value=ChatResponse(
+        content="This is a mocked LLM response from the new client system.",
+        model="mock-model"
     ))
-    mock_async_client.chat = MagicMock(completions=mock_async_completions)
     
-    # Patch the client instantiations
-    monkeypatch.setattr("persona.llm.embeddings.openai_client", mock_sync_client)
-    monkeypatch.setattr("persona.llm.llm_graph.openai_client", mock_async_client)
+    # Create mock embedding client
+    mock_embedding_client = AsyncMock()
+    mock_embedding_client.embeddings = AsyncMock(side_effect=lambda texts: deterministic_embedding(texts))
+    
+    # Mock the client factory functions
+    monkeypatch.setattr("persona.llm.client_factory.get_chat_client", lambda: mock_chat_client)
+    monkeypatch.setattr("persona.llm.client_factory.get_embedding_client", lambda: mock_embedding_client)
 
 @pytest.fixture(autouse=True)
 def mock_llm_graph_calls(monkeypatch):
     """Mock LLM calls for graph construction and querying - always active to prevent real API calls."""
     # Return a dummy node to allow ingestion pipeline to proceed
+    from persona.llm.llm_graph import Node
     dummy_node = Node(name="Dummy Node", type="Test")
-    monkeypatch.setattr("persona.llm.llm_graph.get_nodes", lambda *args, **kwargs: [dummy_node])
-    monkeypatch.setattr("persona.llm.llm_graph.get_relationships", lambda *args, **kwargs: ([], {}))
     
-    # Mock the generate_response_with_context function used by RAG
-    monkeypatch.setattr(
-        "persona.llm.llm_graph.generate_response_with_context",
-        lambda *args, **kwargs: "This is a mocked RAG response based on the provided context."
-    )
+    async def mock_get_nodes(*args, **kwargs):
+        return [dummy_node]
     
-    # Mock the generate_structured_insights function used by Ask service
-    def mock_structured_insights(ask_request, context):
+    async def mock_get_relationships(*args, **kwargs):
+        return ([], {})
+    
+    async def mock_generate_response_with_context(*args, **kwargs):
+        return "This is a mocked RAG response based on the provided context."
+    
+    async def mock_generate_structured_insights(ask_request, context):
         # Return a response that matches the expected schema structure
         return {k: f"mocked_{k}" if isinstance(v, str) else ["mocked_item"] if isinstance(v, list) else {"mocked_key": "mocked_value"} 
                 for k, v in ask_request.output_schema.items()}
     
-    monkeypatch.setattr(
-        "persona.llm.llm_graph.generate_structured_insights", 
-        mock_structured_insights
-    )
+    monkeypatch.setattr("persona.llm.llm_graph.get_nodes", mock_get_nodes)
+    monkeypatch.setattr("persona.llm.llm_graph.get_relationships", mock_get_relationships)
+    monkeypatch.setattr("persona.llm.llm_graph.generate_response_with_context", mock_generate_response_with_context)
+    monkeypatch.setattr("persona.llm.llm_graph.generate_structured_insights", mock_generate_structured_insights)
 
 # Neo4j mocks - only use these in unit tests where we want to isolate components
 @pytest.fixture

@@ -4,18 +4,17 @@ Schema and Pydantic Models for the Graph Library Ops."
 
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from instructor import OpenAISchema
 
 class UnstructuredData(BaseModel):
     title: str
     content: str
     metadata: Optional[Dict[str, str]] = {}
 
-class Node(OpenAISchema):
+class Node(BaseModel):
     name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
     type: str = Field(..., description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', 'Goal', 'Event', 'Relationship', etc.)")
 
-class Relationship(OpenAISchema):
+class Relationship(BaseModel):
     source: str
     target: str
     relation: str
@@ -98,22 +97,22 @@ class RAGQuery(BaseModel):
 class RAGResponse(BaseModel):
     answer: str
 
-class Subgraph(OpenAISchema):
+class Subgraph(BaseModel):
     id: int
     nodes: List[str]
     relationships: List[Dict[str, str]]
     size: int
     central_nodes: List[str]  # nodes with highest degree/influence
 
-class CommunitySubheader(OpenAISchema):
+class CommunitySubheader(BaseModel):
     subheader: str
     subgraph_ids: List[int]
 
-class CommunityHeader(OpenAISchema):
+class CommunityHeader(BaseModel):
     header: str
     subheaders: List[CommunitySubheader]
 
-class CommunityStructure(OpenAISchema):
+class CommunityStructure(BaseModel):
     communityHeaders: List[CommunityHeader]
 
 # BYOA - Learn Anything Ask Anything Personalize Anything
@@ -154,7 +153,7 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     result: Dict[str, Any]
 
-class AskResponseInstructor(OpenAISchema):
+class AskResponseInstructor(BaseModel):
     result: Dict[str, Any]
 
 

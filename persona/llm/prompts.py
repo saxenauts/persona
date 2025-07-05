@@ -140,7 +140,8 @@ SPACE_SCHOOL_CHAT = """
 
 GET_NODES = """
 You are a persona extraction expert and your task is to extract information nodes that map the user's cognitive framework.
-You will be given streams of unstructured data, like conversations and interactions logs, and you have to output the extracted nodes as JSON. 
+You will be given streams of unstructured data, like conversations and interactions logs, and you have to output the extracted nodes as JSON.
+IMPORTANT: You must respond with valid JSON format only. 
 
 These nodes will be self contained lingustic fragments that collect the narratives and memories that make up a human personality. 
 The nodes will be indexed in a knowledge graph and a vector database hybrid system. 
@@ -193,6 +194,7 @@ Example Response Format:
 
 GET_RELATIONSHIPS = """
 You are an expert in understanding human cognitive patterns and meaningful connections. Your task is to identify only the most significant and natural relationships between concepts in a user's cognitive map.
+IMPORTANT: You must respond with valid JSON format only.
 
 CRITICAL: You will receive a list of nodes with temporary IDs (Node1, Node2, etc.). You MUST use these exact IDs in your relationships, NOT the node names.
 
