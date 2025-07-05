@@ -42,6 +42,10 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     
+    # Load .env file when running outside Docker
+    from dotenv import load_dotenv
+    load_dotenv(project_root / ".env")
+    
     from persona.llm.client_factory import get_chat_client
     from persona.llm.providers.base import ChatMessage
     
