@@ -32,28 +32,54 @@ def get_anscheck_prompt(task, question, answer, response, abstention=False):
     return prompt
 
 def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
-    """Query OpenAI with retry logic"""
-    import openai
+    """Query LLM with retry logic using the configured client factory"""
+    import asyncio
+    import sys
+    from pathlib import Path
     
-    client = openai.OpenAI()
+    # Add project root to Python path to import persona modules
+    project_root = Path(__file__).parent.parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
     
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model=EVAL_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=TEMPERATURE,
-                max_tokens=10
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {e}. Retrying...")
-            time.sleep(2 ** attempt)  # Exponential backoff
-            if attempt == max_retries - 1:
-                # Instead of raising, we will return an empty string to be handled by the caller
-                return ""
+    from persona.llm.client_factory import get_chat_client
+    from persona.llm.providers.base import ChatMessage
     
-    return ""
+    async def async_query():
+        client = get_chat_client()
+        messages = [ChatMessage(role="user", content=prompt)]
+        
+        for attempt in range(max_retries):
+            try:
+                response = await client.chat(
+                    messages=messages,
+                    temperature=TEMPERATURE,
+                    max_tokens=10
+                )
+                return response.content.strip()
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {e}. Retrying...")
+                time.sleep(2 ** attempt)  # Exponential backoff
+                if attempt == max_retries - 1:
+                    # Instead of raising, we will return an empty string to be handled by the caller
+                    return ""
+        
+        return ""
+    
+    # Run the async function
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we're already in an async context, create a new event loop
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, async_query())
+                return future.result()
+        else:
+            return asyncio.run(async_query())
+    except Exception as e:
+        print(f"Error in LLM query: {e}")
+        return ""
 
 def evaluate_qa(hypotheses_file: str, reference_file: str, 
                metric_model: str = EVAL_MODEL, verbose: bool = False) -> Dict:

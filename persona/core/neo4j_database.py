@@ -73,11 +73,6 @@ class Neo4jConnectionManager:
             result = await session.run(query, node_name=node_name, node_type=node_type, user_id=user_id)
             return result.single() is not None
 
-    async def clean_graph(self) -> None:
-        async with self.driver.session() as session:
-            await session.run("MATCH (n) DETACH DELETE n")
-        await self.drop_vector_index("embeddings_index")
-
     async def drop_vector_index(self, index_name: str) -> None:
         if await self.index_exists(index_name):
             query = f"DROP INDEX `{index_name}`"
@@ -183,7 +178,7 @@ class Neo4jConnectionManager:
             if not index_exists:
                 # Create the index if it doesn't exist
                 query = """
-                CREATE VECTOR INDEX embeddings_index IF NOT EXISTS
+                CREATE VECTOR INDEX embeddings_index
                 FOR (n:NodeName)
                 ON (n.embedding)
                 OPTIONS {indexConfig: {
@@ -191,8 +186,14 @@ class Neo4jConnectionManager:
                     `vector.similarity_function`: 'cosine'
                 }}
                 """
-                await session.run(query)
-                logger.info("Vector index 'embeddings_index' created.")
+                try:
+                    await session.run(query)
+                    logger.info("Vector index 'embeddings_index' created.")
+                except Exception as e:
+                    if "EquivalentSchemaRuleAlreadyExists" in str(e):
+                        logger.debug("Vector index 'embeddings_index' already exists (caught exception).")
+                    else:
+                        raise e
             else:
                 logger.debug("Vector index 'embeddings_index' already exists.")
 
