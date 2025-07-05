@@ -11,4 +11,5 @@ tests/assets/
 
 # Evals directories
 evals/data/
+evals/results/__pycache__/
 evals/results/
