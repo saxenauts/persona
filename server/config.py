@@ -29,28 +29,29 @@ class Neo4j(BaseModel):
 
 class ML(BaseModel):
     """Machine Learning configuration"""
-    # LLM Service Configuration
-    LLM_SERVICE: str = Field(environ.get("LLM_SERVICE", "openai/gpt-4o-mini"), description="LLM service in format 'provider/model'")
+    # LLM Service Configuration - REQUIRED
+    LLM_SERVICE: str = Field(environ.get("LLM_SERVICE", ""), description="LLM service in format 'provider/model' (REQUIRED)")
+    EMBEDDING_SERVICE: str = Field(environ.get("EMBEDDING_SERVICE", ""), description="Embedding service in format 'provider/model' (REQUIRED)")
     
     # OpenAI Configuration
     OPENAI_API_KEY: str = Field(environ.get("OPENAI_API_KEY", ""), description="OpenAI API key")
-    OPENAI_CHAT_MODEL: str = Field(environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini"), description="OpenAI chat model")
-    OPENAI_EMBEDDING_MODEL: str = Field(environ.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"), description="OpenAI embedding model")
+    OPENAI_CHAT_MODEL: str = Field(environ.get("OPENAI_CHAT_MODEL", ""), description="OpenAI chat model")
+    OPENAI_EMBEDDING_MODEL: str = Field(environ.get("OPENAI_EMBEDDING_MODEL", ""), description="OpenAI embedding model")
     
     # Azure OpenAI Configuration
     AZURE_API_KEY: str = Field(environ.get("AZURE_API_KEY", ""), description="Azure OpenAI API key")
     AZURE_API_BASE: str = Field(environ.get("AZURE_API_BASE", ""), description="Azure OpenAI API base URL")
-    AZURE_API_VERSION: str = Field(environ.get("AZURE_API_VERSION", "2024-02-01"), description="Azure OpenAI API version")
-    AZURE_CHAT_DEPLOYMENT: str = Field(environ.get("AZURE_CHAT_DEPLOYMENT", "gpt-4o-mini"), description="Azure chat model deployment name")
-    AZURE_EMBEDDING_DEPLOYMENT: str = Field(environ.get("AZURE_EMBEDDING_DEPLOYMENT", "text-embedding-3-small"), description="Azure embedding model deployment name")
+    AZURE_API_VERSION: str = Field(environ.get("AZURE_API_VERSION", ""), description="Azure OpenAI API version")
+    AZURE_CHAT_DEPLOYMENT: str = Field(environ.get("AZURE_CHAT_DEPLOYMENT", ""), description="Azure chat model deployment name")
+    AZURE_EMBEDDING_DEPLOYMENT: str = Field(environ.get("AZURE_EMBEDDING_DEPLOYMENT", ""), description="Azure embedding model deployment name")
     
     # Anthropic Configuration
     ANTHROPIC_API_KEY: str = Field(environ.get("ANTHROPIC_API_KEY", ""), description="Anthropic API key")
-    ANTHROPIC_CHAT_MODEL: str = Field(environ.get("ANTHROPIC_CHAT_MODEL", "claude-3-5-sonnet-20241022"), description="Anthropic chat model")
+    ANTHROPIC_CHAT_MODEL: str = Field(environ.get("ANTHROPIC_CHAT_MODEL", ""), description="Anthropic chat model")
     
     # Google Gemini Configuration
     GEMINI_API_KEY: str = Field(environ.get("GEMINI_API_KEY", ""), description="Google Gemini API key")
-    GEMINI_CHAT_MODEL: str = Field(environ.get("GEMINI_CHAT_MODEL", "gemini-1.5-flash"), description="Google Gemini chat model")
+    GEMINI_CHAT_MODEL: str = Field(environ.get("GEMINI_CHAT_MODEL", ""), description="Google Gemini chat model")
 
 class BaseConfig(BaseSettings):
     """

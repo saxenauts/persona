@@ -39,6 +39,10 @@ def create_openai_client() -> OpenAIClient:
     """Create OpenAI client"""
     if not config.MACHINE_LEARNING.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is required for OpenAI provider")
+    if not config.MACHINE_LEARNING.OPENAI_CHAT_MODEL:
+        raise ValueError("OPENAI_CHAT_MODEL is required for OpenAI provider")
+    if not config.MACHINE_LEARNING.OPENAI_EMBEDDING_MODEL:
+        raise ValueError("OPENAI_EMBEDDING_MODEL is required for OpenAI provider")
     
     return OpenAIClient(
         api_key=config.MACHINE_LEARNING.OPENAI_API_KEY,
@@ -53,6 +57,12 @@ def create_azure_client() -> AzureOpenAIClient:
         raise ValueError("AZURE_API_KEY is required for Azure provider")
     if not config.MACHINE_LEARNING.AZURE_API_BASE:
         raise ValueError("AZURE_API_BASE is required for Azure provider")
+    if not config.MACHINE_LEARNING.AZURE_API_VERSION:
+        raise ValueError("AZURE_API_VERSION is required for Azure provider")
+    if not config.MACHINE_LEARNING.AZURE_CHAT_DEPLOYMENT:
+        raise ValueError("AZURE_CHAT_DEPLOYMENT is required for Azure provider")
+    if not config.MACHINE_LEARNING.AZURE_EMBEDDING_DEPLOYMENT:
+        raise ValueError("AZURE_EMBEDDING_DEPLOYMENT is required for Azure provider")
     
     return AzureOpenAIClient(
         api_key=config.MACHINE_LEARNING.AZURE_API_KEY,
@@ -67,6 +77,8 @@ def create_anthropic_client() -> AnthropicClient:
     """Create Anthropic client"""
     if not config.MACHINE_LEARNING.ANTHROPIC_API_KEY:
         raise ValueError("ANTHROPIC_API_KEY is required for Anthropic provider")
+    if not config.MACHINE_LEARNING.ANTHROPIC_CHAT_MODEL:
+        raise ValueError("ANTHROPIC_CHAT_MODEL is required for Anthropic provider")
     
     return AnthropicClient(
         api_key=config.MACHINE_LEARNING.ANTHROPIC_API_KEY,
@@ -78,6 +90,8 @@ def create_gemini_client() -> GeminiClient:
     """Create Google Gemini client"""
     if not config.MACHINE_LEARNING.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is required for Gemini provider")
+    if not config.MACHINE_LEARNING.GEMINI_CHAT_MODEL:
+        raise ValueError("GEMINI_CHAT_MODEL is required for Gemini provider")
     
     return GeminiClient(
         api_key=config.MACHINE_LEARNING.GEMINI_API_KEY,
@@ -117,6 +131,9 @@ def get_chat_client() -> BaseLLMClient:
     global _chat_client
     
     if _chat_client is None:
+        if not config.MACHINE_LEARNING.LLM_SERVICE:
+            raise ValueError("LLM_SERVICE is required but not configured. Set LLM_SERVICE in .env file (e.g., LLM_SERVICE=openai/gpt-4o-mini)")
+        
         provider, model = parse_llm_service(config.MACHINE_LEARNING.LLM_SERVICE)
         _chat_client = create_client(provider)
         logger.info(f"Initialized chat client: {provider}/{model}")
@@ -126,7 +143,8 @@ def get_chat_client() -> BaseLLMClient:
 
 def get_embedding_client() -> BaseLLMClient:
     """
-    Get the embedding client. Falls back to OpenAI if current provider doesn't support embeddings.
+    Get the embedding client based on explicit EMBEDDING_SERVICE configuration.
+    No automatic fallbacks - embedding service must be explicitly configured.
     
     Returns:
         BaseLLMClient instance for embedding operations
@@ -134,22 +152,17 @@ def get_embedding_client() -> BaseLLMClient:
     global _embedding_client
     
     if _embedding_client is None:
-        provider, model = parse_llm_service(config.MACHINE_LEARNING.LLM_SERVICE)
+        if not config.MACHINE_LEARNING.EMBEDDING_SERVICE:
+            raise ValueError("EMBEDDING_SERVICE is required but not configured. Set EMBEDDING_SERVICE in .env file (e.g., EMBEDDING_SERVICE=openai/text-embedding-3-small)")
         
-        # Try to use the same provider as chat
-        try:
-            client = create_client(provider)
-            if client.supports_embeddings():
-                _embedding_client = client
-                logger.info(f"Initialized embedding client: {provider}")
-            else:
-                # Fall back to OpenAI for embeddings
-                logger.info(f"Provider {provider} doesn't support embeddings, falling back to OpenAI")
-                _embedding_client = create_openai_client()
-        except Exception as e:
-            logger.warning(f"Failed to create {provider} client for embeddings: {e}")
-            logger.info("Falling back to OpenAI for embeddings")
-            _embedding_client = create_openai_client()
+        provider, model = parse_llm_service(config.MACHINE_LEARNING.EMBEDDING_SERVICE)
+        _embedding_client = create_client(provider)
+        
+        # Validate that the provider actually supports embeddings
+        if not _embedding_client.supports_embeddings():
+            raise ValueError(f"Provider {provider} does not support embeddings. Use openai or azure for EMBEDDING_SERVICE.")
+        
+        logger.info(f"Initialized embedding client: {provider}/{model}")
     
     return _embedding_client
 
