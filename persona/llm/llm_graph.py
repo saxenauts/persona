@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 class Node(BaseModel):
     name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
     type: str = Field(..., description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', 'Goal', 'Event', 'Relationship', etc.)")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Optional schemaless properties for the node (e.g., date, count, source, location)")
 
 class Relationship(BaseModel):
     source: str
@@ -50,10 +51,18 @@ async def get_nodes(text: str, graph_context: str) -> List[Node]:
         
         # Parse JSON response
         json_data = json.loads(response.content)
-        
+
         # Validate and convert to Node objects
         if "nodes" in json_data:
-            nodes = [Node(**node_data) for node_data in json_data["nodes"]]
+            nodes = []
+            for node_data in json_data["nodes"]:
+                # Ensure properties defaults to {} if missing
+                if "properties" not in node_data or node_data["properties"] is None:
+                    node_data["properties"] = {}
+                try:
+                    nodes.append(Node(**node_data))
+                except Exception as e:
+                    logger.warning(f"Skipping malformed node from LLM response: {e}; data={node_data}")
             return nodes
         else:
             logger.warning("No 'nodes' key found in LLM response")

@@ -140,56 +140,40 @@ SPACE_SCHOOL_CHAT = """
 
 GET_NODES = """
 You are a persona extraction expert and your task is to extract information nodes that map the user's cognitive framework.
-You will be given streams of unstructured data, like conversations and interactions logs, and you have to output the extracted nodes as JSON.
-IMPORTANT: You must respond with valid JSON format only. 
+You will be given streams of unstructured data (chat, email, notes, browser activity, etc.) and must output nodes as JSON ONLY.
 
-These nodes will be self contained lingustic fragments that collect the narratives and memories that make up a human personality. 
-The nodes will be indexed in a knowledge graph and a vector database hybrid system. 
-The hybrid database will act as a evolving, self organizing system that represents a holistic user persona.
-
-Principles for Node Extraction:
+Each node represents a self-contained linguistic fragment of memory/persona and may include lightweight properties for precise retrieval.
 
 INCLUDE exactly these fields per node:
-- name: Short, unique handle (5-20 words) suitable for embedding, and representative of a cognitive fragment. 
-- type: One of: Identity · Memory · Preference · Trait · Narrative · Goal · Event · State · Relationship · Belief · Other types shared below. 
+- name: Short, unique handle (5–20 words) that stands alone without extra context.
+- type: One of: Identity · Memory · Preference · Trait · Narrative · Goal · Event · State · Relationship · Belief · Activity · Resource · Other
+- properties: An object (key/value) capturing salient attributes when present. Keep it compact and factual.
 
+Common properties to include when available:
+- date or timestamp (ISO or "YYYY/MM/DD HH:MM"): e.g., "2023/03/22 13:41"
+- entity (person/place/thing), location, source (User|Assistant|System), polarity (like|dislike), confidence (0–1)
+- quantity, unit (e.g., pages, km, hours), count, category, tags
 
-Node Types to Extract, with some examples and elaborations:
-   - Identity: (name, age, location, occupation, education, demographic etc.)
-   - Core Memories: "First time I felt truly seen was during my college theater performance"
-   - Current Narratives: "Building AI products with $100k savings after leaving tech industry"
-   - Preferences/Interests: (e.g hobbies, likes, dislikes, favorites)
-   - Traits/Habits: (e.g. personality traits, habits, skills, tendencies the user shows)
-   - Goals/Plans: (e.g. stated objectives or aspirations)
-   - Past Events/Experiences: notable stories or events the user mentions about themselves
-   - Relationships: (eg. people or places important to the user, like family, friends, hometown, etc. mentioned by the user)
-   - Key Facts: "Born in Seattle, 1990"
-   - Strong Preferences: "Prefers working in complete solitude before dawn" (this is a preference, not a fact)
-   - Beliefs/Values: "Believes technology should serve human connection, not replace it" (this is a belief, not a fact)
-
-Guidelines for Node Creation:
-   - Node names should be self-contained as a memory or narrative fragment (they should make sense without additional context)
-   - Keep factual nodes clear and precise
-   - Node types follow an open schema to accomodate human complexity, but recommended to keep them constrained to the types shared above. 
+Guidelines:
+- Node names should be self-contained memories/narratives or crisp facts.
+- Prefer fewer, stronger nodes to many weak ones.
+- Use properties to store precise details (dates, counts, specific names) rather than bloating the name.
+- Only include properties that are clearly implied by the text. Omit if unknown.
 
 Avoid:
-   - Creating multiple nodes for what could be a single coherent thought
-   - Overly generic nodes that don't capture unique aspects
-   - Splitting interconnected ideas that make more sense together
-   - Creating nodes that require external context to understand
+- Generic nodes without unique details.
+- Redundant nodes for the same thought.
+- Nodes that require external context to understand.
 
 Example Response Format:
 {
   "nodes": [
-    { "name": "Born in 1990 in Seattle", "type": "Identity" },
-    { "name": "Prefers working in complete solitude before dawn", "type": "Preference" },
-    { "name": "Believes technology should serve human connection, not replace it", "type": "Belief" },
-    { "name": "Training for a marathon next spring", "type": "Goal" },
-    { "name": "Burned out after overworking last year", "type": "Event" },
-    { "name": "Has a younger sister named Alice", "type": "Relationship" }
+    { "name": "Born in 1990 in Seattle", "type": "Identity", "properties": {"date": "1990/01/01", "location": "Seattle"} },
+    { "name": "Prefers working in solitude before dawn", "type": "Preference", "properties": {"polarity": "like"} },
+    { "name": "Completed 10km run last weekend", "type": "Event", "properties": {"date": "2023/05/21", "quantity": 10, "unit": "km"} },
+    { "name": "Younger sister named Alice", "type": "Relationship", "properties": {"entity": "Alice"} }
   ]
 }
-
 """
 
 GET_RELATIONSHIPS = """

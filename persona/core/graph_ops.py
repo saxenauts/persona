@@ -51,17 +51,34 @@ class GraphOps:
         await self.add_nodes_batch_embeddings(nodes, user_id)
 
 
+    def _embedding_text_for_node(self, node: NodeModel) -> str:
+        """Build a richer text for embeddings from name + type + key properties."""
+        parts = [node.name]
+        if getattr(node, 'type', None):
+            parts.append(f"type:{node.type}")
+        props = getattr(node, 'properties', {}) or {}
+        # Flatten a small, stable subset of properties for embedding space
+        interesting_keys = [
+            'date', 'timestamp', 'entity', 'location', 'quantity', 'unit', 'count',
+            'source', 'category', 'tags', 'polarity'
+        ]
+        for k in interesting_keys:
+            if k in props and props[k] not in (None, ""):
+                parts.append(f"{k}:{props[k]}")
+        return " | ".join(map(str, parts))
+
     async def add_nodes_batch_embeddings(self, nodes: List[NodeModel], user_id: str):
         if not await self.user_exists(user_id):
             logger.warning(f"User {user_id} does not exist. Cannot add embeddings.")
             return
 
-        # Generate embeddings for all nodes in one batch
-        node_names = [node.name for node in nodes]
-        embeddings = generate_embeddings(node_names)  # This will now embed the full narrative/label
+        # Generate embeddings for all nodes in one batch using richer text
+        embed_texts = [self._embedding_text_for_node(node) for node in nodes]
+        embeddings = generate_embeddings(embed_texts)
         
         # Add embeddings to nodes
-        for node_name, embedding in zip(node_names, embeddings):
+        for node_obj, embedding in zip(nodes, embeddings):
+            node_name = node_obj.name
             if embedding:
                 await self.neo4j_manager.add_embedding_to_vector_index(node_name, embedding, user_id)
             else:
@@ -339,6 +356,29 @@ class GraphOps:
 class GraphContextRetriever:
     def __init__(self, graph_ops: GraphOps):
         self.graph_ops = graph_ops
+        self._log_path = "evals/results/retrieval_logs.jsonl"
+
+    def _append_log(self, record: Dict[str, Any]):
+        try:
+            from pathlib import Path
+            p = Path(self._log_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a") as f:
+                import json
+                f.write(json.dumps(record) + "\n")
+        except Exception:
+            # best-effort logging, do not raise
+            pass
+
+    def _parse_date(self, s: str):
+        from datetime import datetime
+        s = (s or "").strip()
+        for fmt in ("%Y/%m/%d (%a) %H:%M", "%Y/%m/%d %H:%M", "%Y/%m/%d", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s, fmt)
+            except Exception:
+                continue
+        return None
 
     async def get_rich_context(self, query: str, user_id: str, top_k: int = 5, max_hops: int = 2) -> str:
         """
@@ -402,7 +442,16 @@ class GraphContextRetriever:
 
         return formatted
     
-    async def get_relevant_graph_context(self, nodes: List[Node], user_id: str, max_hops: int = 2) -> str:
+    async def get_relevant_graph_context(
+        self,
+        nodes: List[Node],
+        user_id: str,
+        max_hops: int = 2,
+        filter_types: set[str] | None = None,
+        seed_scores: Dict[str, float] | None = None,
+        question_date: str | None = None,
+        date_window_days: int = 60,
+    ) -> str:
         """
         Get relevant subgraph context for the given nodes.
         """
@@ -416,20 +465,69 @@ class GraphContextRetriever:
         
         logger.debug(f"Found {len(existing_nodes)} existing nodes in graph")
         
-        # Start exploring from the provided nodes directly
-        subgraph = {}
-        for node in nodes:
+        # Filter seed nodes by type if requested
+        seed_list = list(nodes)
+        if filter_types:
+            seed_list = [n for n in seed_list if (getattr(n, 'type', None) in filter_types or not getattr(n, 'type', None))]
+
+        subgraph: Dict[str, Dict[str, Any]] = {}
+        for node in seed_list:
             await self._explore_node(node_name=node.name, subgraph=subgraph, user_id=user_id, max_hops=max_hops)
-        
+
         # Format the subgraph context
         if subgraph:
-            context += "## Related Nodes and Relationships\n"
+            # Compute simple ranking for nodes in subgraph
+            from datetime import timedelta
+            scores: Dict[str, float] = {}
+            qdt = self._parse_date(question_date) if question_date else None
             for node_name, data in subgraph.items():
+                s = 0.0
+                # base from seed score
+                if seed_scores and node_name in seed_scores:
+                    s += float(seed_scores[node_name])
+                # temporal proximity bonus
+                nd = None
+                props = data.get('properties') or {}
+                for key in ("date", "timestamp"):
+                    nd = nd or self._parse_date(str(props.get(key, "")))
+                if qdt and nd:
+                    delta = abs((qdt - nd).days)
+                    if delta <= date_window_days:
+                        # closer = higher bonus
+                        s += max(0.0, (date_window_days - delta) / date_window_days)
+                # type preference bonus (if filter provided)
+                ntype = data.get('type') or None
+                if filter_types and ntype in filter_types:
+                    s += 0.25
+                scores[node_name] = s
+
+            # Order nodes by score desc
+            ordered = sorted(subgraph.items(), key=lambda kv: scores.get(kv[0], 0.0), reverse=True)
+
+            context += "## Related Nodes and Relationships\n"
+            for node_name, data in ordered:
                 context += f"\n### {node_name}\n"
-                if data['relationships']:
+                
+                # Add Properties
+                props = data.get('properties') or {}
+                if props:
+                    for k, v in props.items():
+                        context += f"- {k}: {v}\n"
+                
+                if data.get('relationships'):
                     context += "Relationships:\n"
                     for rel in data['relationships']:
                         context += f"- {rel}\n"
+
+            # Log retrieval details (best-effort)
+            self._append_log({
+                "user_id": user_id,
+                "seeds": [n.name for n in seed_list],
+                "seed_scores": seed_scores or {},
+                "filter_types": list(filter_types) if filter_types else None,
+                "question_date": question_date,
+                "ranked_nodes": [name for name, _ in ordered[:10]],
+            })
         
         return context
 
@@ -443,6 +541,7 @@ class GraphContextRetriever:
         
         subgraph[node_name] = {
             'properties': node_data.properties,
+            'type': node_data.type,
             'relationships': []
         }
         

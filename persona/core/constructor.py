@@ -60,9 +60,28 @@ class GraphConstructor:
             mixed_relationships = await self.generate_cross_relationships(new_nodes, existing_context)
             # Filter for stronger relationships (we might want to add a confidence score)
             relationships.extend(mixed_relationships)
+            
+        # Phase 3: Heuristic Linking (Temporal/Context) if LLM failed
+        # If we have multiple new nodes, ensure they are chained if they appear in same ingestion?
+        if len(new_nodes) > 1:
+            # Chain them sequentially? n1 -> n2 -> n3? 
+            # This assumes narrative order.
+            for i in range(len(new_nodes) - 1):
+                relationships.append(RelationshipModel(
+                    source=new_nodes[i].name,
+                    target=new_nodes[i+1].name,
+                    relation="NEXT_EVENT"
+                ))
         
-        # Create the graph update - nodes with type information
-        nodes = [NodeModel(name=node.name, type=node.type) for node in new_nodes]
+        # Create the graph update - nodes with type information and properties
+        nodes = [
+            NodeModel(
+                name=node.name,
+                type=node.type,
+                properties=getattr(node, 'properties', {}) or {}
+            )
+            for node in new_nodes
+        ]
         
         relationships = [RelationshipModel(
             source=rel.source,

@@ -22,7 +22,7 @@ class Relationship(BaseModel):
 class NodeModel(BaseModel):
     name: str = Field(..., description="The node content - can be a simple label or narrative fragment")
     type: Optional[str] = Field(None, description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', etc.)")
-    properties: Optional[Dict[str, str]] = Field(default_factory=dict)
+    properties: Optional[Dict[str, Any]] = Field(default_factory=dict)
     embedding: Optional[List[float]] = Field(None, description="Embedding vector for the node, if applicable")
 
     class Config:
