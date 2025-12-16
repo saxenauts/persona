@@ -20,40 +20,40 @@ class PersonaAdapter(MemorySystem):
                 "title": f"Session {date}",
                 "content": session_data,
                 "metadata": {"date": date}
-            }
+            },
+            timeout=300  # Increased timeout for large batches
         )
         if response.status_code != 201:
             print(f"Persona Ingest Error: {response.status_code} - {response.text}")
         response.raise_for_status()
 
     def add_sessions(self, user_id: str, sessions: list):
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        """
+        Add multiple sessions using the new bulk ingestion endpoint.
+        """
+        # Create user if needed
+        requests.post(f"{self.base_url}/users/{user_id}")
         
-        # 1. Ensure user exists (once)
-        resp = requests.post(f"{self.base_url}/users/{user_id}")
-        if resp.status_code not in [200, 201]:
-             resp.raise_for_status()
-
-        # 2. Parallel Ingest
-        def _post(session):
-            return requests.post(
-                f"{self.base_url}/users/{user_id}/ingest",
-                json={
-                    "title": f"Session {session['date']}",
-                    "content": session['content'],
-                    "metadata": {"date": session['date']}
-                }
-            )
-
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(_post, s) for s in sessions]
-            for future in as_completed(futures):
-                try:
-                    res = future.result()
-                    if res.status_code != 201:
-                        print(f"  ! Persona Ingest Fail: {res.text}")
-                except Exception as e:
-                    print(f"  ! Persona Thread Fail: {e}")
+        # Prepare batch payload
+        batch_items = []
+        for s in sessions:
+            content = f"Date: {s['date']}\n\n{s['content']}"
+            batch_items.append({
+                "title": f"Session {s['date']}",
+                "content": content,
+                "metadata": {"source": "benchmark"}
+            })
+            
+        payload = {"batch": batch_items}
+        
+        try:
+            resp = requests.post(f"{self.base_url}/users/{user_id}/ingest/batch", json=payload)
+            resp.raise_for_status()
+        except Exception as e:
+            print(f"[PersonaAdapter] Batch ingest failed: {e}")
+            if hasattr(e, 'response') and e.response:
+                print(f"  Response: {e.response.text}")
+            raise e
 
     def query(self, user_id: str, query: str) -> str:
         # Benchmark usually asks for an answer.

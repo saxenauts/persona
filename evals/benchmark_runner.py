@@ -5,19 +5,26 @@ from datetime import datetime
 from evals.adapters.persona_adapter import PersonaAdapter
 from evals.adapters.mem0_adapter import Mem0Adapter
 from evals.adapters.zep_adapter import ZepAdapter
+from evals.adapters.evermem_adapter import EverMemAdapter
 from langchain_openai import AzureChatOpenAI
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import uuid
 
 class BenchmarkRunner:
     def __init__(self):
+        # FORCE USER REQUEST: Always use gpt-4.1-mini
+        os.environ["AZURE_CHAT_DEPLOYMENT"] = "gpt-4.1-mini"
+        
         self.adapters = {
-            "Persona": PersonaAdapter(),
-            "Mem0": Mem0Adapter(),
-            #"Zep": ZepAdapter()
+            #"Persona": PersonaAdapter(), # Already benchmarked
+            "Mem0 (Vector)": Mem0Adapter(use_graph=False),  # Re-running single-session-user
+            # "Mem0 (Graph)": Mem0Adapter(use_graph=True),  # Skip for now
         }
         self.results = []
         # Judge LLM
         self.judge_llm = AzureChatOpenAI(
-            azure_deployment=os.getenv("AZURE_CHAT_DEPLOYMENT", "gpt-4o-mini"),
+            azure_deployment=os.getenv("AZURE_CHAT_DEPLOYMENT", "gpt-4.1-mini"),
             openai_api_version=os.getenv("AZURE_API_VERSION"),
             azure_endpoint=os.getenv("AZURE_API_BASE"),
             api_key=os.getenv("AZURE_API_KEY"),
@@ -27,10 +34,11 @@ class BenchmarkRunner:
     def load_questions(self, limit=None):
         questions = []
         # Priority 1: Full LongMemEval Dataset (Cleaned)
-        path = "evals/data/longmemeval/longmemeval_s_cleaned.json"
+        # Priority 1: Single-Session-User Benchmark (Re-run for Mem0)
+        path = "evals/data/longmemeval/single_session_user_benchmark.json"
         
         if os.path.exists(path):
-            print(f"📖 Loading Full Dataset from {path}")
+            print(f"📖 Loading Sampled Dataset from {path}")
             with open(path, "r") as f:
                 raw_data = json.load(f)
                 
@@ -88,14 +96,31 @@ class BenchmarkRunner:
         except Exception as e:
             return {"grade": 0, "reason": f"Evaluation failed: {e}"}
 
-    def run(self, limit=2): # Start small
-        questions = self.load_questions(limit)
-        if not questions:
-            print("No questions found! Check path.")
-            return
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=120),
+        stop=stop_after_attempt(15),
+        retry=retry_if_exception_type((Exception))
+    )
+    def _safe_ingest(self, name, adapter, user_id, sessions, date_list):
+        print(f"    [{name}] Ingesting {len(sessions)} sessions...")
+        try:
+            adapter.add_sessions(user_id, sessions)
+        except Exception as e:
+            # Fallback for systems strictly requiring run_in_executor wrapper or failures
+            print(f"[{name}] Ingest fail: {e}")
+            raise e
+
+    @retry(
+        wait=wait_exponential(multiplier=1, min=2, max=60),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type((Exception))
+    )
+    def _safe_query(self, adapter, user_id, question):
+        return adapter.query(user_id, question)
 
     def run(self, limit=None):
         questions = self.load_questions(limit)
+
         if not questions:
             print("No questions found! Check path.")
             return
@@ -110,8 +135,8 @@ class BenchmarkRunner:
                     if line.strip():
                         try:
                             record = json.loads(line)
-                            # create a unique signature for the question to avoid duplicates
-                            q_hash = f"{record['question']}_{record.get('type')}"
+                            # Use simple question text as signature
+                            q_hash = record['question'].strip()
                             processed_hashes.add(q_hash)
                             self.results.append(record)
                         except:
@@ -120,111 +145,122 @@ class BenchmarkRunner:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         total_qs = len(questions)
-        remaining_qs = [q for q in questions if f"{q['question']}_{q.get('type')}" not in processed_hashes]
+        remaining_qs = [q for q in questions if q['question'].strip() not in processed_hashes]
         
         print(f"🏁 Starting Benchmark: {len(remaining_qs)} questions remaining (Total: {total_qs})")
         
-        start_time = time.time()
+        # PARALLEL QUESTION PROCESSING
+        # Process 5 questions simultaneously for significant speedup
+        PARALLEL_QUESTIONS = 5
         
-        for i, q in enumerate(remaining_qs):
-            loop_start = time.time()
-            idx_overall = len(processed_hashes) + i + 1
-            
-            # ETA Calculation
-            if i > 0:
-                avg_time = (time.time() - start_time) / i
-                eta_seconds = avg_time * (len(remaining_qs) - i)
-                eta_str = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
-            else:
-                eta_str = "Calculating..."
-
-            print(f"Processing ({idx_overall}/{total_qs}) [ETA: {eta_str}]: {q['question'][:50]}...", flush=True)
-            user_id = f"bench_user_{idx_overall}_{timestamp}"
-
-            row = {"question": q['question'], "gold": q['gold'], "type": q['type']}
-            
-            # Parallel Execution for all adapters
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
-            def process_adapter(name, adapter, question_data):
-                row_update = {}
-                adapter_user_id = f"{name}_{user_id}"
+        import threading
+        checkpoint_lock = threading.Lock()
+        results_lock = threading.Lock()
+        start_time = time.time()
+        completed_count = [0]  # Mutable for thread-safe counter
+        
+        def process_single_question(task, idx_overall):
+            """Process a single question - ingest, query, evaluate."""
+            try:
+                # 1. Ingestion Phase
+                sessions = task.get('sessions', [])
+                date_list = [s['date'] for s in sessions]
                 
-                try:
-                    # CLEAN SLATE
-                    adapter.reset(adapter_user_id)
-                    
-                    # 1. Ingest (Bulk)
-                    t_ingest_start = time.time()
-                    sessions = question_data.get('sessions', [])
-                    if not sessions:
-                        sessions = [{"date": "2024-01-01", "content": f"Context: {question_data.get('gold', 'unknown')}"}]
-                    
-                    print(f"    [{name}] Ingesting {len(sessions)} sessions...", flush=True)
-                    adapter.add_sessions(adapter_user_id, sessions)
-                    
-                    # Single Indexing Sleep per system
-                    print(f"    [{name}] Indexing (5s)...", flush=True)
-                    time.sleep(5)
-                    
-                    # 2. Query
-                    t_query_start = time.time()
-                    ans = adapter.query(adapter_user_id, question_data['question'])
-                    duration = time.time() - t_query_start
-                    
-                    # 3. Eval
-                    eval_res = self.evaluate_answer(question_data['question'], question_data['gold'], ans)
-                    
-                    row_update[f"{name}_ans"] = ans
-                    row_update[f"{name}_grade"] = eval_res['grade']
-                    row_update[f"{name}_reason"] = eval_res['reason']
-                    row_update[f"{name}_latency"] = duration
-                    
-                except Exception as e:
-                    print(f"  ! Error {name}: {e}")
-                    row_update[f"{name}_error"] = str(e)
-                    row_update[f"{name}_ans"] = "ERROR"
-                    row_update[f"{name}_grade"] = 0
+                adapter_user_ids = {}
                 
-                return row_update
-
-            
-            row = {"question": q['question'], "gold": q['gold'], "type": q['type']}
-            
-            # Run connected systems in parallel
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {executor.submit(process_adapter, name, adapter, q): name for name, adapter in self.adapters.items()}
-                
-                for future in as_completed(futures):
-                    name = futures[future]
+                # Ingest for each adapter (sequential per question to avoid overload)
+                for name, adapter in self.adapters.items():
+                    q_user_id = f"{name}_q{idx_overall}_{uuid.uuid4().hex[:4]}"
+                    adapter_user_ids[name] = q_user_id
+                    print(f"    [{name}] Q{idx_overall}: Ingesting {len(sessions)} sessions...")
                     try:
-                        res = future.result()
-                        row.update(res)
-                        print(f"  > [{name}] Finished (Grade: {res.get(f'{name}_grade')})")
-                    except Exception as exc:
-                         print(f"  ! System {name} crashed: {exc}")
+                        self._safe_ingest(name, adapter, q_user_id, sessions, date_list)
+                    except Exception as e:
+                        print(f"    [{name}] Q{idx_overall}: Ingest error: {e}")
+                
+                # Brief indexing wait
+                time.sleep(2)
+                
+                # 2. Query Phase
+                question_text = task['question']
+                gold_answer = task['gold']
+                question_type = task['type']
+                
+                row = {"question": question_text, "gold": gold_answer, "type": question_type}
+                
+                for name, adapter in self.adapters.items():
+                    user_id_for_query = adapter_user_ids.get(name)
+                    if user_id_for_query:
+                        try:
+                            t_query_start = time.time()
+                            ans = self._safe_query(adapter, user_id_for_query, question_text)
+                            duration = time.time() - t_query_start
+                            
+                            eval_res = self.evaluate_answer(question_text, gold_answer, ans)
+                            
+                            row[f"{name}_ans"] = ans
+                            row[f"{name}_grade"] = eval_res['grade']
+                            row[f"{name}_reason"] = eval_res['reason']
+                            row[f"{name}_latency"] = duration
+                            print(f"    [{name}] Q{idx_overall}: Grade {eval_res.get('grade')}")
+                        except Exception as exc:
+                            print(f"    [{name}] Q{idx_overall}: Query error: {exc}")
+                            row[f"{name}_error"] = str(exc)
+                            row[f"{name}_ans"] = "ERROR"
+                            row[f"{name}_grade"] = 0
+                    else:
+                        row[f"{name}_error"] = "User ID not found"
+                        row[f"{name}_ans"] = "ERROR"
+                        row[f"{name}_grade"] = 0
+                
+                # Thread-safe checkpoint save
+                with checkpoint_lock:
+                    with open(checkpoint_file, "a") as f:
+                        f.write(json.dumps(row) + "\n")
+                
+                with results_lock:
+                    self.results.append(row)
+                    completed_count[0] += 1
+                    
+                # Progress update
+                elapsed = time.time() - start_time
+                avg_time = elapsed / max(completed_count[0], 1)
+                remaining = len(remaining_qs) - completed_count[0]
+                eta_seconds = avg_time * remaining
+                print(f"✓ Q{idx_overall} Complete ({completed_count[0]}/{len(remaining_qs)}) [ETA: {int(eta_seconds // 60)}m {int(eta_seconds % 60)}s]")
+                
+                return row
+                
+            except Exception as e:
+                print(f"ERROR Q{idx_overall}: {e}")
+                return None
+        
+        # Process questions in parallel
+        print(f"🚀 Running with {PARALLEL_QUESTIONS} parallel question workers...")
+        
+        with ThreadPoolExecutor(max_workers=PARALLEL_QUESTIONS) as executor:
+            futures = {}
+            for i, task in enumerate(remaining_qs):
+                idx_overall = total_qs - len(remaining_qs) + i + 1
+                futures[executor.submit(process_single_question, task, idx_overall)] = idx_overall
             
-            # NOTE: We moved ingestion INSIDE the per-adapter loop to support unique IDs.
-            # Original code had ingestion separately. This is cleaner for total isolation.
-            
-            self.results.append(row)
-            
-            # IMMEDIATE SAVE (Checkpoint)
-            os.makedirs("evals/results", exist_ok=True)
-            with open(checkpoint_file, "a") as f:
-                f.write(json.dumps(row) + "\n")
+            # Wait for all to complete
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Question {idx} failed: {e}")
 
         # Final Save (Aggregate)
         out_file = f"evals/results/benchmark_run_{timestamp}.json"
+        os.makedirs("evals/results", exist_ok=True)
         with open(out_file, "w") as f:
             json.dump(self.results, f, indent=2)
         print(f"✅ Benchmark Complete! Saved to {out_file}")
-        
-        # Clean up checkpoint if desired, or keep it as backup. 
-        # For now, we keep it.
 
 
 if __name__ == "__main__":
     runner = BenchmarkRunner()
     # Run full benchmark
-    runner.run()
+    runner.run(limit=None)
