@@ -4,6 +4,7 @@ Azure OpenAI LLM client implementation.
 
 import openai
 from typing import List, Dict, Any, Optional
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from .base import BaseLLMClient, ChatMessage, ChatResponse
 from server.logging_config import get_logger
 
@@ -41,6 +42,11 @@ class AzureOpenAIClient(BaseLLMClient):
             api_version=api_version
         )
     
+    @retry(
+        wait=wait_exponential(multiplier=1, min=2, max=60),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(Exception)
+    )
     async def chat(
         self, 
         messages: List[ChatMessage], 
@@ -82,18 +88,34 @@ class AzureOpenAIClient(BaseLLMClient):
                 usage=response.usage.model_dump() if response.usage else None
             )
             
+        except openai.BadRequestError as e:
+            # Handle Content Filter (400) safely
+            if "content_filter" in str(e) or "ResponsibleAIPolicyViolation" in str(e):
+                logger.warning(f"Azure Content Filter triggered: {e}. Returning safe placeholder.")
+                return ChatResponse(
+                    content="<CONTENT_FILTERED>",
+                    model=f"azure/{self.chat_deployment}",
+                    usage={}
+                )
+            # Retain original behavior for other bad requests
+            logger.error(f"Azure OpenAI bad request: {e}")
+            raise
         except Exception as e:
             logger.error(f"Azure OpenAI chat error: {e}")
             raise
-    
+
+    @retry(
+        wait=wait_exponential(multiplier=1, min=2, max=60),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(Exception)
+    )
     async def embeddings(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings using Azure OpenAI API"""
         if not texts:
             return []
         
         try:
-            # Use sync client for embeddings as it's more stable
-            response = self.sync_client.embeddings.create(
+            response = await self.async_client.embeddings.create(
                 input=texts,
                 model=self.embedding_deployment,
                 dimensions=1536,
@@ -102,10 +124,16 @@ class AzureOpenAIClient(BaseLLMClient):
             
             return [data.embedding for data in response.data]
             
+        except openai.BadRequestError as e:
+             if "content_filter" in str(e) or "ResponsibleAIPolicyViolation" in str(e):
+                logger.warning(f"Azure Content Filter triggered in Embeddings: {e}. Returning zero vectors.")
+                # Return Zero Vectors to keep shapes correct
+                return [[0.0] * 1536 for _ in texts]
+             logger.error(f"Azure OpenAI embeddings bad request: {e}")
+             raise
         except Exception as e:
             logger.error(f"Azure OpenAI embeddings error: {e}")
-            # Return None embeddings to maintain alignment with input
-            return [None] * len(texts)
+            raise
     
     def get_provider_name(self) -> str:
         return "azure"

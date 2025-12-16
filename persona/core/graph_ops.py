@@ -1,5 +1,5 @@
 from persona.core.neo4j_database import Neo4jConnectionManager
-from persona.llm.embeddings import generate_embeddings
+from persona.llm.embeddings import generate_embeddings, generate_embeddings_async
 from persona.models.schema import (
     NodeModel, RelationshipModel, GraphUpdateModel, NodesAndRelationshipsResponse, 
     CommunityStructure, Subgraph, Node, Relationship, GraphSchema
@@ -74,7 +74,8 @@ class GraphOps:
 
         # Generate embeddings for all nodes in one batch using richer text
         embed_texts = [self._embedding_text_for_node(node) for node in nodes]
-        embeddings = generate_embeddings(embed_texts)
+        # Use async generator to avoid blocking the event loop
+        embeddings = await generate_embeddings_async(embed_texts)
         
         # Add embeddings to nodes
         for node_obj, embedding in zip(nodes, embeddings):
@@ -125,7 +126,8 @@ class GraphOps:
             return {"query": query, "results": []}
 
         logger.debug(f"Generating embedding for query: '{query}' for user ID: '{user_id}'")
-        query_embeddings = generate_embeddings([query])
+        # Use async generator to avoid blocking the event loop
+        query_embeddings = await generate_embeddings_async([query])
         if not query_embeddings[0]:
             return {"query": query, "results": []}
 

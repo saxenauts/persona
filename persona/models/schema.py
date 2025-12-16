@@ -10,6 +10,9 @@ class UnstructuredData(BaseModel):
     content: str
     metadata: Optional[Dict[str, str]] = {}
 
+class UnstructuredBatchData(BaseModel):
+    batch: List[UnstructuredData]
+
 class Node(BaseModel):
     name: str = Field(..., description="The node content - can be a simple label (e.g., 'Techno Music') or a narrative fragment (e.g., 'Deeply moved by classical music in empty spaces')")
     type: str = Field(..., description="The type/category of the node (e.g., 'Identity', 'Belief', 'Preference', 'Goal', 'Event', 'Relationship', etc.)")

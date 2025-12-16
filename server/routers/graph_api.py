@@ -3,7 +3,7 @@ from persona.core.graph_ops import GraphOps, GraphContextRetriever
 from persona.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
 from persona.core.constructor import GraphConstructor
 from persona.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOOL_CHAT
-from persona.models.schema import UnstructuredData
+from persona.models.schema import UnstructuredData, UnstructuredBatchData
 from persona.core.constructor import GraphContextRetriever
 from persona.core.rag_interface import RAGInterface
 from persona.models.schema import UserCreate, RAGQuery, RAGResponse
@@ -125,6 +125,35 @@ async def ingest_data(
         if "Neo4j" in str(e) or "database" in str(e).lower():
             raise HTTPException(status_code=503, detail="Database connection error. Please try again later.")
         raise HTTPException(status_code=500, detail="Internal server error occurred while ingesting data")
+
+@router.post("/users/{user_id}/ingest/batch", status_code=201)
+async def ingest_batch_data(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    batch_data: UnstructuredBatchData = Body(...),
+    graph_ops: GraphOps = Depends(get_graph_ops)
+):
+    try:
+        logger.info(f"Ingesting batch of {len(batch_data.batch)} items for user: {user_id}")
+        
+        # Validate user exists
+        if not await graph_ops.user_exists(user_id):
+            logger.warning(f"Attempted to batch ingest for non-existent user: {user_id}")
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+        
+        if not batch_data.batch:
+            raise HTTPException(status_code=400, detail="Batch cannot be empty")
+
+        result = await IngestService.ingest_batch(user_id, batch_data.batch, graph_ops)
+        logger.info(f"Batch ingestion completed for user {user_id}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to batch ingest for user {user_id}: {str(e)}")
+        if "Neo4j" in str(e):
+             raise HTTPException(status_code=503, detail="Database connection error.")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.post("/users/{user_id}/rag/query", response_model=RAGResponse)
 async def rag_query(
