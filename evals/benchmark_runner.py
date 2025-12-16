@@ -17,10 +17,11 @@ class BenchmarkRunner:
         os.environ["AZURE_CHAT_DEPLOYMENT"] = "gpt-4.1-mini"
         
         self.adapters = {
-            #"Persona": PersonaAdapter(), # Already benchmarked
+            "Persona": PersonaAdapter(), # Already benchmarked
             #"Mem0 (Vector)": Mem0Adapter(use_graph=False),  # Already benchmarked
             # "Mem0 (Graph)": Mem0Adapter(use_graph=True),  # Already benchmarked
-            "EverMem": EverMemAdapter(),  # Running EverMem benchmark
+            "Zep (Graphiti)": ZepAdapter(),
+            # "EverMem": EverMemAdapter(),  # Decommissioned
         }
         self.results = []
         # Judge LLM
@@ -36,7 +37,7 @@ class BenchmarkRunner:
         questions = []
         # Priority 1: Full LongMemEval Dataset (Cleaned)
         # EverMem benchmark - using multi-session + temporal questions
-        path = "evals/data/longmemeval/sampled_benchmark_data.json"
+        path = "evals/data/longmemeval/single_session_user_benchmark.json"
         
         if os.path.exists(path):
             print(f"📖 Loading Sampled Dataset from {path}")
@@ -152,7 +153,8 @@ class BenchmarkRunner:
         
         # PARALLEL QUESTION PROCESSING
         # Process 2 questions simultaneously to avoid overwhelming EverMem async processing
-        PARALLEL_QUESTIONS = 2
+        # Process 1 question (sequential) to specific threading issues
+        PARALLEL_QUESTIONS = 1
         
         import threading
         checkpoint_lock = threading.Lock()
@@ -264,4 +266,4 @@ class BenchmarkRunner:
 if __name__ == "__main__":
     runner = BenchmarkRunner()
     # Run full benchmark
-    runner.run(limit=None)
+    runner.run(limit=40)
