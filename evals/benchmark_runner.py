@@ -18,8 +18,9 @@ class BenchmarkRunner:
         
         self.adapters = {
             #"Persona": PersonaAdapter(), # Already benchmarked
-            "Mem0 (Vector)": Mem0Adapter(use_graph=False),  # Re-running single-session-user
-            # "Mem0 (Graph)": Mem0Adapter(use_graph=True),  # Skip for now
+            #"Mem0 (Vector)": Mem0Adapter(use_graph=False),  # Already benchmarked
+            # "Mem0 (Graph)": Mem0Adapter(use_graph=True),  # Already benchmarked
+            "EverMem": EverMemAdapter(),  # Running EverMem benchmark
         }
         self.results = []
         # Judge LLM
@@ -34,8 +35,8 @@ class BenchmarkRunner:
     def load_questions(self, limit=None):
         questions = []
         # Priority 1: Full LongMemEval Dataset (Cleaned)
-        # Priority 1: Single-Session-User Benchmark (Re-run for Mem0)
-        path = "evals/data/longmemeval/single_session_user_benchmark.json"
+        # EverMem benchmark - using multi-session + temporal questions
+        path = "evals/data/longmemeval/sampled_benchmark_data.json"
         
         if os.path.exists(path):
             print(f"📖 Loading Sampled Dataset from {path}")
@@ -150,8 +151,8 @@ class BenchmarkRunner:
         print(f"🏁 Starting Benchmark: {len(remaining_qs)} questions remaining (Total: {total_qs})")
         
         # PARALLEL QUESTION PROCESSING
-        # Process 5 questions simultaneously for significant speedup
-        PARALLEL_QUESTIONS = 5
+        # Process 2 questions simultaneously to avoid overwhelming EverMem async processing
+        PARALLEL_QUESTIONS = 2
         
         import threading
         checkpoint_lock = threading.Lock()

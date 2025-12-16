@@ -1,5 +1,7 @@
 import os
 import uuid
+import json
+import asyncio
 from datetime import datetime
 from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType
@@ -28,6 +30,23 @@ class ZepAdapter(MemorySystem):
             temperature=0,
         )
         
+        # Stage logging for diagnosis
+        self.last_stage_logs = {}
+        self._create_log_dir()
+    
+    def _create_log_dir(self):
+        """Create directory for detailed stage logs."""
+        self.log_dir = "evals/results/zep_stage_logs"
+        os.makedirs(self.log_dir, exist_ok=True)
+    
+    def _log_stage(self, user_id: str, stage: str, data: dict):
+        """Log stage data for later diagnosis."""
+        self.last_stage_logs[f"{user_id}_{stage}"] = data
+        # Also write to file for persistence
+        log_file = f"{self.log_dir}/{user_id}.jsonl"
+        with open(log_file, "a") as f:
+            f.write(json.dumps({"stage": stage, "timestamp": datetime.now().isoformat(), **data}) + "\n")
+        
     def _get_graphiti(self):
         # Initialize clients inside the current loop context
         azure_client = AsyncAzureOpenAI(
@@ -36,36 +55,7 @@ class ZepAdapter(MemorySystem):
             azure_endpoint=os.getenv("AZURE_API_BASE"),
             azure_deployment=os.getenv("AZURE_CHAT_DEPLOYMENT"),
         )
-
-        async def _patched_create_structured_completion(self_instance, model, messages, temperature, max_tokens, response_model, reasoning=None, verbosity=None):
-            response = await self_instance.client.beta.chat.completions.parse(
-                model=model,
-                messages=messages,
-                response_format=response_model,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            parsed = response.choices[0].message.parsed
-            
-            class ParsedInterceptor:
-                def __init__(self, wrapped):
-                    self._wrapped = wrapped
-                    self.output_text = ""
-                
-                def __getattr__(self, name):
-                    return getattr(self._wrapped, name)
-                    
-                def model_dump(self, *args, **kwargs):
-                    return self._wrapped.model_dump(*args, **kwargs)
-                
-                def dict(self, *args, **kwargs):
-                     return self._wrapped.dict(*args, **kwargs)
-
-            return ParsedInterceptor(parsed)
         
-        # Apply patch
-        AzureOpenAILLMClient._create_structured_completion = _patched_create_structured_completion
-
         llm_client = AzureOpenAILLMClient(azure_client=azure_client)
         
         return Graphiti(
@@ -76,7 +66,6 @@ class ZepAdapter(MemorySystem):
         )
 
     def add_session(self, user_id: str, session_data: str, date: str):
-        import asyncio
         client = self._get_graphiti()
         
         try:
@@ -84,18 +73,29 @@ class ZepAdapter(MemorySystem):
         except:
             episode_date = datetime.utcnow()
  
-        asyncio.run(client.add_episode(
-            name=f"Session on {date}",
-            episode_body=session_data,
-            source=EpisodeType.text,
-            source_description="chat history",
-            reference_time=episode_date,
-            group_id=user_id 
-        ))
- 
+        try:
+            asyncio.run(client.add_episode(
+                name=f"Session on {date}",
+                episode_body=session_data,
+                source=EpisodeType.text,
+                source_description="chat history",
+                reference_time=episode_date,
+                group_id=user_id 
+            ))
+            self._log_stage(user_id, "stage1_ingestion", {
+                "date": date, 
+                "status": "success",
+                "content_preview": session_data[:100]
+            })
+        except Exception as e:
+            print(f"[ZepAdapter] Ingest error: {e}")
+            self._log_stage(user_id, "stage1_ingestion", {
+                "date": date, 
+                "status": "failed",
+                "error": str(e)
+            })
+
     def add_sessions(self, user_id: str, sessions: list):
-        import asyncio
-        
         async def _ingest_all():
             client = self._get_graphiti()
             tasks = []
@@ -113,37 +113,69 @@ class ZepAdapter(MemorySystem):
                     reference_time=episode_date,
                     group_id=user_id
                 ))
-            await asyncio.gather(*tasks)
+            
+            # Run concurrently
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Log results
+            success_count = sum(1 for r in results if not isinstance(r, Exception))
+            self._log_stage(user_id, "stage1_ingestion_batch", {
+                "total_sessions": len(sessions),
+                "success_count": success_count,
+                "failed_count": len(sessions) - success_count,
+                "errors": [str(r) for r in results if isinstance(r, Exception)]
+            })
             
         asyncio.run(_ingest_all())
- 
+
     def query(self, user_id: str, query: str) -> str:
-        import asyncio
         client = self._get_graphiti()
         
-        # Graphiti 'search' returns chunks/facts.
-        # It is async
-        stopwords = [] # Optional
-        
-        # We need to run search in asyncio loop
-        results = asyncio.run(client.search(
-            query=query,
-            group_ids=[user_id],
-            num_results=5
-        ))
-        
-        context = "\n".join([r.fact for r in results]) # Assuming EntityEdge has 'fact' or similar. 
-        # Check Graphiti result structure. Returns 'list[EntityEdge]'.
-        # EntityEdge probably has 'fact' string field.
-
-        
-        # RAG Generation
-        prompt = f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
-        response = self.generator_llm.invoke(prompt)
-        return response.content
+        try:
+            # We need to run search in asyncio loop
+            results = asyncio.run(client.search(
+                query=query,
+                group_ids=[user_id],
+                num_results=10 # Increased from 5 to improve recall
+            ))
+            
+            context_facts = [r.fact for r in results]
+            context = "\n".join(context_facts)
+            
+            self._log_stage(user_id, "stage3_retrieval", {
+                "query": query,
+                "retrieved_facts_count": len(context_facts),
+                "context_preview": context[:500] if context else "EMPTY",
+                "facts": context_facts[:5]
+            })
+            
+            # RAG Generation
+            prompt = f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+            response = self.generator_llm.invoke(prompt)
+            answer = response.content
+            
+            self._log_stage(user_id, "stage4_generation", {
+                "query": query,
+                "context_len": len(context),
+                "answer": answer
+            })
+            
+            return answer
+            
+        except Exception as e:
+            print(f"[ZepAdapter] Query error: {e}")
+            self._log_stage(user_id, "stage3_retrieval", {
+                "query": query,
+                "status": "failed",
+                "error": str(e)
+            })
+            return f"Error: {e}"
 
     def reset(self, user_id: str):
         # Clear graph for user.
-        # Graphiti might not have a clean 'delete_user' yet, so we cypher delete.
-        with self.driver.session() as session:
-            session.run("MATCH (n) WHERE n.group_id = $uid DETACH DELETE n", uid=user_id)
+        try:
+            with self.driver.session() as session:
+                session.run("MATCH (n) WHERE n.group_id = $uid DETACH DELETE n", uid=user_id)
+        except Exception as e:
+            print(f"[ZepAdapter] Reset error: {e}")
+
