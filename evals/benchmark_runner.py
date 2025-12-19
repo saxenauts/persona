@@ -5,7 +5,6 @@ from datetime import datetime
 from evals.adapters.persona_adapter import PersonaAdapter
 from evals.adapters.mem0_adapter import Mem0Adapter
 from evals.adapters.zep_adapter import ZepAdapter
-from evals.adapters.evermem_adapter import EverMemAdapter
 from langchain_openai import AzureChatOpenAI
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,14 +13,13 @@ import uuid
 class BenchmarkRunner:
     def __init__(self):
         # FORCE USER REQUEST: Always use gpt-4.1-mini
-        os.environ["AZURE_CHAT_DEPLOYMENT"] = "gpt-4.1-mini"
+        # os.environ["AZURE_CHAT_DEPLOYMENT"] = "gpt-4.1-mini"  # Commented out to allow gpt-5 env var
         
         self.adapters = {
-            "Persona": PersonaAdapter(), # Already benchmarked
+            # "Persona": PersonaAdapter(), # Already benchmarked - commenting for Zep-only run
             #"Mem0 (Vector)": Mem0Adapter(use_graph=False),  # Already benchmarked
             # "Mem0 (Graph)": Mem0Adapter(use_graph=True),  # Already benchmarked
-            "Zep (Graphiti)": ZepAdapter(),
-            # "EverMem": EverMemAdapter(),  # Decommissioned
+            "Zep (Graphiti)": ZepAdapter(),  # Running with rate-limit fix
         }
         self.results = []
         # Judge LLM
@@ -35,9 +33,8 @@ class BenchmarkRunner:
 
     def load_questions(self, limit=None):
         questions = []
-        # Priority 1: Full LongMemEval Dataset (Cleaned)
-        # EverMem benchmark - using multi-session + temporal questions
-        path = "evals/data/longmemeval/single_session_user_benchmark.json"
+        # Multi-session + Temporal Reasoning dataset (80 questions)
+        path = "evals/data/longmemeval/sampled_benchmark_data.json"
         
         if os.path.exists(path):
             print(f"📖 Loading Sampled Dataset from {path}")
@@ -76,27 +73,24 @@ class BenchmarkRunner:
             
         return questions
 
-    def evaluate_answer(self, question, gold, hypothesis) -> dict:
-        prompt = f"""
-        You are an impartial judge. Grade the correctness of the hypothesis answer compared to the gold answer.
-        
-        Question: {question}
-        Gold Answer: {gold}
-        Hypothesis Answer: {hypothesis}
-        
-        Evaluate on a scale of 1-5 where:
-        1: Completely incorrect or irrelevant.
-        5: Completely correct and complete.
-        
-        Output valid JSON: {{"grade": int, "reason": "string"}}
+    def evaluate_answer(self, question, gold, hypothesis, task_type) -> dict:
         """
+        Official LongMemEval binary evaluation.
+        Uses task-specific prompts as defined in the LongMemEval paper.
+        Returns {"correct": bool, "raw_response": str}
+        """
+        from evals.longmemeval.evaluate_qa import get_anscheck_prompt
+        
+        # Generate task-specific binary evaluation prompt
+        prompt = get_anscheck_prompt(task_type, question, gold, hypothesis, abstention=False)
+        
         try:
             res = self.judge_llm.invoke(prompt)
-            # basic cleanup
-            content = res.content.replace("```json", "").replace("```", "")
-            return json.loads(content)
+            raw_response = res.content.strip().lower()
+            correct = 'yes' in raw_response
+            return {"correct": correct, "raw_response": raw_response}
         except Exception as e:
-            return {"grade": 0, "reason": f"Evaluation failed: {e}"}
+            return {"correct": False, "raw_response": f"Evaluation failed: {e}"}
 
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=120),
@@ -151,10 +145,8 @@ class BenchmarkRunner:
         
         print(f"🏁 Starting Benchmark: {len(remaining_qs)} questions remaining (Total: {total_qs})")
         
-        # PARALLEL QUESTION PROCESSING
-        # Process 2 questions simultaneously to avoid overwhelming EverMem async processing
         # Process 1 question (sequential) to specific threading issues
-        PARALLEL_QUESTIONS = 1
+        PARALLEL_QUESTIONS = 5  # Hyper-parallel for 80% utilization
         
         import threading
         checkpoint_lock = threading.Lock()
@@ -199,22 +191,24 @@ class BenchmarkRunner:
                             ans = self._safe_query(adapter, user_id_for_query, question_text)
                             duration = time.time() - t_query_start
                             
-                            eval_res = self.evaluate_answer(question_text, gold_answer, ans)
+                            eval_res = self.evaluate_answer(question_text, gold_answer, ans, question_type)
                             
                             row[f"{name}_ans"] = ans
-                            row[f"{name}_grade"] = eval_res['grade']
-                            row[f"{name}_reason"] = eval_res['reason']
+                            row[f"{name}_correct"] = eval_res['correct']
+                            row[f"{name}_raw_eval"] = eval_res['raw_response']
                             row[f"{name}_latency"] = duration
-                            print(f"    [{name}] Q{idx_overall}: Grade {eval_res.get('grade')}")
+                            result_str = "CORRECT" if eval_res['correct'] else "WRONG"
+                            print(f"    [{name}] Q{idx_overall}: {result_str}")
                         except Exception as exc:
                             print(f"    [{name}] Q{idx_overall}: Query error: {exc}")
                             row[f"{name}_error"] = str(exc)
                             row[f"{name}_ans"] = "ERROR"
-                            row[f"{name}_grade"] = 0
+                            row[f"{name}_correct"] = False
                     else:
                         row[f"{name}_error"] = "User ID not found"
                         row[f"{name}_ans"] = "ERROR"
-                        row[f"{name}_grade"] = 0
+                        row[f"{name}_correct"] = False
+
                 
                 # Thread-safe checkpoint save
                 with checkpoint_lock:
@@ -266,4 +260,4 @@ class BenchmarkRunner:
 if __name__ == "__main__":
     runner = BenchmarkRunner()
     # Run full benchmark
-    runner.run(limit=40)
+    runner.run(limit=80)  # Full 80-question benchmark with dual-provider

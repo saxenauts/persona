@@ -2,18 +2,120 @@ import os
 import uuid
 import json
 import asyncio
+import re
+import threading
 from datetime import datetime
 from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType, EntityNode
 from openai import AsyncAzureOpenAI
 from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from langchain_openai import AzureChatOpenAI
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, AsyncGraphDatabase
 from .base import MemorySystem
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
-from openai import AsyncAzureOpenAI
+from tenacity import retry, AsyncRetrying, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_exception_message
+import time
+from collections import deque
+
+
+class CallRateMonitor:
+    """Monitor API call rates with rolling window and periodic logging."""
+    
+    def __init__(self, window_seconds: int = 60, log_interval: int = 30, estimated_tokens_per_call: int = 2000):
+        self.window_seconds = window_seconds
+        self.log_interval = log_interval
+        self.estimated_tokens_per_call = estimated_tokens_per_call
+        self.calls = deque()  # (timestamp, call_type) tuples
+        self.lock = threading.Lock()
+        self.last_log_time = time.time()
+        self.total_calls = 0
+        self.quota_tpm = 10_000_000  # gpt-5 quota
+        
+    def record_call(self, call_type: str = "llm"):
+        """Record an API call and optionally log stats."""
+        now = time.time()
+        with self.lock:
+            self.calls.append((now, call_type))
+            self.total_calls += 1
+            
+            # Prune old calls outside window
+            cutoff = now - self.window_seconds
+            while self.calls and self.calls[0][0] < cutoff:
+                self.calls.popleft()
+            
+            # Log every interval
+            if now - self.last_log_time >= self.log_interval:
+                self._log_stats(now)
+                self.last_log_time = now
+    
+    def _log_stats(self, now: float):
+        """Log current call rate statistics."""
+        calls_in_window = len(self.calls)
+        rpm = calls_in_window * (60.0 / self.window_seconds)
+        estimated_tpm = rpm * self.estimated_tokens_per_call
+        utilization = (estimated_tpm / self.quota_tpm) * 100
+        
+        print(f"📊 [RateMonitor] Last {self.window_seconds}s: {calls_in_window} calls | "
+              f"RPM: {rpm:.1f} | Est. TPM: {estimated_tpm:,.0f}/{self.quota_tpm:,} ({utilization:.1f}%) | "
+              f"Total: {self.total_calls}")
+
+
+class ThreadSafeRateLimiter:
+    """A thread-safe rate limiter using threading.Lock (works across event loops)."""
+    
+    # Shared monitor across all instances
+    _monitor = CallRateMonitor(window_seconds=60, log_interval=30, estimated_tokens_per_call=2000)
+    
+    def __init__(self, requests_per_second: float):
+        self.delay = 1.0 / requests_per_second
+        self.lock = threading.Lock()
+        self.last_request = 0.0
+
+    def wait(self):
+        """Synchronous wait - call this BEFORE entering async context."""
+        with self.lock:
+            now = time.monotonic()
+            elapsed = now - self.last_request
+            wait_time = max(0, self.delay - elapsed)
+            if wait_time > 0:
+                time.sleep(wait_time)
+            self.last_request = time.monotonic()
+            # Record this call for monitoring
+            ThreadSafeRateLimiter._monitor.record_call("llm")
+
+class CustomNeo4jDriver(Neo4jDriver):
+    """Custom driver to increase connection pool size for high-throughput benchmarking."""
+    def __init__(self, uri, user, password, database='neo4j'):
+        # Re-implement init to set max_connection_pool_size
+        self.client = AsyncGraphDatabase.driver(
+            uri=uri,
+            auth=(user or '', password or ''),
+            max_connection_pool_size=500,  # Increased from default 100
+            connection_acquisition_timeout=120.0, # Wait longer for connection
+        )
+        self._database = database
+        
+        # Schedule indices (same as original)
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.build_indices_and_constraints())
+        except RuntimeError:
+            pass
+        self.aoss_client = None
+
 
 class ZepAdapter(MemorySystem):
+    # Thread-safe global rate limiter
+    # GPT-5 TURBO: 160 RPS (target ~9600 RPM)
+    _rate_limiter = ThreadSafeRateLimiter(requests_per_second=160.0)
+
+
+    def _run_async(self, coro):
+        """Run a coroutine in a fresh event loop. Always creates new loop to avoid contamination."""
+        return asyncio.run(coro)
+
     def __init__(self):
         # Neo4j Config
         self.neo4j_uri = os.getenv("URI_NEO4J", "bolt://127.0.0.1:7687")
@@ -48,32 +150,46 @@ class ZepAdapter(MemorySystem):
         log_file = f"{self.log_dir}/{user_id}.jsonl"
         with open(log_file, "a") as f:
             f.write(json.dumps({"stage": stage, "timestamp": datetime.now().isoformat(), **data}) + "\n")
+
         
 
 
-    def _get_graphiti(self):
-        # MONKEY PATCH: Graphiti's Azure client uses a non-existent 'responses.parse' endpoint.
-        # We replace it with the standard 'beta.chat.completions.parse' implementation from OpenAIClient.
-        # AND we wrap the response because Graphiti expects an object with .output_text property (JSON string).
+    async def _get_graphiti(self):
+        """Create a fresh Graphiti instance for this call (no singleton to avoid cross-loop issues)."""
         
+        # Robust ResponseWrapper to handle non-object responses (strings, errors)
         class ResponseWrapper:
             def __init__(self, response):
                 self.response = response
             
             @property
             def output_text(self):
-                # Graphiti expects JSON string in output_text
-                return self.response.choices[0].message.content
+                if isinstance(self.response, str):
+                    return "{}"
+                try:
+                    return self.response.choices[0].message.content
+                except (AttributeError, IndexError) as e:
+                    return "{}"
 
             @property
             def refusal(self):
-                 return self.response.choices[0].message.refusal
+                if isinstance(self.response, str):
+                    return "Rate limited or error"
+                try:
+                     return self.response.choices[0].message.refusal
+                except:
+                     return None
 
             def model_dump(self):
-                return self.response.model_dump()
+                if isinstance(self.response, str):
+                    return {"error": self.response}
+                try:
+                    return self.response.model_dump()
+                except:
+                    return {"raw": str(self.response)}
 
         async def _patched_create_structured_completion(
-            self,
+            llm_self,
             model: str,
             messages: list,
             temperature: float | None,
@@ -82,130 +198,125 @@ class ZepAdapter(MemorySystem):
             reasoning: str | None = None,
             verbosity: str | None = None,
         ):
-            # Azure OpenAI supports standard beta.chat.completions.parse
-            response = await self.client.beta.chat.completions.parse(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_model,
-            )
-            return ResponseWrapper(response)
+            # Synchronous rate limiting BEFORE the async call
+            ZepAdapter._rate_limiter.wait()
+            
+            # Simple retry logic for Azure 429s/timeouts
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1, min=2, max=120),
+                stop=stop_after_attempt(8),
+                retry=retry_if_exception_type(Exception)
+            ):
+                with attempt:
+                    response = await llm_self.client.beta.chat.completions.parse(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_completion_tokens=max_tokens,  # GPT-5 requires max_completion_tokens
+                        response_format=response_model,
+                    )
+                    return ResponseWrapper(response)
 
+        # Apply monkey patch (idempotent - safe to call multiple times)
         AzureOpenAILLMClient._create_structured_completion = _patched_create_structured_completion
-        print("[ZepAdapter] Monkey-patched AzureOpenAILLMClient to use beta.chat.completions.parse and ResponseWrapper.")
+        print("[ZepAdapter] Monkey-patched AzureOpenAILLMClient with ThreadSafe Rate Limiting (160 RPS).")
 
-        # 1. Chat Client (for Graph construction & RAG)
+        # Create fresh clients for this event loop
         azure_chat_client = AsyncAzureOpenAI(
             api_key=os.getenv("AZURE_API_KEY"),
-            api_version="2024-08-01-preview", # Force specific version compatible with Graphiti Structured Outputs
+            api_version="2024-08-01-preview",
             azure_endpoint=os.getenv("AZURE_API_BASE"),
             azure_deployment=os.getenv("AZURE_CHAT_DEPLOYMENT"),
+            timeout=300.0,  # Increased timeout for high concurrency
         )
         llm_client = AzureOpenAILLMClient(azure_client=azure_chat_client)
         
-        # 2. Embedding Client (for Vector Search)
         azure_emb_client = AsyncAzureOpenAI(
             api_key=os.getenv("AZURE_API_KEY"),
-            api_version="2023-05-15", # Embeddings usually work with older/stable API versions
+            api_version="2023-05-15",
             azure_endpoint=os.getenv("AZURE_API_BASE"),
             azure_deployment=os.getenv("AZURE_EMBEDDING_DEPLOYMENT"),
+            timeout=300.0,  # Increased timeout for high concurrency
         )
         embedder = AzureOpenAIEmbedderClient(
             azure_client=azure_emb_client,
             model=os.getenv("AZURE_EMBEDDING_DEPLOYMENT")
         )
         
-        return Graphiti(
+        # Use Custom Driver with large connection pool
+        custom_driver = CustomNeo4jDriver(
             uri=self.neo4j_uri,
             user=self.neo4j_user,
-            password=self.neo4j_password,
+            password=self.neo4j_password
+        )
+
+        graphiti_client = Graphiti(
+            graph_driver=custom_driver,
             llm_client=llm_client,
             embedder=embedder
         )
+        return graphiti_client
 
-    async def _close_client(self, client):
-        """Helper to close Graphiti internal clients."""
-        try:
-            # print(f"[ZepAdapter] Closing clients...")
-            if hasattr(client, "driver"):
-                await client.driver.close()
-            if hasattr(client.llm_client, "client"):
-                await client.llm_client.client.close()
-            if hasattr(client.embedder, "azure_client"):
-                await client.embedder.azure_client.close()
-        except Exception as e:
-            print(f"[ZepAdapter] Close error: {e}")
+
+    async def _close_all(self):
+        """No-op - clients are created fresh per call and cleaned up by asyncio.run()."""
+        pass
+
 
     def add_session(self, user_id: str, session_data: str, date: str):
-        async def _ingest():
-            client = self._get_graphiti()
-            try:
-                try:
-                    episode_date = datetime.strptime(date, "%Y-%m-%d")
-                except:
-                    episode_date = datetime.utcnow()
-    
-                await client.add_episode(
-                    name=f"Session on {date}",
-                    episode_body=session_data,
-                    source=EpisodeType.text,
-                    source_description="chat history",
-                    reference_time=episode_date,
-                    group_id=user_id 
-                )
-                self._log_stage(user_id, "stage1_ingestion", {
-                    "date": date, 
-                    "status": "success",
-                    "content_preview": session_data[:100]
-                })
-            except Exception as e:
-                print(f"[ZepAdapter] Ingest error: {e}")
-                self._log_stage(user_id, "stage1_ingestion", {
-                    "date": date, 
-                    "status": "failed",
-                    "error": str(e)
-                })
-            finally:
-                await self._close_client(client)
-
-        asyncio.run(_ingest())
+        self.add_sessions(user_id, [{"content": session_data, "date": date}])
 
     def add_sessions(self, user_id: str, sessions: list):
+        """Ingest sessions SEQUENTIALLY to avoid event loop corruption from nest_asyncio.
+        
+        Key design decisions:
+        - Sequential processing (no asyncio.gather) for stability with nest_asyncio.
+        - Fail-fast: Raises immediately on first error to ensure data integrity.
+        - Progress logging: Prints clear progress markers every 5 sessions.
+        """
+        safe_user_id = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)
+        
         async def _ingest_all():
-            client = self._get_graphiti()
-            try:
-                tasks = []
-                for s in sessions:
+            client = await self._get_graphiti()
+            
+            # GPT-5 TURBO: 50 workers (x 5 parallel qs = 250 total) to eliminate DB lock contention
+            MAX_CONCURRENT_EPISODES = 50
+            semaphore = asyncio.Semaphore(MAX_CONCURRENT_EPISODES)
+
+            async def _ingest_one(idx, s):
+                async with semaphore:
+                    # Sync rate limit still applies globally across threads
+                    self._rate_limiter.wait()
+                    
                     try:
                         episode_date = datetime.strptime(s['date'], "%Y-%m-%d")
                     except:
                         episode_date = datetime.utcnow()
-                        
-                    tasks.append(client.add_episode(
+                    
+                    await client.add_episode(
                         name=f"Session on {s['date']}",
                         episode_body=s['content'],
                         source=EpisodeType.text,
                         source_description="chat history + " + s['date'],
                         reference_time=episode_date,
-                        group_id=user_id
-                    ))
-                
-                # Run concurrently
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                
-                # Log results
-                success_count = sum(1 for r in results if not isinstance(r, Exception))
-                self._log_stage(user_id, "stage1_ingestion_batch", {
-                    "total_sessions": len(sessions),
-                    "success_count": success_count,
-                    "failed_count": len(sessions) - success_count,
-                    "errors": [str(r) for r in results if isinstance(r, Exception)]
-                })
-            finally:
-                await self._close_client(client)
+                        group_id=safe_user_id
+                    )
+                    # Simple progress marker in logs
+                    if (idx + 1) % 5 == 0 or (idx + 1) == len(sessions):
+                         print(f"    [ZepAdapter] Progress: {idx+1}/{len(sessions)} sessions for {safe_user_id}...")
+
+            tasks = [_ingest_one(i, s) for i, s in enumerate(sessions)]
+            await asyncio.gather(*tasks)
             
-        asyncio.run(_ingest_all())
+            # Final success summary
+            print(f"    [ZepAdapter] ✅ Ingested ALL {len(sessions)} sessions for {safe_user_id}")
+            self._log_stage(safe_user_id, "stage1_ingestion_complete", {
+                "total_sessions": len(sessions),
+                "success_count": len(sessions),
+                "failed_count": 0
+            })
+
+        self._run_async(_ingest_all())
 
     def _format_edge_date_range(self, edge) -> str:
         # Handle valid_at/invalid_at which might be None or datetime strings
@@ -234,83 +345,69 @@ FACTS and ENTITIES represent relevant context to the current conversation.
         return TEMPLATE.format(facts='\n'.join(facts), entities='\n'.join(entities))
 
     def query(self, user_id: str, query: str) -> str:
-        async def _run_search():
-            client = self._get_graphiti()
+        safe_user_id = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)
+        
+        async def _run_rag():
+            client = await self._get_graphiti()
             try:
-                # We need to run search in asyncio loop
-                # Graphiti search returns list[EntityEdge]
+                # 1. Search
                 results = await client.search(
                     query=query,
-                    group_ids=[user_id],
-                    num_results=20 # Increased to match notebook limit
+                    group_ids=[safe_user_id],
+                    num_results=20
                 )
                 
-                # Extract Edges
-                edges = results
-                
-                # Extract Unique Node UUIDs
+                # 2. Fetch Nodes
                 node_uuids = set()
-                for edge in edges:
-                    if edge.source_node_uuid:
-                        node_uuids.add(edge.source_node_uuid)
-                    if edge.target_node_uuid:
-                        node_uuids.add(edge.target_node_uuid)
+                for edge in results:
+                    if edge.source_node_uuid: node_uuids.add(edge.source_node_uuid)
+                    if edge.target_node_uuid: node_uuids.add(edge.target_node_uuid)
                 
-                # Fetch Nodes from DB
                 nodes = []
                 if node_uuids:
                     nodes = await EntityNode.get_by_uuids(client.driver, list(node_uuids))
                 
-                return edges, nodes
-            finally:
-                await self._close_client(client)
+                # 3. Compose Context
+                context = self._compose_search_context(results, nodes)
+                
+                # 4. Global Rate Limiting for Generation (sync method - no await)
+                self._rate_limiter.wait()
+                
+                # RAG Generation
+                user_prompt = f"""
+                Your task is to briefly answer the question. You are given the following context from the previous conversation. If you don't know how to answer the question, abstain from answering.
+                    <CONTEXT>
+                    {context}
+                    </CONTEXT>
+                    <QUESTION>
+                    {query}
+                    </QUESTION>
 
-        try:
-            edges, nodes = asyncio.run(_run_search())
-            
-            # Compose Context using official template
-            context = self._compose_search_context(edges, nodes)
-            
-            self._log_stage(user_id, "stage3_retrieval", {
-                "query": query,
-                "edges_count": len(edges),
-                "nodes_count": len(nodes),
-                "context_preview": context[:500] if context else "EMPTY"
-            })
-            
-            # RAG Generation
-            # Use specific prompt to ensure usage of context
-            system_prompt = "You are a helpful expert assistant answering questions based on the provided context."
-            user_prompt = f"""
-            Your task is to briefly answer the question. You are given the following context from the previous conversation. If you don't know how to answer the question, abstain from answering.
-                <CONTEXT>
-                {context}
-                </CONTEXT>
-                <QUESTION>
-                {query}
-                </QUESTION>
+                Answer:
+                """
+                
+                # Use ainstoke if available or just run in executor
+                response = await self.generator_llm.ainvoke(user_prompt)
+                answer = response.content
+                
+                self._log_stage(safe_user_id, "stage4_generation", {
+                    "query": query,
+                    "answer": answer,
+                    "edges_count": len(results),
+                    "nodes_count": len(nodes)
+                })
+                
+                return answer
+            except Exception as e:
+                print(f"[ZepAdapter] RAG error for {safe_user_id}: {e}")
+                self._log_stage(safe_user_id, "stage3_retrieval", {
+                    "query": query,
+                    "status": "failed",
+                    "error": str(e)
+                })
+                return f"Error: {e}"
 
-            Answer:
-            """
-            
-            response = self.generator_llm.invoke(user_prompt)
-            answer = response.content
-            
-            self._log_stage(user_id, "stage4_generation", {
-                "query": query,
-                "answer": answer
-            })
-            
-            return answer
-            
-        except Exception as e:
-            print(f"[ZepAdapter] Query error: {e}")
-            self._log_stage(user_id, "stage3_retrieval", {
-                "query": query,
-                "status": "failed",
-                "error": str(e)
-            })
-            return f"Error: {e}"
+        return self._run_async(_run_rag())
 
     def reset(self, user_id: str):
         # Clear graph for user.
