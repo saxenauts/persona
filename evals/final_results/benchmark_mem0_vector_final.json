@@ -1,0 +1,722 @@
+[
+  {
+    "question": "How many weeks passed between the day I bought my new tennis racket and the day I received it?",
+    "gold": "1 week",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about when you bought your new tennis racket or when you received it. Therefore, I cannot determine how many weeks passed between those two events.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided to determine the time difference, which is a reasonable response if the question context lacks data. However, since the gold answer specifies '1 week,' the hypothesis contradicts the provided answer and does not address the given information, making it largely incorrect in this context.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "Which trip did I take first, the one to Europe with family or the solo trip to Thailand?",
+    "gold": "The solo trip to Thailand",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "Based on the context provided, there is no mention of a solo trip to Thailand. The trips mentioned are to Europe with family, a solo trip to South America (Chile, Argentina, Galapagos Islands), and a trip to London. Therefore, it is not possible to determine which trip you took first between Europe with family and a solo trip to Thailand.",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis correctly identifies that there is no mention of a solo trip to Thailand in the provided context and therefore concludes that it is not possible to determine which trip was taken first. This is a reasonable and accurate assessment given the information. However, it does not directly confirm the gold answer that the solo trip to Thailand was first, so it is not fully aligned with the gold answer.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "Which project did I start first, the Ferrari model or the Japanese Zero fighter plane model?",
+    "gold": "Japanese Zero fighter plane model",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about when you started either the Ferrari model or the Japanese Zero fighter plane model. Could you provide more details?",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the correct answer to the question and instead states a lack of information. While it is factually accurate that the information is missing, it does not address the question or confirm the correct project started first as given in the gold answer.",
+    "Mem0 (Vector)_latency": 4.76837158203125e-06
+  },
+  {
+    "question": "I mentioned participating in a sports event two weeks ago. What was the event?",
+    "gold": "The company's annual charity soccer tournament.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The event you mentioned was a sports event that took place two weeks ago, but the specific type of sports event was not provided in the information given.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis correctly identifies that a sports event took place two weeks ago but fails to specify the exact event, which is the company's annual charity soccer tournament as given in the gold answer. Therefore, it is incomplete and only partially correct.",
+    "Mem0 (Vector)_latency": 1.6689300537109375e-06
+  },
+  {
+    "question": "How many months ago did I book the Airbnb in San Francisco?",
+    "gold": "Five months ago",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about booking an Airbnb in San Francisco. Therefore, I cannot determine how many months ago it was booked.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is no information provided about the booking, making it impossible to determine how many months ago the Airbnb was booked. This is a complete and accurate response given the lack of data.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "I mentioned visiting a museum two months ago. Did I visit with a friend or not?",
+    "gold": "No, you did not visit with a friend.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "You did not mention whether you visited the museum with a friend or not.",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there was no mention of visiting the museum with a friend, which aligns with the gold answer that says no friend was involved. However, the hypothesis is slightly less direct and does not explicitly confirm that the visit was without a friend, only that it was not mentioned.",
+    "Mem0 (Vector)_latency": 9.5367431640625e-07
+  },
+  {
+    "question": "How many months ago did I attend the photography workshop?",
+    "gold": 3,
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I'm sorry, but there is no information in the context provided about when you attended a photography workshop. Could you please provide more details?",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided to determine how many months ago the photography workshop was attended, which aligns with the lack of context in the question.",
+    "Mem0 (Vector)_latency": 9.5367431640625e-07
+  },
+  {
+    "question": "Which event happened first, my attendance at a cultural festival or the start of my Spanish classes?",
+    "gold": "Spanish classes",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about the dates of your attendance at the cultural festival or the start of your Spanish classes. Could you provide more details or dates for these events?",
+    "Mem0 (Vector)_grade": 3,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide a direct answer to the question but correctly indicates that there is insufficient information to determine which event happened first. It is a reasonable and honest response given the lack of data, but it does not match the gold answer which states 'Spanish classes' as the event that happened first.",
+    "Mem0 (Vector)_latency": 9.5367431640625e-07
+  },
+  {
+    "question": "How many days before the 'Rack Fest' did I participate in the 'Turbocharged Tuesdays' event?",
+    "gold": "4 days.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t see any information about the dates of the 'Rack Fest' or the 'Turbocharged Tuesdays' event in the context you provided. Could you please share the dates or more details about these events?",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies the lack of information needed to determine the number of days between the events, which is a valid and accurate response given the context. However, it does not provide the specific answer of '4 days' as in the gold answer, so it is not fully complete.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "Which book did I finish reading first, 'The Hate U Give' or 'The Nightingale'?",
+    "gold": "'The Hate U Give'",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "Based on the context you provided, there is no mention of either *The Hate U Give* or *The Nightingale* in your reading history. Therefore, it\u2019s not possible to determine which of these two books you finished reading first. If you can provide more details about when you read these books or your reading log entries, I\u2019d be happy to help!",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is no information provided to determine which book was finished first, which aligns with the lack of context in the question. Therefore, it is accurate and appropriately cautious, making it fully correct and complete.",
+    "Mem0 (Vector)_latency": 4.76837158203125e-06
+  },
+  {
+    "question": "How many weeks have I been taking sculpting classes when I invested in my own set of sculpting tools?",
+    "gold": 3,
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "You invested in your own set of sculpting tools at the start of your sculpting classes, so you had been taking sculpting classes for 0 weeks when you got your tools.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer contradicts the gold answer by stating 0 weeks instead of 3 weeks. While it provides a rationale, it is factually incorrect based on the gold answer, which clearly states 3 weeks.",
+    "Mem0 (Vector)_latency": 3.814697265625e-06
+  },
+  {
+    "question": "What time do I wake up on Tuesdays and Thursdays?",
+    "gold": "6:45 AM",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have that information. Could you please provide your schedule or details about your wake-up times on those days?",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the requested wake-up time and instead asks for more information, which is not a direct answer. However, it is relevant to the question and acknowledges the lack of information, so it is not completely incorrect.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "How many weeks ago did I attend the 'Summer Nights' festival at Universal Studios Hollywood?",
+    "gold": "3 weeks ago",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about the date you attended the 'Summer Nights' festival at Universal Studios Hollywood. Could you please provide the date or more details?",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly indicates the lack of information needed to answer the question, which is appropriate and accurate. However, it does not provide the requested numerical answer as in the gold answer, so it is not fully complete.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "Which event happened first, my cousin's wedding or Michael's engagement party?",
+    "gold": "Michael's engagement party",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about the dates of your cousin\u2019s wedding or Michael\u2019s engagement party based on the details you\u2019ve provided. Could you please share the dates or any additional context?",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is insufficient information to determine which event happened first, which is accurate given the lack of date details in the question. It appropriately requests additional information, making it a complete and correct response.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "Which device did I got first, the Samsung Galaxy S22 or the Dell XPS 13?",
+    "gold": "Samsung Galaxy S22",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "Based on the information provided, there is no mention of when you acquired either the Samsung Galaxy S22 or the Dell XPS 13. Therefore, I cannot determine which device you got first. If you provide the dates or additional details, I can help you figure it out.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is no information provided to determine which device was acquired first, making it a complete and accurate response given the lack of data. It appropriately refrains from guessing and requests additional information.",
+    "Mem0 (Vector)_latency": 4.76837158203125e-06
+  },
+  {
+    "question": "How many days before the team meeting I was preparing for did I attend the workshop on 'Effective Communication in the Workplace'?",
+    "gold": "7 days. 8 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The provided context does not mention attending a workshop on 'Effective Communication in the Workplace' or specify any dates related to workshops or team meetings. Therefore, there is no information available to determine how many days before the team meeting you attended that workshop.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that the provided context does not contain any information about attending the workshop or the dates related to it, thus appropriately stating that the number of days cannot be determined. This is a complete and accurate response given the lack of information.",
+    "Mem0 (Vector)_latency": 5.9604644775390625e-06
+  },
+  {
+    "question": "What is the order of the three events: 'I signed up for the rewards program at ShopRite', 'I used a Buy One Get One Free coupon on Luvs diapers at Walmart', and 'I redeemed $12 cashback for a $10 Amazon gift card from Ibotta'?",
+    "gold": "First, I used a Buy One Get One Free coupon on Luvs diapers at Walmart. Then, I redeemed $12 cashback for a $10 Amazon gift card from Ibotta. Finally, I signed up for the rewards program at ShopRite.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "Based on the context, the likely order of the three events is:\n\n1. **I signed up for the rewards program at ShopRite**  \n   (This is the initial step mentioned as part of planning to maximize savings.)\n\n2. **I used a Buy One Get One Free coupon on Luvs diapers at Walmart**  \n   (This is a specific coupon use event, likely occurring after signing up for rewards programs.)\n\n3. **I redeemed $12 cashback for a $10 Amazon gift card from Ibotta**  \n   (Redeeming cashback typically happens after accumulating rewards, so this would come after using coupons and earning cashback.)\n\n**Final order:**  \n1. Signed up for ShopRite rewards program  \n2. Used BOGO coupon on Luvs diapers at Walmart  \n3. Redeemed $12 cashback for $10 Amazon gift card from Ibotta",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer reverses the order of events compared to the gold answer. The gold answer states that the coupon use at Walmart happened first, followed by the cashback redemption, and finally signing up for the rewards program at ShopRite. The hypothesis incorrectly places signing up for the rewards program first, which contradicts the gold answer's sequence. Therefore, the hypothesis is mostly incorrect in ordering the events.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "When did I book the Airbnb in Sacramento?",
+    "gold": "The information provided is not enough. You only mentioned booking Airbnb in San Francisco.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about booking an Airbnb in Sacramento.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly identifies that there is no information about booking an Airbnb in Sacramento, aligning with the gold answer's point that the information is insufficient and only mentions San Francisco.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "Which pair of shoes did I clean last month?",
+    "gold": "white Adidas sneakers",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not mention any shoes or cleaning activities. Therefore, it is not possible to determine which pair of shoes you cleaned last month.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is no information provided about any shoes or cleaning activities, making it impossible to determine which pair of shoes was cleaned last month. Therefore, it appropriately addresses the question given the lack of data.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "How many days passed between the day I started playing along to my favorite songs on my old keyboard and the day I discovered a bluegrass band?",
+    "gold": "6 days. 7 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about the specific dates you started playing along to your keyboard or when you discovered the bluegrass band. Could you provide those dates or more details? Then I can help calculate the number of days between them.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the requested numerical answer and instead asks for more information, which is not aligned with the gold answer that specifies the number of days. While it is factually correct that the dates are needed to calculate the difference, the question implies the information is known, and the gold answer provides a direct response. Therefore, the hypothesis is mostly unhelpful and incomplete.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "Which item did I purchase first, the dog bed for Max or the training pads for Luna?",
+    "gold": "Training pads for Luna",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "You purchased the training pads for Luna first, and later got the orthopedic memory foam dog bed for Max.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that the training pads for Luna were purchased first, matching the gold answer, and provides additional relevant detail about the dog bed purchase, making it completely correct and complete.",
+    "Mem0 (Vector)_latency": 9.5367431640625e-07
+  },
+  {
+    "question": "How long have I been working before I started my current job at NovaTech?",
+    "gold": "4 years and 9 months",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about how long you were working before you started your current job at NovaTech. If you provide details about your work history or timeline, I can help you figure that out.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the requested information and instead states a lack of information, which is not correct compared to the gold answer. However, it is relevant to the question and acknowledges the need for more data, so it is not completely incorrect.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "Which bike did I fixed or serviced the past weekend?",
+    "gold": "road bike",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The road bike with spongy brakes that you planned to check and maintain.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies the 'road bike' as the bike fixed or serviced, matching the gold answer, and provides additional relevant detail without contradicting the gold answer.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many days had passed since I bought my Adidas running shoes when I realized one of the shoelaces on my old Converse sneakers had broken?",
+    "gold": "14 days. 15 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not specify the exact date when you realized the shoelace on your old Converse sneakers had broken. Therefore, it is not possible to determine how many days had passed since you bought your Adidas running shoes on January 10th until that realization.",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that the exact number of days is not specified and thus cannot be determined from the information given. However, the gold answer provides a specific number (14 or 15 days), implying that such information is available or inferred. Since the hypothesis does not acknowledge this and instead claims the information is not provided, it is mostly correct but incomplete compared to the gold answer.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "Who graduated first, second and third among Emma, Rachel and Alex?",
+    "gold": "Emma graduated first, followed by Rachel and then Alex.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not specify who graduated first, second, or third among Emma, Rachel, and Alex. Therefore, it is not possible to determine their graduation order based on the given context.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer contradicts the gold answer by claiming the information is not specified, whereas the gold answer clearly states the graduation order. Therefore, the hypothesis is completely incorrect.",
+    "Mem0 (Vector)_latency": 5.245208740234375e-06
+  },
+  {
+    "question": "What was the the life event of one of my relatives that I participated in a week ago?",
+    "gold": "my cousin's wedding",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The life event was your cousin's wedding.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies the life event as the cousin's wedding, matching the gold answer exactly in meaning and completeness.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How old was I when I moved to the United States?",
+    "gold": "27",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about your age when you moved to the United States.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided about the age when the person moved to the United States, which aligns with the lack of data in the question context. Therefore, it is completely correct and complete.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "Which group did I join first, 'Page Turners' or 'Marketing Professionals'?",
+    "gold": "Page Turners",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "Based on the context provided, you are active in the LinkedIn group called 'Marketing Professionals' and there is no mention of joining the 'Page Turners' group. Therefore, it can be inferred that you joined 'Marketing Professionals' first.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer contradicts the gold answer by stating that 'Marketing Professionals' was joined first, whereas the gold answer clearly states 'Page Turners' was joined first. Therefore, the hypothesis is completely incorrect.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "Which event happened first, the purchase of the coffee maker or the malfunction of the stand mixer?",
+    "gold": "The malfunction of the stand mixer",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about the purchase of a coffee maker or the malfunction of a stand mixer. Therefore, it is not possible to determine which event happened first.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is no information provided to determine which event happened first, making it a complete and accurate response given the lack of data.",
+    "Mem0 (Vector)_latency": 4.0531158447265625e-06
+  },
+  {
+    "question": "How many weeks ago did I attend a bird watching workshop at the local Audubon society?",
+    "gold": 4,
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "You haven't mentioned attending a bird watching workshop at the local Audubon society, so I don't have that information.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided about attending a bird watching workshop at the local Audubon society, which makes it impossible to determine how many weeks ago it occurred. Therefore, it is accurate and complete given the available information.",
+    "Mem0 (Vector)_latency": 6.9141387939453125e-06
+  },
+  {
+    "question": "What gardening-related activity did I do two weeks ago?",
+    "gold": "planting 12 new tomato saplings",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about any gardening-related activity you did two weeks ago.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer states that there is no information provided about any gardening-related activity, which directly contradicts the gold answer that specifies planting 12 new tomato saplings two weeks ago. Therefore, the hypothesis is completely incorrect.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "How long have I been working before I started my current job at Google?",
+    "gold": "The information provided is not enough. From the information provided, You haven't started working at Google yet.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not mention anything about your previous work experience or your current job at Google. Therefore, I cannot determine how long you worked before starting your current job at Google.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is insufficient information to determine the length of prior work experience before starting the current job at Google, aligning well with the gold answer's conclusion that the information is not enough and that the job at Google has not yet started.",
+    "Mem0 (Vector)_latency": 2.86102294921875e-06
+  },
+  {
+    "question": "Where did I attend the religious activity last week?",
+    "gold": "the Episcopal Church",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about where you attended the religious activity last week. Could you provide more details?",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis does not provide an answer to the question and instead requests more information, whereas the gold answer directly states the location of the religious activity.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many days had passed since I started taking ukulele lessons when I decided to take my acoustic guitar to the guitar tech for servicing?",
+    "gold": "24 days. 25 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not specify the exact date or duration since you started ukulele lessons, only that you have started them and that your Taylor GS Mini guitar was recently serviced. Therefore, it is not possible to determine how many days had passed since you started ukulele lessons when you took your acoustic guitar to the guitar tech.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that the information provided does not specify the exact duration, which aligns with the lack of explicit data in the question. However, since the gold answer provides a specific number (24 or 25 days), the hypothesis fails to acknowledge or extract this information, resulting in an incomplete response.",
+    "Mem0 (Vector)_latency": 2.86102294921875e-06
+  },
+  {
+    "question": "I mentioned that I participated in an art-related event two weeks ago. Where was that event held at?",
+    "gold": "The Metropolitan Museum of Art.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "Based on the context provided, the art-related events mentioned are traditional festivals in Yunnan Province and Guizhou Province, which include cultural showcases like music, dance, costume shows, and handicrafts. Since you mentioned participating in an art-related event two weeks ago, it is likely that the event was held in one of these locations known for such cultural and artistic celebrations, such as Yunnan Province (e.g., Shangri-La Flower Festival) or Guizhou Province (e.g., Guizhou Minority Culture Festival in Guiyang, Kaili, or Xijiang Miao Village).\n\nIf you participated in a specific art-related event two weeks ago, the most probable locations are:\n\n- Yunnan Province (Shangri-La Flower Festival or other traditional festivals)\n- Guizhou Province (Guiyang, Kaili, or Xijiang Miao Village during the Minority Culture Festival)\n\nWithout more specific details, the best answer is that the event was held in either Yunnan Province or Guizhou Province in China.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not match the gold answer at all. The gold answer specifies the event was held at The Metropolitan Museum of Art, while the hypothesis speculates about locations in Yunnan and Guizhou provinces without any supporting context. Therefore, the hypothesis is completely incorrect relative to the gold answer.",
+    "Mem0 (Vector)_latency": 4.76837158203125e-06
+  },
+  {
+    "question": "How many days ago did I go on a whitewater rafting trip in the Oregon mountains?",
+    "gold": "3 days ago. 4 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about a whitewater rafting trip in the Oregon mountains, so I cannot determine how many days ago that trip occurred.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is no information provided to determine how many days ago the whitewater rafting trip occurred, which aligns with the lack of data in the question. Therefore, it is a completely correct and appropriate response.",
+    "Mem0 (Vector)_latency": 4.76837158203125e-06
+  },
+  {
+    "question": "Which device did I set up first, the smart thermostat or the mesh network system?",
+    "gold": "Smart thermostat",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not specify which device you set up first, the smart thermostat or the mesh network system.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that the information provided does not specify which device was set up first, accurately reflecting the lack of information in the question context. Therefore, it is completely correct and appropriately cautious.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "How many days had passed between the Sunday mass at St. Mary's Church and the Ash Wednesday service at the cathedral?",
+    "gold": "30 days. 31 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "The information provided does not specify any dates or details about a Sunday mass at St. Mary's Church or an Ash Wednesday service at a cathedral. Therefore, it is not possible to determine how many days had passed between these two events based on the given context.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is no information provided to determine the number of days between the Sunday mass at St. Mary's Church and the Ash Wednesday service at the cathedral, which aligns with the absence of data in the question context. Therefore, it is a fully correct and complete response given the information available.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many days had passed since I finished reading 'The Seven Husbands of Evelyn Hugo' when I attended the book reading event at the local library, where the author of 'The Silent Patient' is discussing her latest thriller novel?",
+    "gold": "18 days. 19 days (including the last day) is also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about when you finished reading *The Seven Husbands of Evelyn Hugo* or the date of the book reading event at the local library. Could you please provide those dates? Then I can help calculate how many days had passed between the two events.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis does not provide an answer to the question and instead requests additional information, whereas the gold answer provides a specific number of days. Therefore, it is completely incorrect in terms of answering the question.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How long had I been using the new area rug when I rearranged my living room furniture?",
+    "gold": "One week. Answers ranging from 7 days to 10 days are also acceptable.",
+    "type": "temporal-reasoning",
+    "Mem0 (Vector)_ans": "There is no information provided about how long you had been using the new area rug before rearranging your living room furniture.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is no information provided about the duration of using the new area rug before rearranging the furniture, which aligns with the absence of such detail in the question context. Therefore, it is a fully accurate and complete response.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "What is the total number of comments on my recent Facebook Live session and my most popular YouTube video?",
+    "gold": "33",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have access to your personal data or social media accounts, so I can\u2019t determine the total number of comments on your recent Facebook Live session or your most popular YouTube video. You can check these numbers directly on your Facebook and YouTube account dashboards. If you need help with how to find or analyze these metrics, I\u2019d be happy to assist!",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the requested numerical total of comments, which is the direct answer to the question. However, it correctly explains the inability to access personal data and offers helpful guidance, making it partially relevant but not correct or complete in terms of the requested information.",
+    "Mem0 (Vector)_latency": 1.6689300537109375e-06
+  },
+  {
+    "question": "How much total money have I spent on bike-related expenses since the start of the year?",
+    "gold": "$185",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You have spent a total of $65 on bike-related expenses since the start of the year: $25 for the chain replacement and $40 for the new bike lights.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer provides a total of $65, which is significantly less than the gold answer of $185. While it correctly lists some expenses, it is incomplete and underestimates the total amount spent on bike-related expenses.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How much cashback did I earn at SaveMart last Thursday?",
+    "gold": "$0.75",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "There is no information provided about any cashback earned at SaveMart last Thursday.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer states that there is no information about cashback earned, which contradicts the gold answer that specifies $0.75 cashback. Therefore, the hypothesis is mostly incorrect, but it is relevant to the question.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many projects have I been working on simultaneously, excluding my thesis?",
+    "gold": 2,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "Based on the context, you use Trello and Mendeley to manage your Master's thesis **and other projects**, but the exact number of other projects is not specified. Therefore, the number of projects you have been working on simultaneously, excluding your thesis, is not provided.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly notes that the exact number of projects excluding the thesis is not specified, but it fails to provide the correct answer of 2 as given in the gold answer. Therefore, it is mostly incorrect in terms of the specific question asked.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "What percentage of packed shoes did I wear on my last trip?",
+    "gold": "40%",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about the number of shoes you packed or wore on your last trip. Could you provide those details?",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the percentage but correctly states the lack of information needed to answer the question, which is a reasonable and accurate response given the data provided.",
+    "Mem0 (Vector)_latency": 1.6689300537109375e-06
+  },
+  {
+    "question": "How many years older am I than when I graduated from college?",
+    "gold": "7",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "There is no information provided about your age or the year you graduated from college, so I cannot determine how many years older you are now compared to when you graduated.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly identifies that there is no information provided to determine the number of years older the person is compared to when they graduated from college, making it a complete and accurate response despite the gold answer being a specific number.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many times did I bake egg tarts in the past two weeks?",
+    "gold": "The information provided is not enough. You did not mention baking egg tarts.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "There is no information provided about baking egg tarts in the past two weeks.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information about baking egg tarts in the past two weeks, which aligns perfectly with the gold answer indicating insufficient information.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "How many rare items do I have in total?",
+    "gold": 99,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The information provided does not mention any rare items. Therefore, based on the given context, you have zero rare items in total.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer contradicts the gold answer by stating zero rare items, while the gold answer specifies 99. Therefore, the hypothesis is completely incorrect.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "How many bikes did I service or plan to service in March?",
+    "gold": 2,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You serviced one bike in March\u2014the road bike at Pedal Power on March 10th.",
+    "Mem0 (Vector)_grade": 3,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that one bike was serviced in March, but it does not address the total number of bikes serviced or planned to be serviced, which is two according to the gold answer. Therefore, it is partially correct but incomplete.",
+    "Mem0 (Vector)_latency": 5.9604644775390625e-06
+  },
+  {
+    "question": "Which grocery store did I spend the most money at in the past month?",
+    "gold": "Thrive Market",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "Based on the information provided, you shop sustainably and purchase bulk items from Trader Joe's and Thrive Market. However, there is no specific detail about which grocery store you spent the most money at in the past month. Therefore, I cannot determine which grocery store you spent the most money at.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is no specific information provided to determine which grocery store the most money was spent at, making it an accurate and complete response given the data.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "What is the total amount I spent on the designer handbag and high-end skincare products?",
+    "gold": "$1,300",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You mentioned purchasing high-end skincare products (La Mer Moisturizing Cream, Sunday Riley Power Couple, and Dr. Dennis Gross Alpha Beta Peel), but there was no mention of purchasing a designer handbag. Therefore, based on the information provided, the total amount spent on the high-end skincare products is the sum of those items, but without specific prices given, I cannot calculate the exact total. If you provide the prices, I can help sum them up.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is no mention of a designer handbag purchase and notes the lack of specific prices for the skincare products, thus unable to calculate the total. However, it fails to provide the total amount of $1,300 as given in the gold answer, which presumably includes both items. Therefore, the hypothesis is partially correct but incomplete and does not fully answer the question.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "When did I submit my research paper on sentiment analysis?",
+    "gold": "February 1st",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "There is no information provided about the exact date or time when you submitted your research paper on sentiment analysis.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided about the submission date, which aligns with the lack of such information in the question context. Therefore, it is completely correct and appropriately complete.",
+    "Mem0 (Vector)_latency": 5.245208740234375e-06
+  },
+  {
+    "question": "How many times did I ride rollercoasters across all the events I attended from July to October?",
+    "gold": "10 times",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about how many times you rode rollercoasters from July to October based on the details you provided. If you can share your records or notes about the events you attended and rides you took during that period, I can help you tally them.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the requested numerical answer and instead states a lack of information, which is not directly answering the question. However, it is relevant and acknowledges the need for more data, so it is not completely incorrect or irrelevant.",
+    "Mem0 (Vector)_latency": 5.245208740234375e-06
+  },
+  {
+    "question": "How much have I made from selling eggs this month?",
+    "gold": "$120",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have information on how many eggs you sold this month or the total quantity of eggs produced, so I can\u2019t calculate your earnings from egg sales. If you provide the number of dozens of eggs sold, I can help determine your total income from selling eggs at $3 per dozen.",
+    "Mem0 (Vector)_grade": 3,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies the lack of information needed to calculate the earnings and offers to help if more data is provided, which is a reasonable response. However, it does not provide the direct answer of $120 as given in the gold answer, so it is incomplete in terms of correctness.",
+    "Mem0 (Vector)_latency": 5.7220458984375e-06
+  },
+  {
+    "question": "How many days did it take for my laptop backpack to arrive after I bought it?",
+    "gold": "5 days. 6 days (including the last day) is also acceptable.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "There is no information provided about when you bought your laptop backpack or when it arrived, so I cannot determine how many days it took to arrive.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided to determine the number of days it took for the laptop backpack to arrive, which aligns with the lack of data in the question. Therefore, it is completely correct and appropriately cautious.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many fitness classes do I attend in a typical week?",
+    "gold": 5,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You attend two fitness classes in a typical week: BodyPump on Mondays at 6:30 PM and Hip Hop Abs on Saturdays at 10:00 AM.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer states attending two fitness classes per week, which contradicts the gold answer of five. While it provides specific details, it is factually incorrect compared to the gold answer.",
+    "Mem0 (Vector)_latency": 1.6689300537109375e-06
+  },
+  {
+    "question": "How many different cuisines have I learned to cook or tried out in the past few months?",
+    "gold": 4,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The information provided does not mention anything about the number of different cuisines you have learned to cook or tried out in the past few months. Therefore, I cannot determine that from the given context.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is no information provided to determine the number of different cuisines learned or tried, which aligns with the lack of context. Therefore, it is accurate and complete in its response.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How many Marvel movies did I re-watch?",
+    "gold": "2",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The information provided does not mention how many Marvel movies you re-watched. Therefore, I don't have that detail.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that the information about how many Marvel movies were re-watched is not provided, which aligns with the absence of such detail in the question context. Therefore, it is accurate and complete given the information available.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How many online courses have I completed in total?",
+    "gold": 5,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You have completed a total of two online courses.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer states that two online courses have been completed, which directly contradicts the gold answer of five courses. Therefore, it is completely incorrect.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "How many kitchen items did I replace or fix?",
+    "gold": "I replaced or fixed five items: the kitchen faucet, the kitchen mat, the toaster, the coffee maker, and the kitchen shelves.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You replaced or fixed two kitchen items: the old toaster was replaced with a toaster oven, and you decluttered the kitchen countertops (which can be considered fixing or improving the kitchen space).",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer identifies only two items replaced or fixed, whereas the gold answer lists five specific items. Additionally, the hypothesis includes decluttering countertops, which is not mentioned in the gold answer and may not be considered a direct replacement or fixing of an item. Therefore, the hypothesis is partially correct but incomplete and somewhat inaccurate in the count and specifics.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How many days did it take for my iPad case to arrive after I bought it?",
+    "gold": "The information provided is not enough. You did not mention buying an iPad case.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about the purchase date or the delivery date of your iPad case. Could you please provide those details?",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies the lack of information about the purchase and delivery dates, similar to the gold answer, and appropriately requests additional details to provide an accurate response.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "How many years in total did I spend in formal education from high school to the completion of my Master's degree?",
+    "gold": "The information provided is not enough. You mentioned 4 years in high school (2010-2014), 2 years at PCC (2014-2016), and 4 years at UCLA (2016-2020). But you didn't mention the number of years you spend getting the Master's degree",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The provided context does not include any information about the number of years you spent in formal education from high school to the completion of your Master's degree. Therefore, I cannot determine the total years of your formal education based on the given details.",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that there is insufficient information to determine the total years of formal education up to the completion of the Master's degree. However, it does not acknowledge the partial information given about high school and undergraduate years, which the gold answer includes. Thus, it is mostly correct but less complete than the gold answer.",
+    "Mem0 (Vector)_latency": 5.9604644775390625e-06
+  },
+  {
+    "question": "How many sports have I played competitively in the past?",
+    "gold": "two",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "Based on the information provided, you have played at least three sports competitively in the past: running, soccer, and tennis.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer contradicts the gold answer by stating at least three sports were played competitively, whereas the gold answer specifies two. Without additional information to support the hypothesis, it is mostly incorrect.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "How many pages do I have left to read in 'Sapiens'?",
+    "gold": "The information provided is not enough. You did not mention how many paged do you have left to read in 'Sapiens'.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The context does not specify how many pages you have already read in *Sapiens* or the total number of pages in *Sapiens*. Without that information, I cannot determine how many pages you have left to read in *Sapiens*. \n\nIf you can provide the total number of pages in *Sapiens* and how many pages you have read so far, I can help calculate the remaining pages.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is insufficient information to determine how many pages are left to read in 'Sapiens'. It also clearly explains what information is missing and offers to help if that information is provided, which aligns well with the gold answer's assessment.",
+    "Mem0 (Vector)_latency": 4.0531158447265625e-06
+  },
+  {
+    "question": "How many items of clothing do I need to pick up or return from a store?",
+    "gold": 3,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about your personal shopping or clothing items. Could you please provide more details or clarify your question?",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide a numerical response to the question and instead requests more information, which is irrelevant given the gold answer specifies the number 3.",
+    "Mem0 (Vector)_latency": 3.814697265625e-06
+  },
+  {
+    "question": "How many graduation ceremonies have I attended in the past three months?",
+    "gold": 3,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "Based on the information provided, you have not mentioned attending any graduation ceremonies in the past three months. You were inspired by your friend Rachel's graduation, but there is no indication that you attended the ceremony yourself. \n\nTherefore, the number of graduation ceremonies you have attended in the past three months is **zero**.",
+    "Mem0 (Vector)_grade": 1,
+    "Mem0 (Vector)_reason": "The hypothesis answer states that zero graduation ceremonies were attended, while the gold answer clearly states the number is 3. The hypothesis contradicts the gold answer and is therefore completely incorrect.",
+    "Mem0 (Vector)_latency": 3.0994415283203125e-06
+  },
+  {
+    "question": "What was the page count of the two novels I finished in January and March?",
+    "gold": "856",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The page count of the two novels you finished in January and March is not provided in the information given.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly states that the page count is not provided, which aligns with the lack of information in the question context. Therefore, it is accurate and complete in its response.",
+    "Mem0 (Vector)_latency": 6.198883056640625e-06
+  },
+  {
+    "question": "What was the approximate increase in Instagram followers I experienced in two weeks?",
+    "gold": "100",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The approximate increase in Instagram followers you experienced in two weeks is about 350 followers, since you currently have around 350 followers after two weeks of regular posting.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer states an increase of about 350 followers, which significantly differs from the gold answer of 100. While the hypothesis provides a rationale, it does not align with the gold standard and thus is largely incorrect.",
+    "Mem0 (Vector)_latency": 7.867813110351562e-06
+  },
+  {
+    "question": "How many days did I spend on camping trips in the United States this year?",
+    "gold": "8 days.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You spent 3 days on a camping trip in the United States this year.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer provides a specific number of days (3) spent camping, but it contradicts the gold answer (8 days). While it is relevant to the question, it is factually incorrect compared to the gold standard.",
+    "Mem0 (Vector)_latency": 6.9141387939453125e-06
+  },
+  {
+    "question": "How many tanks do I currently have, including the one I set up for my friend's kid?",
+    "gold": 3,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You currently have three tanks: your 20-gallon Amazonia community tank, your previous 5-gallon tank with Finley the betta, and the tank you set up for your friend's kid.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states the total number of tanks as three, matching the gold answer, and provides a clear explanation listing all three tanks, including the one set up for the friend's kid.",
+    "Mem0 (Vector)_latency": 5.0067901611328125e-06
+  },
+  {
+    "question": "How many years older is my grandma than me?",
+    "gold": "43",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "Hi Rachel! I don\u2019t have information about your or your grandma\u2019s ages, so I can\u2019t calculate how many years older she is than you. If you tell me your ages, I\u2019d be happy to help with that!",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer is factually correct in stating that it cannot calculate the age difference without the ages, but it does not provide the requested numerical answer of 43 given in the gold answer. Therefore, it is not fully correct or complete.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How many weddings have I attended in this year?",
+    "gold": "I attended three weddings. The couples were Rachel and Mike, Emily and Sarah, and Jen and Tom.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "I don\u2019t have information about how many weddings you have attended this year. Could you please provide more details?",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer does not provide the requested information and instead asks for more details, which is not a direct answer to the question. It is relevant but incomplete and does not match the gold answer.",
+    "Mem0 (Vector)_latency": 4.0531158447265625e-06
+  },
+  {
+    "question": "How much did I spend on gifts for my sister?",
+    "gold": "$300",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The provided context does not specify the exact amount you spent on gifts for your sister. It mentions that spa day gifts are around $100 and that essential oil diffusers and scented candles are thoughtful complementary gifts, but no specific total or details about your actual spending are given. Therefore, I cannot determine how much you spent on gifts for your sister based on the information provided.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis correctly identifies that the exact amount spent on gifts for the sister is not specified in the provided context, and therefore does not contradict or incorrectly state the amount. It appropriately refrains from guessing and explains the lack of information, which aligns with the gold answer's specific figure that is not supported by the context.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "Did I receive a higher percentage discount on my first order from HelloFresh, compared to my first UberEats order?",
+    "gold": "Yes.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "There is no information provided about the specific discount percentages you received on your first HelloFresh order or your first UberEats order. Therefore, I cannot determine whether you received a higher percentage discount on HelloFresh compared to UberEats. If you can provide the discount details or receipts, I can help compare them.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies that there is no information provided to determine which discount was higher, making it a complete and accurate response given the lack of data. It appropriately refrains from making an unsupported conclusion, unlike the gold answer which simply states 'Yes' without evidence.",
+    "Mem0 (Vector)_latency": 9.5367431640625e-07
+  },
+  {
+    "question": "How much did I save on the Jimmy Choo heels?",
+    "gold": "$300",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The information provided does not specify the price of the Jimmy Choo heels or any discount applied to them, so it's not possible to determine how much you saved on the heels.",
+    "Mem0 (Vector)_grade": 5,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided about the price or discount on the Jimmy Choo heels, making it impossible to determine the amount saved. This is accurate and appropriately addresses the question given the lack of data.",
+    "Mem0 (Vector)_latency": 5.245208740234375e-06
+  },
+  {
+    "question": "What is the total number of goals and assists I have in the recreational indoor soccer league?",
+    "gold": "5",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You have scored several goals and had two assists. Since \"several\" typically means more than two but not many, it usually refers to around 3 to 5 goals. Without an exact number, the total number of goals and assists would be your number of goals (let's say 3 to 5) plus 2 assists.\n\nSo, the total number of goals and assists is approximately 5 to 7.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis provides an estimated range for the total number of goals and assists rather than a specific total as given in the gold answer. While it attempts to explain the reasoning, it does not match the precise total of 5 stated in the gold answer, making it only partially correct and less complete.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "What is the total number of siblings I have?",
+    "gold": "4",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "The information provided does not mention anything about siblings or provide any data related to the number of siblings you have. Therefore, based on the given context, it is not possible to determine the total number of siblings you have.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly states that there is no information provided to determine the number of siblings, which is logically consistent. However, it contradicts the gold answer which explicitly states the number as 4. Since the gold answer provides a definitive number, the hypothesis answer is incomplete and does not address the question as expected.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How many model kits have I worked on or bought?",
+    "gold": "I have worked on or bought five model kits. The scales of the models are: Revell F-15 Eagle (scale not mentioned), Tamiya 1/48 scale Spitfire Mk.V, 1/16 scale German Tiger I tank, 1/72 scale B-29 bomber, and 1/24 scale '69 Camaro.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "Based on the information provided, you have worked on or bought at least one model kit\u2014the 1/72 scale B-29 bomber you are currently working on. No other specific model kits are mentioned.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer correctly identifies one model kit (the 1/72 scale B-29 bomber) but fails to acknowledge the total of five model kits mentioned in the gold answer. It is incomplete and understates the number of kits worked on or bought.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  },
+  {
+    "question": "How many different art-related events did I attend in the past month?",
+    "gold": 4,
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You attended two different art-related events in the past month:\n\n1. A lecture on \"The Evolution of Street Art\" on March 3rd.\n2. A guided tour at the History Museum on February 24th.",
+    "Mem0 (Vector)_grade": 2,
+    "Mem0 (Vector)_reason": "The hypothesis answer states that two art-related events were attended, while the gold answer specifies four events. The hypothesis is partially correct but incomplete and undercounts the total number of events.",
+    "Mem0 (Vector)_latency": 1.9073486328125e-06
+  },
+  {
+    "question": "How many plants did I initially plant for tomatoes and chili peppers?",
+    "gold": "The information provided is not enough. You mentioned planting 5 plants for tomatoes but you did not mention chili peppers.",
+    "type": "multi-session",
+    "Mem0 (Vector)_ans": "You haven't mentioned how many tomato or chili pepper plants you initially planted. If you provide that information, I can help you further!",
+    "Mem0 (Vector)_grade": 4,
+    "Mem0 (Vector)_reason": "The hypothesis correctly identifies that the number of chili pepper plants is not mentioned and requests more information. However, it incorrectly states that the number of tomato plants is not mentioned, while the gold answer notes that 5 tomato plants were mentioned. Therefore, the hypothesis is mostly correct but misses the detail about the tomato plants.",
+    "Mem0 (Vector)_latency": 2.1457672119140625e-06
+  }
+]
