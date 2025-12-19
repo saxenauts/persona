@@ -40,6 +40,9 @@ Each answer is graded by an LLM Judge (GPT-4.1-mini) on a **1-5 scale**:
 | **Mem0 Vector** | **3.35** | **51.2%** |
 | **Persona** | 3.33 | 50.0% |
 | Mem0 Graph | 3.25 | 48.8% |
+| Zep (Graphiti)* | N/A | 37.5% (6/16) |
+
+*> *Zep results based on partial run (16/80 questions, Temporal Reasoning only)*
 
 ### By Question Type
 

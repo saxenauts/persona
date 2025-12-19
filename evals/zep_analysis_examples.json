@@ -1,0 +1,332 @@
+{
+  "summary": {
+    "total": 40,
+    "correct": 22,
+    "wrong": 18,
+    "accuracy": 55.0
+  },
+  "zep_correct_examples": [
+    {
+      "question": "What degree did I graduate with?",
+      "gold": "Business Administration",
+      "type": "single-session-user",
+      "zep_answer": "You graduated with a degree in Business Administration.",
+      "zep_correct": true,
+      "zep_latency": 1.55
+    },
+    {
+      "question": "What play did I attend at the local community theater?",
+      "gold": "The Glass Menagerie",
+      "type": "single-session-user",
+      "zep_answer": "You attended The Glass Menagerie by Tennessee Williams.",
+      "zep_correct": true,
+      "zep_latency": 2.18
+    },
+    {
+      "question": "What was my last name before I changed it?",
+      "gold": "Johnson",
+      "type": "single-session-user",
+      "zep_answer": "Your last name before you changed it was Johnson.",
+      "zep_correct": true,
+      "zep_latency": 1.97
+    },
+    {
+      "question": "Where do I take yoga classes?",
+      "gold": "Serenity Yoga",
+      "type": "single-session-user",
+      "zep_answer": "You take yoga classes at Serenity Yoga studio.",
+      "zep_correct": true,
+      "zep_latency": 1.94
+    },
+    {
+      "question": "When did I volunteer at the local animal shelter's fundraising dinner?",
+      "gold": "February 14th",
+      "type": "single-session-user",
+      "zep_answer": "You volunteered at the local animal shelter's fundraising dinner, \"Love is in the Air,\" in February 2023.",
+      "zep_correct": true,
+      "zep_latency": 2.39
+    },
+    {
+      "question": "Where did I buy my new tennis racket from?",
+      "gold": "the sports store downtown",
+      "type": "single-session-user",
+      "zep_answer": "You bought your new tennis racket from the sports store downtown.",
+      "zep_correct": true,
+      "zep_latency": 1.95
+    },
+    {
+      "question": "What was my previous occupation?",
+      "gold": "Marketing specialist at a small startup",
+      "type": "single-session-user",
+      "zep_answer": "Your previous occupation was a marketing specialist at a small startup.",
+      "zep_correct": true,
+      "zep_latency": 1.99
+    },
+    {
+      "question": "What speed is my new internet plan?",
+      "gold": "500 Mbps",
+      "type": "single-session-user",
+      "zep_answer": "Your new internet plan speed is 500 Mbps.",
+      "zep_correct": true,
+      "zep_latency": 1.71
+    },
+    {
+      "question": "What brand are my favorite running shoes?",
+      "gold": "Nike",
+      "type": "single-session-user",
+      "zep_answer": "Your favorite running shoes are Nike.",
+      "zep_correct": true,
+      "zep_latency": 2.08
+    },
+    {
+      "question": "What breed is my dog?",
+      "gold": "Golden Retriever",
+      "type": "single-session-user",
+      "zep_answer": "Your dog, Max, is a Golden Retriever.",
+      "zep_correct": true,
+      "zep_latency": 1.81
+    },
+    {
+      "question": "How many amateur comedians did I watch perform at the open mic night?",
+      "gold": "10",
+      "type": "single-session-user",
+      "zep_answer": "You watched 10 amateur comedians perform at the open mic night.",
+      "zep_correct": true,
+      "zep_latency": 2.28
+    },
+    {
+      "question": "What is the name of my cat?",
+      "gold": "Luna",
+      "type": "single-session-user",
+      "zep_answer": "Your cat's name is Luna.",
+      "zep_correct": true,
+      "zep_latency": 1.7
+    },
+    {
+      "question": "How old was I when my grandma gave me the silver necklace?",
+      "gold": "18",
+      "type": "single-session-user",
+      "zep_answer": "You were 18 years old when your grandma gave you the silver necklace.",
+      "zep_correct": true,
+      "zep_latency": 2.02
+    },
+    {
+      "question": "What is my preferred gin-to-vermouth ratio for a classic gin martini?",
+      "gold": "3:1",
+      "type": "single-session-user",
+      "zep_answer": "Your preferred gin-to-vermouth ratio for a classic gin martini is 3:1.",
+      "zep_correct": true,
+      "zep_latency": 1.98
+    },
+    {
+      "question": "How much RAM did I upgrade my laptop to?",
+      "gold": "16GB",
+      "type": "single-session-user",
+      "zep_answer": "You upgraded your laptop RAM to 16GB.",
+      "zep_correct": true,
+      "zep_latency": 1.81
+    },
+    {
+      "question": "Where did I attend my cousin's wedding?",
+      "gold": "The Grand Ballroom",
+      "type": "single-session-user",
+      "zep_answer": "You attended your cousin's wedding at the Grand Ballroom.",
+      "zep_correct": true,
+      "zep_latency": 1.82
+    },
+    {
+      "question": "Where did I complete my Bachelor's degree in Computer Science?",
+      "gold": "University of California, Los Angeles (UCLA)",
+      "type": "single-session-user",
+      "zep_answer": "You completed your Bachelor's degree in Computer Science at UCLA.",
+      "zep_correct": true,
+      "zep_latency": 1.73
+    },
+    {
+      "question": "How long did it take to move to the new apartment?",
+      "gold": "5 hours",
+      "type": "single-session-user",
+      "zep_answer": "It took about 5 hours to move to the new apartment.",
+      "zep_correct": true,
+      "zep_latency": 1.8
+    },
+    {
+      "question": "What type of rice is my favorite?",
+      "gold": "Japanese short-grain rice",
+      "type": "single-session-user",
+      "zep_answer": "Your favorite rice is Japanese short-grain rice.",
+      "zep_correct": true,
+      "zep_latency": 2.14
+    },
+    {
+      "question": "Who did I have a conversation with about destiny?",
+      "gold": "Sarah",
+      "type": "single-session-user",
+      "zep_answer": "You had a conversation with your friend Sarah about destiny.",
+      "zep_correct": true,
+      "zep_latency": 1.84
+    },
+    {
+      "question": "Where did I buy my new bookshelf from?",
+      "gold": "IKEA",
+      "type": "single-session-user",
+      "zep_answer": "You bought your new bookshelf from IKEA.",
+      "zep_correct": true,
+      "zep_latency": 1.77
+    },
+    {
+      "question": "How many copies of my favorite artist's debut album were released worldwide?",
+      "gold": "500",
+      "type": "single-session-user",
+      "zep_answer": "There were 500 copies of your favorite artist's debut album released worldwide.",
+      "zep_correct": true,
+      "zep_latency": 1.92
+    }
+  ],
+  "zep_wrong_examples": [
+    {
+      "question": "How long is my daily commute to work?",
+      "gold": "45 minutes each way",
+      "type": "single-session-user",
+      "zep_answer": "I don't have information about the length of your daily commute to work.",
+      "zep_correct": false,
+      "zep_latency": 1.8
+    },
+    {
+      "question": "Where did I redeem a $5 coupon on coffee creamer?",
+      "gold": "Target",
+      "type": "single-session-user",
+      "zep_answer": "The context does not provide information about where you redeemed a $5 coupon on coffee creamer.",
+      "zep_correct": false,
+      "zep_latency": 2.18
+    },
+    {
+      "question": "What is the name of the playlist I created on Spotify?",
+      "gold": "Summer Vibes",
+      "type": "single-session-user",
+      "zep_answer": "I don't have information about the name of the playlist you created on Spotify.",
+      "zep_correct": false,
+      "zep_latency": 2.03
+    },
+    {
+      "question": "What color did I repaint my bedroom walls?",
+      "gold": "a lighter shade of gray",
+      "type": "single-session-user",
+      "zep_answer": "The color you repainted your bedroom walls is not mentioned in the provided context.",
+      "zep_correct": false,
+      "zep_latency": 1.93
+    },
+    {
+      "question": "How much did I spend on a designer handbag?",
+      "gold": "$800",
+      "type": "single-session-user",
+      "zep_answer": "There is no information about how much you spent on a designer handbag.",
+      "zep_correct": false,
+      "zep_latency": 2.18
+    },
+    {
+      "question": "How many playlists do I have on Spotify?",
+      "gold": "20",
+      "type": "single-session-user",
+      "zep_answer": "I don't have information about your Spotify playlists.",
+      "zep_correct": false,
+      "zep_latency": 1.93
+    },
+    {
+      "question": "Where did I attend for my study abroad program?",
+      "gold": "University of Melbourne in Australia",
+      "type": "single-session-user",
+      "zep_answer": "You attended the University of Melbourne for your study abroad program.",
+      "zep_correct": false,
+      "zep_latency": 1.99
+    },
+    {
+      "question": "What was the discount I got on my first purchase from the new clothing brand?",
+      "gold": "10%",
+      "type": "single-session-user",
+      "zep_answer": "There is no information about a discount on your first purchase from a new clothing brand in the provided context.",
+      "zep_correct": false,
+      "zep_latency": 2.2
+    },
+    {
+      "question": "How long did it take me to assemble the IKEA bookshelf?",
+      "gold": "4 hours",
+      "type": "single-session-user",
+      "zep_answer": "The context does not provide information about how long it took you to assemble the IKEA bookshelf.",
+      "zep_correct": false,
+      "zep_latency": 1.87
+    },
+    {
+      "question": "What did I buy for my sister's birthday gift?",
+      "gold": "a yellow dress",
+      "type": "single-session-user",
+      "zep_answer": "You bought your sister a yellow dress and a pair of earrings for her birthday.",
+      "zep_correct": false,
+      "zep_latency": 2.01
+    },
+    {
+      "question": "How many shirts did I pack for my 5-day trip to Costa Rica?",
+      "gold": "7",
+      "type": "single-session-user",
+      "zep_answer": "The context does not specify how many shirts you packed for your 5-day trip to Costa Rica.",
+      "zep_correct": false,
+      "zep_latency": 2.0
+    },
+    {
+      "question": "What was my previous stance on spirituality?",
+      "gold": "A staunch atheist",
+      "type": "single-session-user",
+      "zep_answer": "Your previous stance on spirituality involved viewing it as an exploration of consciousness, synchronicity, and interconnectedness, often integrating concepts from quantum mechanics and practices like meditation to deepen awareness and personal growth.",
+      "zep_correct": false,
+      "zep_latency": 2.46
+    },
+    {
+      "question": "What certification did I complete last month?",
+      "gold": "Data Science",
+      "type": "single-session-user",
+      "zep_answer": "The context does not specify any certification you completed last month.",
+      "zep_correct": false,
+      "zep_latency": 1.92
+    },
+    {
+      "question": "How many bikes do I own?",
+      "gold": "three",
+      "type": "single-session-user",
+      "zep_answer": "The context does not specify how many bikes you own.",
+      "zep_correct": false,
+      "zep_latency": 2.16
+    },
+    {
+      "question": "How many largemouth bass did I catch on my fishing trip to Lake Michigan?",
+      "gold": "12",
+      "type": "single-session-user",
+      "zep_answer": "The available information does not include any details about largemouth bass catches in Lake Michigan.",
+      "zep_correct": false,
+      "zep_latency": 1.93
+    },
+    {
+      "question": "How much is the painting of a sunset worth in terms of the amount I paid for it?",
+      "gold": "The painting is worth triple what I paid for it.",
+      "type": "single-session-user",
+      "zep_answer": "I don't have information about the painting of a sunset or the amount you paid for it.",
+      "zep_correct": false,
+      "zep_latency": 1.93
+    },
+    {
+      "question": "What type of cocktail recipe did I try last weekend?",
+      "gold": "lavender gin fizz",
+      "type": "single-session-user",
+      "zep_answer": "I don't have information about the specific cocktail recipe you tried last weekend.",
+      "zep_correct": false,
+      "zep_latency": 2.04
+    },
+    {
+      "question": "What time do I stop checking work emails and messages?",
+      "gold": "7 pm",
+      "type": "single-session-user",
+      "zep_answer": "I don't have information on your specific work schedule or preferences for stopping email and message checks.",
+      "zep_correct": false,
+      "zep_latency": 1.98
+    }
+  ]
+}

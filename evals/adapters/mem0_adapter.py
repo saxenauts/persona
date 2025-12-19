@@ -11,7 +11,6 @@ import os
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-from evals.mem0_patch import *  # Apply Patch for Azure Tool Calls
 from mem0 import Memory
 from .base import MemorySystem
 

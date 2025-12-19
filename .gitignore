@@ -13,3 +13,9 @@ tests/assets/
 evals/data/
 evals/results/__pycache__/
 evals/results/
+!evals/results/*.json
+!evals/results/*.jsonl
+
+# Benchmark Logs
+benchmark_*.log
+analysis/

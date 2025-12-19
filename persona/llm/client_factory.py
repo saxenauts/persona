@@ -64,9 +64,12 @@ def create_azure_client() -> AzureOpenAIClient:
     if not config.MACHINE_LEARNING.AZURE_EMBEDDING_DEPLOYMENT:
         raise ValueError("AZURE_EMBEDDING_DEPLOYMENT is required for Azure provider")
     
+    # AZURE_API_BASE can be a comma-separated list of endpoints
+    api_base = config.MACHINE_LEARNING.AZURE_API_BASE
+    
     return AzureOpenAIClient(
         api_key=config.MACHINE_LEARNING.AZURE_API_KEY,
-        api_base=config.MACHINE_LEARNING.AZURE_API_BASE,
+        api_base=api_base,
         api_version=config.MACHINE_LEARNING.AZURE_API_VERSION,
         chat_deployment=config.MACHINE_LEARNING.AZURE_CHAT_DEPLOYMENT,
         embedding_deployment=config.MACHINE_LEARNING.AZURE_EMBEDDING_DEPLOYMENT

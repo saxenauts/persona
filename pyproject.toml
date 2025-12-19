@@ -40,6 +40,8 @@ mem0ai = "^1.0.1"
 graphiti-core = "^0.24.3"
 langchain-openai = "^1.1.3"
 azure-identity = "^1.25.1"
+tenacity = "^9.0.0"
+nest-asyncio = "^1.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
