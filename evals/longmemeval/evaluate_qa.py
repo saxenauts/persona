@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 from typing import Dict, List
 
-from .config import EVAL_MODEL, TEMPERATURE
+# from .config import EVAL_MODEL, TEMPERATURE
+
 
 def get_anscheck_prompt(task, question, answer, response, abstention=False):
     """Generate evaluation prompt based on task type"""
