@@ -131,7 +131,8 @@ class ZepAdapter(MemorySystem):
             openai_api_version=os.getenv("AZURE_API_VERSION"),
             azure_endpoint=os.getenv("AZURE_API_BASE"),
             api_key=os.getenv("AZURE_API_KEY"),
-            temperature=0,
+            temperature=1,
+
         )
         
         # Stage logging for diagnosis
@@ -211,7 +212,8 @@ class ZepAdapter(MemorySystem):
                     response = await llm_self.client.beta.chat.completions.parse(
                         model=model,
                         messages=messages,
-                        temperature=temperature,
+                        temperature=1,
+
                         max_completion_tokens=max_tokens,  # GPT-5 requires max_completion_tokens
                         response_format=response_model,
                     )

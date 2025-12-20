@@ -89,7 +89,16 @@ def main():
     refs: List[Dict] = load_json(args.references)
     manifest: Dict[str, Dict] = load_json(args.manifest) if args.manifest else {}
 
-    qid2ref = {r["question_id"]: r for r in refs}
+    # Results often don't have question_id if generated from benchmark_runner. Use 'question' as key.
+    qid2ref = {}
+    qtext2ref = {}
+    for r in refs:
+        if "question_id" in r:
+            qid2ref[r["question_id"]] = r
+        if "question" in r:
+            # simple normalization for key
+            k = r["question"].strip()
+            qtext2ref[k] = r
 
     # Accumulators
     task_counts = Counter()
@@ -102,16 +111,46 @@ def main():
     missing_in_refs = 0
     for r in results:
         qid = r.get("question_id")
-        hyp = r.get("hypothesis", "")
-        rt = float(r.get("retrieval_time", 0.0))
-        ref = qid2ref.get(qid)
+        qtext_raw = r.get("question", "").strip()
+        
+        # Try finding ref by ID, then by text
+        ref = None
+        if qid:
+            ref = qid2ref.get(qid)
+        if not ref and qtext_raw:
+            ref = qtext2ref.get(qtext_raw)
+            
         if not ref:
             missing_in_refs += 1
+            # print(f"Missing ref for: {qtext_raw[:50]}...")
             continue
 
         task = ref.get("question_type", "unknown")
         gold = ref.get("answer", "")
         question = ref.get("question", "")
+        
+        # Support different result formats
+        # 1. Standard: 'hypothesis'
+        # 2. BenchmarkRunner: 'Zep (Graphiti)_ans' or similar
+        if "hypothesis" in r:
+             hyp = r["hypothesis"]
+        else:
+             # Find first key ending in _ans
+             hyp = ""
+             for k, v in r.items():
+                 if k.endswith("_ans"):
+                     hyp = v
+                     break
+        
+        # Check latency key
+        if "retrieval_time" in r:
+             rt = float(r["retrieval_time"])
+        else:
+             rt = 0.0
+             for k, v in r.items():
+                 if k.endswith("_latency"):
+                     rt = float(v)
+                     break
 
         task_counts[task] += 1
         if contains_answer(gold, hyp):

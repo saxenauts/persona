@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Dict, List
 
 # from .config import EVAL_MODEL, TEMPERATURE
+EVAL_MODEL = "gpt-4o"
+TEMPERATURE = 0
+
 
 
 def get_anscheck_prompt(task, question, answer, response, abstention=False):
