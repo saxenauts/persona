@@ -4,16 +4,22 @@ from persona.core.rag_interface import RAGInterface
 from persona.models.schema import NodeModel
 
 @pytest.fixture
-async def mock_neo4j():
+async def mock_graph_db():
     mock = AsyncMock()
-    mock.query_text_similarity = AsyncMock(return_value=[{"nodeId": 1, "nodeName": "test", "score": 0.9}])
-    mock.get_node_data = AsyncMock(return_value={"properties": {"content": "test content"}})
+    mock.get_node = AsyncMock(return_value={"properties": {"content": "test content"}})
     return mock
 
 @pytest.fixture
-async def mock_rag_interface(mock_neo4j):
+async def mock_vector_store():
+    mock = AsyncMock()
+    mock.search_similar = AsyncMock(return_value=[{"node_name": "test", "score": 0.9}])
+    return mock
+
+@pytest.fixture
+async def mock_rag_interface(mock_graph_db, mock_vector_store):
     with patch('persona.core.rag_interface.RAGInterface.__aenter__', return_value=AsyncMock()) as mock_enter:
-        mock_enter.return_value.neo4j_manager = mock_neo4j
+        mock_enter.return_value.graph_db = mock_graph_db
+        mock_enter.return_value.vector_store = mock_vector_store
         mock_enter.return_value.query = AsyncMock(return_value="test response")
         mock_enter.return_value.get_context = AsyncMock(return_value="test context")
         yield mock_enter.return_value

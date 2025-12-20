@@ -1,8 +1,7 @@
 # main.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from persona.core.neo4j_database import Neo4jConnectionManager
-from persona.core.graph_ops import GraphOps
+from persona.core import GraphOps
 from fastapi.middleware.cors import CORSMiddleware
 from server.routers.graph_api import router as graph_api_router
 from server.logging_config import setup_logging, get_logger
@@ -18,9 +17,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    neo4j_manager = Neo4jConnectionManager()
-    await neo4j_manager.initialize()
-    app.state.graph_ops = GraphOps(neo4j_manager)
+    app.state.graph_ops = GraphOps()
     await app.state.graph_ops.initialize()
     yield
     if hasattr(app.state, "graph_ops"):

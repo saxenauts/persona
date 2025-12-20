@@ -5,8 +5,9 @@ import uuid
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 from server.main import app
-from persona.core.neo4j_database import Neo4jConnectionManager
-from persona.core.graph_ops import GraphOps
+from persona.core import GraphOps
+from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
+from persona.core.backends.neo4j_vector import Neo4jVectorStore
 from server.config import config
 from persona.models.schema import Node
 
@@ -23,24 +24,27 @@ def test_client():
         yield client
 
 @pytest.fixture(scope="session")
-async def neo4j_manager():
-    manager = Neo4jConnectionManager()
-    await manager.initialize()
-    
-    yield manager
-    
-    await manager.close()
+async def graph_db():
+    """Session-scoped GraphDatabase for tests."""
+    db = Neo4jGraphDatabase()
+    await db.initialize()
+    yield db
+    await db.close()
+
+@pytest.fixture(scope="session")
+async def vector_store(graph_db):
+    """Session-scoped VectorStore that shares the graph connection."""
+    store = Neo4jVectorStore(graph_driver=graph_db.driver)
+    await store.initialize()
+    yield store
+    await store.close()
 
 @pytest.fixture(scope="function")
-async def test_user(neo4j_manager):
+async def test_user(graph_db):
     user_id = f"test-user-{uuid.uuid4()}"
-    # Clean up just in case of leftovers from a failed run
-    await neo4j_manager.run_query("MATCH (u:User {id: $user_id}) DETACH DELETE u", {"user_id": user_id})
-    
     yield user_id
-    
     # Cleanup after test
-    await neo4j_manager.run_query("MATCH (u:User {id: $user_id}) DETACH DELETE u", {"user_id": user_id})
+    await graph_db.delete_user(user_id)
 
 @pytest.fixture(scope="function")
 def api_test_user():
@@ -124,58 +128,46 @@ def mock_llm_graph_calls(monkeypatch):
 
 # Neo4j mocks - only use these in unit tests where we want to isolate components
 @pytest.fixture
-def mock_neo4j_vector_calls(monkeypatch):
-    """Mock Neo4j vector index calls - use this fixture explicitly in unit tests only."""
+def mock_vector_store(monkeypatch):
+    """Mock VectorStore calls - use this fixture explicitly in unit tests only."""
     async def mock_add_embedding(*args, **kwargs):
         return
     
-    async def mock_query_similarity(*args, **kwargs):
+    async def mock_search_similar(*args, **kwargs):
         return []
 
     monkeypatch.setattr(
-        "persona.core.neo4j_database.Neo4jConnectionManager.add_embedding_to_vector_index",
+        "persona.core.backends.neo4j_vector.Neo4jVectorStore.add_embedding",
         mock_add_embedding
     )
     monkeypatch.setattr(
-        "persona.core.neo4j_database.Neo4jConnectionManager.query_text_similarity",
-        mock_query_similarity
+        "persona.core.backends.neo4j_vector.Neo4jVectorStore.search_similar",
+        mock_search_similar
     )
 
 @pytest.fixture
-def mock_neo4j_manager(monkeypatch):
-    """Mock the entire Neo4j manager - use this fixture explicitly in unit tests."""
-    mock_manager = MagicMock()
-    mock_manager.user_exists = MagicMock(return_value=True)
-    mock_manager.create_nodes = MagicMock()
-    mock_manager.create_relationships = MagicMock()
-    mock_manager.get_node_data = MagicMock(return_value={"name": "test", "properties": {}})
-    mock_manager.get_all_nodes = MagicMock(return_value=[])
-    mock_manager.get_all_relationships = MagicMock(return_value=[])
-    mock_manager.add_embedding_to_vector_index = MagicMock()
-    mock_manager.query_text_similarity = MagicMock(return_value=[])
-    
-    return mock_manager
+def mock_graph_db(monkeypatch):
+    """Mock the entire GraphDatabase - use this fixture explicitly in unit tests."""
+    mock_db = MagicMock()
+    mock_db.user_exists = AsyncMock(return_value=True)
+    mock_db.create_nodes = AsyncMock()
+    mock_db.create_relationships = AsyncMock()
+    mock_db.get_node = AsyncMock(return_value={"name": "test", "properties": {}})
+    mock_db.get_all_nodes = AsyncMock(return_value=[])
+    mock_db.get_all_relationships = AsyncMock(return_value=[])
+    return mock_db
 
 @pytest.fixture
-async def integration_graph_ops(neo4j_manager):
+async def integration_graph_ops(graph_db, vector_store):
     """
     A GraphOps for integration tests that uses real Neo4j operations including vector index.
     This allows us to test the full pipeline including embeddings and similarity search.
     """
-    # Create a GraphOps instance with the real Neo4j manager
-    graph_ops = GraphOps(neo4j_manager)
-    await graph_ops.initialize()
-    
-    # Ensure vector index exists for testing
-    await graph_ops.neo4j_manager.ensure_vector_index()
-    
+    graph_ops = GraphOps(graph_db=graph_db, vector_store=vector_store)
     yield graph_ops
-    
-    # Clean up
-    await graph_ops.close()
 
 @pytest.fixture(scope="function")
-async def isolated_graph_ops(neo4j_manager):
+async def isolated_graph_ops(graph_db, vector_store):
     """
     Provides a GraphOps instance and a unique user_id for isolated integration tests.
     Creates the user before the test and guarantees cleanup of the user and all 
@@ -186,13 +178,11 @@ async def isolated_graph_ops(neo4j_manager):
     """
     user_id = f"test-user-{uuid.uuid4()}"
     
-    # Correctly resolve the async generator fixture
-    async for manager in neo4j_manager:
-        graph_ops = GraphOps(manager)
-        await graph_ops.create_user(user_id)
-        
-        try:
-            yield graph_ops, user_id
-        finally:
-            # This will delete the user node and all associated data
-            await graph_ops.delete_user(user_id)
+    graph_ops = GraphOps(graph_db=graph_db, vector_store=vector_store)
+    await graph_ops.create_user(user_id)
+    
+    try:
+        yield graph_ops, user_id
+    finally:
+        # This will delete the user node and all associated data
+        await graph_ops.delete_user(user_id)

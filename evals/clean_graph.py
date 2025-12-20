@@ -33,14 +33,14 @@ async def main():
     if args.password:
         config.NEO4J.PASSWORD = args.password
         
-    # Now that config is potentially patched, we can import and use Neo4jConnectionManager
-    from persona.core.neo4j_database import Neo4jConnectionManager
+    # Use the new backend abstraction
+    from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 
     print("Connecting to Neo4j database...")
-    db_manager = Neo4jConnectionManager()
+    db = Neo4jGraphDatabase()
     
     try:
-        await db_manager.initialize()
+        await db.initialize()
         print("✅ Connection successful.")
         
         print("\n🔥 Wiping the entire graph. This will delete ALL nodes, relationships, and indexes.")
@@ -53,15 +53,14 @@ async def main():
                 return
 
         print("\nCleaning graph...")
-        await db_manager.clean_graph()
+        await db.clean_graph()
         print("✅ Graph has been completely wiped.")
 
     except Exception as e:
         print(f"❌ An error occurred: {e}")
     finally:
-        if db_manager.driver:
-            await db_manager.close()
-            print("\nConnection closed.")
+        await db.close()
+        print("\nConnection closed.")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
