@@ -2,9 +2,9 @@
 Unified Memory Ingestion Service for Persona v2.
 
 Ingests raw input and extracts all three memory types:
-- Episode (always) - the narrative record
-- Psyche (if identity content detected) - traits, values, preferences
-- Goals (if action items detected) - tasks, projects, todos
+- Episode - the narrative record
+- Psyche - traits, values, preferences
+- Goals - tasks, projects, todos
 
 Uses OpenAI Structured Outputs with strict schema for reliable extraction.
 """
@@ -15,9 +15,7 @@ from typing import Optional, List, Tuple
 from uuid import uuid4
 from pydantic import BaseModel, Field
 
-from persona.models.episode import Episode
-from persona.models.psyche import Psyche, PsycheCreateInput
-from persona.models.goal import Goal, GoalCreateInput
+from persona.models.memory import Episode, Psyche, Goal, PsycheCreateInput, GoalCreateInput
 from persona.llm.client_factory import get_chat_client, get_embedding_client
 from server.logging_config import get_logger
 

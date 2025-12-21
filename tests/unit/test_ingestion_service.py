@@ -9,9 +9,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 import json
 
-from persona.models.episode import Episode
-from persona.models.psyche import Psyche
-from persona.models.goal import Goal
+from persona.models.memory import Episode, Psyche, Goal
 from persona.services.ingestion_service import (
     MemoryIngestionService,
     IngestionResult,

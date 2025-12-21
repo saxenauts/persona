@@ -11,7 +11,7 @@ import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from persona.models.episode import Episode, EpisodeCreateRequest, EpisodeChainResponse
+from persona.models.memory import Episode, EpisodeCreateRequest, EpisodeChainResponse
 
 
 # ============================================================================

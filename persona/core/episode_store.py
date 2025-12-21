@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from uuid import UUID
 
 from persona.core.interfaces import GraphDatabase
-from persona.models.episode import Episode, EpisodeChainResponse
+from persona.models.memory import Episode, EpisodeChainResponse
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
