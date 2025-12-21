@@ -38,6 +38,10 @@ class Episode(BaseModel):
         default_factory=datetime.utcnow,
         description="When this episode happened"
     )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When this record was created in the system"
+    )
     day_id: str = Field(
         ...,
         description="YYYY-MM-DD format for day-level queries, e.g., '2024-12-19'"
