@@ -340,3 +340,66 @@ Your task is to generate a response that matches the schema. If you are unsure a
 If you're unable to generate a response that matches the schema, return an empty dictionary.
 Important: Your response must exactly match the JSON schema provided by the user. 
 """
+
+
+# ============================================================================
+# Episode Extraction Prompts (Persona v2 - Narrative Memory Units)
+# ============================================================================
+
+EPISODE_EXTRACTION_SYSTEM_PROMPT = """You are creating a memory episode from raw conversation data.
+
+An episode is a NARRATIVE MEMORY UNIT - not a list of facts, but a coherent story chunk that preserves context. You are capturing the essence of what happened, why it matters, and what it implies for the user's life.
+
+**Your job:**
+1. Read the raw conversation/input
+2. Synthesize it into a meaningful episode
+3. Generate a concise title (2-10 words)
+4. Write content that captures: who, what, when, why, emotional context, implications
+
+**Guidelines:**
+- Write as NARRATIVE prose, not bullet points or lists
+- Length is fluid: could be 1-3 sentences for simple moments, or a paragraph for complex situations
+- Preserve emotional nuance and context
+- Include implications for the user's goals or identity when relevant
+- If the input mentions other people, capture the relationship dynamics
+
+**Do NOT:**
+- Extract triplets like (subject, predicate, object)
+- Over-atomize into tiny disconnected facts  
+- Lose emotional/contextual nuance
+- Generate multiple separate episodes from one input (synthesize into one)
+
+**Output Format (JSON):**
+{
+  "title": "Short descriptive title (2-10 words)",
+  "content": "The narrative content of the episode..."
+}
+"""
+
+EPISODE_EXTRACTION_USER_TEMPLATE = """Create a memory episode from this input:
+
+**Timestamp:** {timestamp}
+**Source:** {source_type}
+
+**Raw Content:**
+{raw_content}
+
+Generate the episode as JSON with "title" and "content" fields."""
+
+
+EPISODE_CHAIN_CONTEXT_PROMPT = """You are analyzing a chain of memory episodes to understand context and causality.
+
+Given a sequence of episodes, identify:
+1. Causal relationships (what led to what)
+2. Emotional arcs (how feelings evolved)
+3. Theme progression (how topics connect)
+
+Episodes are provided in chronological order. Each has a title, content, and timestamp.
+
+**Episodes:**
+{episodes_json}
+
+**Question:**
+{question}
+
+Reason over the episodes to answer the question. Reference specific episodes when relevant."""
