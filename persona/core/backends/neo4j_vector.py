@@ -95,15 +95,24 @@ class Neo4jVectorStore(VectorStore):
     ) -> List[Dict[str, Any]]:
         """Search for similar vectors.
         
+        Note: Uses a higher internal limit to handle multi-user index.
+        The WHERE filter is applied after vector search, so we need to
+        scan more candidates to find our user's nodes.
+        
         Returns:
             List of dicts with keys: node_name, score
         """
+        # Use higher internal limit to handle multi-user index
+        # The WHERE clause filters after vector search, so we need more candidates
+        internal_limit = max(limit * 100, 500)
+        
         query = """
-        CALL db.index.vector.queryNodes($indexName, $limit, $embedding)
+        CALL db.index.vector.queryNodes($indexName, $internal_limit, $embedding)
         YIELD node, score
         WHERE node.UserId = $user_id
         RETURN node.name AS node_name, score
         ORDER BY score DESC
+        LIMIT $limit
         """
         results = []
         async with self.driver.session() as session:
@@ -114,6 +123,7 @@ class Neo4jVectorStore(VectorStore):
                     indexName=self.index_name, 
                     embedding=embedding, 
                     user_id=user_id,
+                    internal_limit=internal_limit,
                     limit=limit
                 )
                 async for record in result:

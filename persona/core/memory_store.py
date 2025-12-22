@@ -262,20 +262,22 @@ class MemoryStore:
             types: Filter by memory types
             limit: Maximum results
         """
-        from persona.llm.embeddings import generate_embeddings_async
+        from persona.core.graph_ops import GraphOps
         
-        # Generate embedding for query
-        query_embedding = await generate_embeddings_async(query)
+        # Use GraphOps for proper vector search
+        async with GraphOps() as graph_ops:
+            search_results = await graph_ops.text_similarity_search(
+                query=query,
+                user_id=user_id,
+                limit=limit * 2  # Get more for filtering
+            )
         
-        # Search similar vectors
-        results = await self.graph_db.vector_store.search_similar(
-            query_embedding, user_id, limit=limit * 2  # Get more for filtering
-        )
+        results = search_results.get('results', [])
         
         # Convert to memories and filter by type
         memories = []
         for result in results:
-            node = await self.graph_db.get_node(result['node_name'], user_id)
+            node = await self.graph_db.get_node(result['nodeName'], user_id)
             if node:
                 if types and node.get('type') not in types:
                     continue
