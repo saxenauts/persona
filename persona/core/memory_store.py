@@ -185,6 +185,13 @@ class MemoryStore:
         """Convert a graph node to a Memory model."""
         props = node.get('properties', {})
         
+        # Handle flat properties (new format) vs nested properties (old format)
+        # New format: properties are at node level
+        # Old format: properties are in a nested 'properties' dict
+        if not props and 'title' in node:
+            # New flat format
+            props = node
+        
         return Memory(
             id=UUID(props.get('id', node.get('name'))),
             type=props.get('type', node.get('type', 'episode')),
@@ -202,3 +209,170 @@ class MemoryStore:
             last_accessed=datetime.fromisoformat(props['last_accessed']) if props.get('last_accessed') else None,
             user_id=user_id
         )
+    
+    # ========== Search Methods ==========
+    
+    async def search_text(
+        self,
+        user_id: str,
+        query: str,
+        types: Optional[List[str]] = None,
+        limit: int = 10
+    ) -> List[Memory]:
+        """
+        Keyword-based text search on title and content.
+        
+        Args:
+            user_id: User ID
+            query: Search query string
+            types: Filter by memory types (episode, psyche, goal)
+            limit: Maximum results
+        """
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        query_lower = query.lower()
+        
+        matches = []
+        for node in all_nodes:
+            if types and node.get('type') not in types:
+                continue
+            
+            # Check title and content for query match
+            props = node.get('properties', node)
+            title = str(props.get('title', '')).lower()
+            content = str(props.get('content', '')).lower()
+            
+            if query_lower in title or query_lower in content:
+                matches.append(self._node_to_memory(node, user_id))
+        
+        return matches[:limit]
+    
+    async def search_vector(
+        self,
+        user_id: str,
+        query: str,
+        types: Optional[List[str]] = None,
+        limit: int = 10
+    ) -> List[Memory]:
+        """
+        Semantic similarity search using embeddings.
+        
+        Args:
+            user_id: User ID
+            query: Search query
+            types: Filter by memory types
+            limit: Maximum results
+        """
+        from persona.llm.embeddings import generate_embeddings_async
+        
+        # Generate embedding for query
+        query_embedding = await generate_embeddings_async(query)
+        
+        # Search similar vectors
+        results = await self.graph_db.vector_store.search_similar(
+            query_embedding, user_id, limit=limit * 2  # Get more for filtering
+        )
+        
+        # Convert to memories and filter by type
+        memories = []
+        for result in results:
+            node = await self.graph_db.get_node(result['node_name'], user_id)
+            if node:
+                if types and node.get('type') not in types:
+                    continue
+                memories.append(self._node_to_memory(node, user_id))
+                if len(memories) >= limit:
+                    break
+        
+        return memories
+    
+    async def get_connected(
+        self,
+        memory_id: UUID,
+        user_id: str,
+        relation: Optional[str] = None
+    ) -> List[Memory]:
+        """
+        Get memories connected to this one via relationships.
+        
+        Args:
+            memory_id: Source memory ID
+            user_id: User ID
+            relation: Filter by relationship type (DERIVED_FROM, NEXT, etc.)
+        """
+        relationships = await self.graph_db.get_node_relationships(str(memory_id), user_id)
+        
+        connected = []
+        for rel in relationships:
+            # Get the connected node
+            target_name = rel.get('target') if rel.get('source') == str(memory_id) else rel.get('source')
+            if relation and rel.get('relation') != relation:
+                continue
+            
+            node = await self.graph_db.get_node(target_name, user_id)
+            if node:
+                connected.append(self._node_to_memory(node, user_id))
+        
+        return connected
+    
+    async def get_goal_hierarchy(
+        self,
+        user_id: str,
+        root_id: Optional[UUID] = None
+    ) -> List[Memory]:
+        """
+        Get goals and their subtasks in hierarchy.
+        
+        If root_id is provided, return that goal and its children.
+        Otherwise return all goals.
+        """
+        goals = await self.get_by_type("goal", user_id, limit=100)
+        
+        if root_id:
+            # Get connected goals via PARENT_OF
+            connected = await self.get_connected(root_id, user_id, relation="PARENT_OF")
+            return [g for g in goals if g.id == root_id] + connected
+        
+        return goals
+    
+    # ========== Mutation Methods ==========
+    
+    async def update(
+        self,
+        memory_id: UUID,
+        user_id: str,
+        updates: Dict[str, Any]
+    ) -> Optional[Memory]:
+        """
+        Update mutable fields of a memory.
+        
+        Args:
+            memory_id: Memory ID to update
+            user_id: User ID
+            updates: Dict of field:value pairs to update
+        
+        Allowed fields: title, content, status, properties
+        """
+        # Get existing memory
+        existing = await self.get(memory_id, user_id)
+        if not existing:
+            logger.warning(f"Memory {memory_id} not found for update")
+            return None
+        
+        # Build update node
+        node_data = {
+            "name": str(memory_id),
+            "type": existing.type,
+        }
+        
+        # Add allowed updates
+        allowed_fields = {'title', 'content', 'status', 'due_date'}
+        for field, value in updates.items():
+            if field in allowed_fields:
+                node_data[field] = value
+        
+        # Apply update
+        await self.graph_db.create_nodes([node_data], user_id)
+        
+        logger.info(f"Updated memory {memory_id}: {list(updates.keys())}")
+        return await self.get(memory_id, user_id)
+

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from persona.core.graph_ops import GraphOps, GraphContextRetriever
 from persona.llm.llm_graph import generate_response_with_context
 from persona.models.schema import Node
@@ -11,6 +11,7 @@ class RAGInterface:
         self.user_id = user_id
         self.graph_ops = None
         self.graph_context_retriever = None
+        self._memory_store = None
 
     async def __aenter__(self):
         self.graph_ops = await GraphOps().__aenter__()
@@ -103,3 +104,82 @@ class RAGInterface:
         # (Not applied yet due to property-level filter not implemented in traversal)
 
         return (filter_types if filter_types else None, question_date, hops)
+
+    # ========== V2 Memory Engine: get_user_context ==========
+    
+    async def get_user_context(
+        self,
+        current_conversation: Optional[str] = None,
+        include_goals: bool = True,
+        include_psyche: bool = True,
+        include_previous_episode: bool = True,
+        max_episodes: int = 5,
+        max_goals: int = 10,
+        max_psyche: int = 10
+    ) -> str:
+        """
+        Compose structured context from memory layers.
+        
+        Args:
+            current_conversation: Current conversation to include
+            include_goals: Include active goals
+            include_psyche: Include psyche (traits, preferences)
+            include_previous_episode: Include most recent episode
+            max_episodes: Maximum recent episodes
+            max_goals: Maximum goals to include
+            max_psyche: Maximum psyche items
+            
+        Returns:
+            Formatted context string for LLM
+        """
+        from persona.core.memory_store import MemoryStore
+        from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
+        
+        # Initialize memory store if needed
+        if not self._memory_store:
+            graph_db = Neo4jGraphDatabase()
+            await graph_db.initialize()
+            self._memory_store = MemoryStore(graph_db)
+        
+        sections = []
+        
+        # 1. Previous Episodes
+        if include_previous_episode:
+            episodes = await self._memory_store.get_recent(
+                self.user_id, 
+                memory_type="episode", 
+                limit=max_episodes
+            )
+            if episodes:
+                section = "## Recent Context\n"
+                for ep in episodes[:max_episodes]:
+                    section += f"- {ep.title}: {ep.content[:200]}...\n" if len(ep.content) > 200 else f"- {ep.title}: {ep.content}\n"
+                sections.append(section)
+        
+        # 2. Active Goals
+        if include_goals:
+            goals = await self._memory_store.get_by_type("goal", self.user_id, limit=max_goals)
+            if goals:
+                section = "## Your Goals\n"
+                for goal in goals[:max_goals]:
+                    status = f"[{goal.status}]" if goal.status else ""
+                    section += f"- {status} {goal.title}: {goal.content[:100]}...\n" if len(goal.content) > 100 else f"- {status} {goal.title}: {goal.content}\n"
+                sections.append(section)
+        
+        # 3. Psyche (traits, preferences)
+        if include_psyche:
+            psyche = await self._memory_store.get_by_type("psyche", self.user_id, limit=max_psyche)
+            if psyche:
+                section = "## About You\n"
+                for p in psyche[:max_psyche]:
+                    section += f"- {p.title}: {p.content}\n"
+                sections.append(section)
+        
+        # 4. Current Conversation
+        if current_conversation:
+            sections.append(f"## Current Conversation\n{current_conversation}")
+        
+        context = "\n".join(sections)
+        logger.info(f"Generated user context: {len(sections)} sections, {len(context)} chars")
+        return context
+

@@ -102,35 +102,33 @@ class Neo4jGraphDatabase(GraphDatabase):
                 await session.run(query, params)
     
     async def get_node(self, node_name: str, user_id: str) -> Optional[Dict[str, Any]]:
+        # Return all node properties as flat dict
         query = """
         MATCH (n:NodeName {name: $node_name, UserId: $user_id})
-        RETURN n.name AS name, n.type AS type, n.properties AS properties
+        RETURN n
         """
         async with self.driver.session() as session:
             result = await session.run(query, node_name=node_name, user_id=user_id)
             record = await result.single()
             if record:
-                return {
-                    "name": record["name"],
-                    "type": record["type"],
-                    "properties": json.loads(record["properties"]) if record["properties"] else {}
-                }
+                node = dict(record["n"])
+                return node
             return None
     
     async def get_all_nodes(self, user_id: str) -> List[Dict[str, Any]]:
+        # Return all node properties as flat dicts
         query = """
         MATCH (n:NodeName {UserId: $user_id})
-        RETURN n.name AS name, n.type AS type, n.properties AS properties
+        RETURN n
         """
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
-            data = await result.data()
-            for record in data:
-                if record.get('properties'):
-                    record['properties'] = json.loads(record['properties'])
-                else:
-                    record['properties'] = {}
-            return data
+            records = await result.data()
+            nodes = []
+            for record in records:
+                node = dict(record["n"])
+                nodes.append(node)
+            return nodes
     
     async def check_node_exists(self, node_name: str, node_type: str, user_id: str) -> bool:
         query = """
