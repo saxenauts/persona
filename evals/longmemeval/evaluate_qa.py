@@ -74,17 +74,9 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
         
         return ""
     
-    # Run the async function
+    # Run the async function - Python 3.12+ compatible
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If we're already in an async context, create a new event loop
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, async_query())
-                return future.result()
-        else:
-            return asyncio.run(async_query())
+        return asyncio.run(async_query())
     except Exception as e:
         print(f"Error in LLM query: {e}")
         return ""

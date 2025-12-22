@@ -31,7 +31,7 @@ class PersonaAdapter:
     def __init__(self, user_id: str, graph_ops: GraphOps):
         self.user_id = user_id
         self.graph_ops = graph_ops
-        self.store = MemoryStore(graph_ops._graph_db)
+        self.store = MemoryStore(graph_ops.graph_db)
         self.ingestion_service = MemoryIngestionService()
     
     async def __aenter__(self):

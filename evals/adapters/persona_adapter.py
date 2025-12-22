@@ -30,24 +30,24 @@ class PersonaAdapter(MemorySystem):
     def add_sessions(self, user_id: str, sessions: list):
         """
         Add multiple sessions using the new bulk ingestion endpoint.
+        Uses IngestBatchRequest format with 'items' array.
         """
         # Create user if needed
         requests.post(f"{self.base_url}/users/{user_id}")
         
-        # Prepare batch payload
-        batch_items = []
+        # Prepare batch payload using new API format
+        items = []
         for s in sessions:
             content = f"Date: {s['date']}\n\n{s['content']}"
-            batch_items.append({
-                "title": f"Session {s['date']}",
+            items.append({
                 "content": content,
-                "metadata": {"source": "benchmark"}
+                "source_type": "conversation"
             })
             
-        payload = {"batch": batch_items}
+        payload = {"items": items}
         
         try:
-            resp = requests.post(f"{self.base_url}/users/{user_id}/ingest/batch", json=payload)
+            resp = requests.post(f"{self.base_url}/users/{user_id}/ingest/batch", json=payload, timeout=300)
             resp.raise_for_status()
         except Exception as e:
             print(f"[PersonaAdapter] Batch ingest failed: {e}")

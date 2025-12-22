@@ -9,10 +9,10 @@ A comprehensive evaluation framework for testing long-term memory systems agains
 
 - [Overview](#overview)
 - [Features](#features)
-- [Benchmarks](#benchmarks)
+- [Unified Benchmark Architecture](#unified-benchmark-architecture)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Results](#results)
+- [Results (Placeholders)](#results)
 - [Usage Guide](#usage-guide)
 - [Architecture](#architecture)
 - [Configuration](#configuration)
@@ -65,37 +65,37 @@ The framework supports multiple benchmarks (LongMemEval, PersonaMem) and memory 
 
 ---
 
-## Benchmarks
+## Unified Benchmark Architecture
 
-### LongMemEval (ICLR 2025)
+The framework uses a research-backed, stratified sampling approach to combine two world-class benchmarks into a single evaluation pipeline. This ensures your memory system is tested on both deep reasoning and surface-level recall.
 
-Tests memory systems on sustained interactions (~115k tokens, ~40 sessions).
+### 1. The "Combined" Rationale
 
-| Question Type | Count | Capability Tested |
-|---------------|-------|-------------------|
-| `single-session-user` | 70 | Recall user-stated facts |
-| `single-session-assistant` | 56 | Recall assistant-stated facts |
-| `single-session-preference` | 30 | Infer implicit preferences |
-| `multi-session` | 133 | Aggregate across sessions |
-| `temporal-reasoning` | 133 | Date calculations, ordering |
-| `knowledge-update` | 78 | Track changed information |
-| `abstention` | ~30 | Correctly refuse unanswerable |
+| Benchmark | Strength | Tokens | Focus |
+|-----------|----------|--------|-------|
+| **LongMemEval** | Temporal logic, Multi-session aggregation | ~115k | Reasoning & Continuity |
+| **PersonaMem** | Factual precision, Personalization | ~32k - 1M | Recall & Alignment |
 
-**Scoring**: Binary (CORRECT/WRONG) via GPT-4o judge with task-specific prompts.
+By combining these, we avoid "local optimization" where a system might be good at recalling a name but fails to update a user's address change two sessions later.
 
-### PersonaMem (COLM 2025)
+### 2. Stratified Sampling Logic
 
-Tests personalization quality on multi-turn conversations (26k-152k tokens).
+To keep developer iterations fast without sacrificing statistical significance, the framework implements **Stratified Random Sampling**:
 
-| Question Type | Capability Tested |
-|---------------|-------------------|
-| `recall_user_shared_facts` | Recall static events/interests |
-| `track_full_preference_evolution` | Track preference changes over time |
-| `generalizing_to_new_scenarios` | Transfer learning across domains |
-| `provide_preference_aligned_recommendations` | Proactive personalization |
-| `recalling_the_reasons_behind_previous_updates` | Recall reasoning behind changes |
+- **Reproducibility**: Uses a fixed random seed (default: 42).
+- **Distribution**: Ensures samples are pulled proportionally from every category (e.g., 60 multi-session vs 35 single-session questions).
+- **Golden Sets**: Includes pre-calculated "Golden Sets" in `evals/data/golden_sets/` for 100% stable benchmarks across teams.
 
-**Scoring**: Multiple-choice accuracy (exact match on a/b/c/d).
+### 3. Capability Coverage
+
+| Category | Capability Tested | Source |
+|----------|-------------------|--------|
+| **Recall** | Static facts (names, events) | PersonaMem |
+| **Temporal** | Date ordering, durations | LongMemEval |
+| **Logic** | Aggregation across time | LongMemEval |
+| **Updates** | Correcting old memories | LongMemEval |
+| **Strategy** | When to abstain (I don't know) | LongMemEval |
+| **Alignment** | Preference-based suggestions | PersonaMem |
 
 ---
 
@@ -177,16 +177,19 @@ poetry run python -m evals.cli analyze run_20241221_143052 --summary
 
 ---
 
-## Results
+## Results (Placeholders)
 
-> ⚠️ **PLACEHOLDER VALUES BELOW** ⚠️
->
-> **DO NOT COMMIT THESE NUMBERS TO PRODUCTION**
->
-> These are example values for documentation purposes. Real benchmark results
-> will be added after running full evaluations on the golden sets.
->
-> **TODO (URGENT)**: Run full evaluations and update this section with real data.
+> [!CAUTION]
+> **PLACEHOLDER DATA**: The metrics below are examples for documentation purposes. 
+> Real benchmark results will be generated after running a full sweep on the 340-question golden set.
+
+### Comparative Performance
+
+| System | LongMemEval (Acc) | PersonaMem (Acc) | Avg. Latency (ms) |
+|--------|-------------------|-------------------|-------------------|
+| **Persona (Graph)** | 84.2% | 91.5% | 840ms |
+| **Mem0 (Vector)** | 76.5% | 88.2% | 1,250ms |
+| **Zep (Graphiti)** | 79.1% | 86.4% | 910ms |
 
 ### LongMemEval Performance
 
@@ -361,16 +364,20 @@ All memory systems implement the `MemorySystem` base class:
 from evals.adapters.base import MemorySystem
 
 class YourAdapter(MemorySystem):
-    def ingest(self, user_id: str, sessions: List[Dict]) -> None:
-        """Ingest conversation history"""
+    def add_session(self, user_id: str, session_data: str, date: str) -> None:
+        """Ingest a single session into the memory system."""
+        pass
+    
+    def add_sessions(self, user_id: str, sessions: List[Dict]) -> None:
+        """Bulk ingest sessions. Each dict has 'content' and 'date' keys."""
         pass
 
     def query(self, user_id: str, question: str) -> str:
-        """Query memory and generate answer"""
+        """Query memory and generate answer."""
         pass
 
     def reset(self, user_id: str) -> None:
-        """Clear memory for a user"""
+        """Clear memory for a user."""
         pass
 ```
 
@@ -495,23 +502,22 @@ class MySystemAdapter(MemorySystem):
         # Initialize your memory system
         pass
 
-    def ingest(self, user_id: str, sessions: List[Dict]) -> None:
-        # Ingest conversation history
+    def add_session(self, user_id: str, session_data: str, date: str) -> None:
+        """Ingest a single session into the memory system."""
+        pass
+    
+    def add_sessions(self, user_id: str, sessions: List[Dict]) -> None:
+        """Bulk ingest sessions. Each dict has 'content' and 'date' keys."""
         for session in sessions:
-            date = session['date']
-            content = session['content']
-            # Store in your memory system
+            self.add_session(user_id, session['content'], session['date'])
 
     def query(self, user_id: str, question: str) -> str:
-        # Retrieve relevant memories
+        """Retrieve relevant context and generate answer."""
         context = self.retrieve(user_id, question)
-
-        # Generate answer
-        answer = self.llm.generate(context, question)
-        return answer
+        return self.llm.generate(context, question)
 
     def reset(self, user_id: str) -> None:
-        # Clear memory for user
+        """Clear all memory for a specific user to ensure test isolation."""
         pass
 ```
 
@@ -622,11 +628,6 @@ evals/
 │       └── run_metadata.json
 │
 ├── analysis/             # Historical analysis (gitignored)
-│   ├── BENCHMARK_REPORT.md
-│   └── final_results/
-│
-├── archive_old_framework/ # Archived legacy code
-│
 ├── cli.py               # CLI interface
 ├── config.py            # Config parser
 ├── runner.py            # Evaluation orchestrator

@@ -189,6 +189,10 @@ def analyze(
     """
     from .logging.deep_logger import DeepLogger
 
+    # Strip run_ prefix if user passed it (DeepLogger adds it)
+    if run_id.startswith("run_"):
+        run_id = run_id[4:]
+    
     logger = DeepLogger(run_id=run_id)
 
     if summary:
