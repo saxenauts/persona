@@ -118,22 +118,11 @@ class RAGInterface:
         max_psyche: int = 10
     ) -> str:
         """
-        Compose structured context from memory layers.
-        
-        Args:
-            current_conversation: Current conversation to include
-            include_goals: Include active goals
-            include_psyche: Include psyche (traits, preferences)
-            include_previous_episode: Include most recent episode
-            max_episodes: Maximum recent episodes
-            max_goals: Maximum goals to include
-            max_psyche: Maximum psyche items
-            
-        Returns:
-            Formatted context string for LLM
+        Compose structured context from memory layers using the universal XML formatter.
         """
         from persona.core.memory_store import MemoryStore
         from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
+        from persona.core.context import format_memories_for_llm
         
         # Initialize memory store if needed
         if not self._memory_store:
@@ -141,7 +130,7 @@ class RAGInterface:
             await graph_db.initialize()
             self._memory_store = MemoryStore(graph_db)
         
-        sections = []
+        all_memories = []
         
         # 1. Previous Episodes
         if include_previous_episode:
@@ -150,36 +139,25 @@ class RAGInterface:
                 memory_type="episode", 
                 limit=max_episodes
             )
-            if episodes:
-                section = "## Recent Context\n"
-                for ep in episodes[:max_episodes]:
-                    section += f"- {ep.title}: {ep.content[:200]}...\n" if len(ep.content) > 200 else f"- {ep.title}: {ep.content}\n"
-                sections.append(section)
+            all_memories.extend(episodes)
         
         # 2. Active Goals
         if include_goals:
             goals = await self._memory_store.get_by_type("goal", self.user_id, limit=max_goals)
-            if goals:
-                section = "## Your Goals\n"
-                for goal in goals[:max_goals]:
-                    status = f"[{goal.status}]" if goal.status else ""
-                    section += f"- {status} {goal.title}: {goal.content[:100]}...\n" if len(goal.content) > 100 else f"- {status} {goal.title}: {goal.content}\n"
-                sections.append(section)
+            all_memories.extend(goals)
         
         # 3. Psyche (traits, preferences)
         if include_psyche:
             psyche = await self._memory_store.get_by_type("psyche", self.user_id, limit=max_psyche)
-            if psyche:
-                section = "## About You\n"
-                for p in psyche[:max_psyche]:
-                    section += f"- {p.title}: {p.content}\n"
-                sections.append(section)
+            all_memories.extend(psyche)
         
-        # 4. Current Conversation
+        # Generate XML context
+        context = format_memories_for_llm(all_memories)
+        
+        # 4. Current Conversation (Keep as raw text outside XML context for now)
         if current_conversation:
-            sections.append(f"## Current Conversation\n{current_conversation}")
+            context = f"{context}\n\n<current_conversation>\n{current_conversation}\n</current_conversation>"
         
-        context = "\n".join(sections)
-        logger.info(f"Generated user context: {len(sections)} sections, {len(context)} chars")
+        logger.info(f"Generated universal user context: {len(all_memories)} memories, {len(context)} chars")
         return context
 

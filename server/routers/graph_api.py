@@ -1,23 +1,33 @@
 from fastapi import APIRouter, HTTPException, status, Path, Depends, Body, Response
 from persona.core.graph_ops import GraphOps, GraphContextRetriever
-from persona.models.schema import NodeModel, RelationshipModel, GraphUpdateModel
-from persona.core.constructor import GraphConstructor
-from persona.llm.prompts import sample_statements, ASTRONAUT_PROMPT, SPACE_SCHOOL_CHAT
-from persona.models.schema import UnstructuredData, UnstructuredBatchData
-from persona.core.constructor import GraphContextRetriever
 from persona.core.rag_interface import RAGInterface
 from persona.models.schema import UserCreate, RAGQuery, RAGResponse
+from persona.models.schema import AskRequest, AskResponse, CustomGraphUpdate
 from persona.services.user_service import UserService
-from persona.services.ingest_service import IngestService
 from persona.services.rag_service import RAGService
 from persona.services.ask_service import AskService
 from persona.services.custom_data_service import CustomDataService
-from persona.models.schema import LearnRequest, LearnResponse, AskRequest, AskResponse, GraphSchema, CustomGraphUpdate, CustomNodeData, CustomRelationshipData
+from persona.adapters import PersonaAdapter
 from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, List
 import re
+from persona.models.schema import LearnRequest, LearnResponse, CustomNodeData, CustomRelationshipData
 
 logger = get_logger(__name__)
+
+
+# --- Request Models (replacing legacy UnstructuredData) ---
+class IngestRequest(BaseModel):
+    """Request body for ingesting content."""
+    content: str = Field(..., description="Raw text content to ingest.")
+    source_type: str = Field(default="conversation", description="Type of content (conversation, notes, etc.)")
+    metadata: Optional[Dict[str, str]] = Field(default=None, description="Optional metadata.")
+
+class IngestBatchRequest(BaseModel):
+    """Request body for batch ingestion."""
+    items: List[IngestRequest] = Field(..., description="List of items to ingest.")
 
 
 router = APIRouter()
@@ -95,7 +105,7 @@ async def delete_user(
 @router.post("/users/{user_id}/ingest", status_code=201)
 async def ingest_data(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    data: UnstructuredData = Body(...),
+    data: IngestRequest = Body(...),
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
     try:
@@ -110,10 +120,19 @@ async def ingest_data(
         if not data.content or len(data.content.strip()) == 0:
             logger.warning(f"Empty content provided for user {user_id}")
             raise HTTPException(status_code=400, detail="Content cannot be empty")
+        
+        # Use PersonaAdapter for ingestion
+        adapter = PersonaAdapter(user_id, graph_ops)
+        result = await adapter.ingest(
+            content=data.content,
+            source_type=data.source_type
+        )
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=f"Ingestion failed: {result.error}")
             
-        await IngestService.ingest_data(user_id, data, graph_ops)
-        logger.info(f"Data ingested successfully for user {user_id}")
-        return {"message": "Data ingested successfully"}
+        logger.info(f"Data ingested successfully for user {user_id}: {len(result.memories)} memories")
+        return {"message": "Data ingested successfully", "memories_created": len(result.memories)}
         
     except HTTPException:
         raise
@@ -124,28 +143,33 @@ async def ingest_data(
         logger.error(f"Failed to ingest data for user {user_id}: {str(e)}")
         if "Neo4j" in str(e) or "database" in str(e).lower():
             raise HTTPException(status_code=503, detail="Database connection error. Please try again later.")
-        raise HTTPException(status_code=500, detail="Internal server error occurred while ingesting data")
+        raise HTTPException(status_code=500, detail=\"Internal server error occurred while ingesting data\")
 
 @router.post("/users/{user_id}/ingest/batch", status_code=201)
 async def ingest_batch_data(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    batch_data: UnstructuredBatchData = Body(...),
+    batch_data: IngestBatchRequest = Body(...),
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
     try:
-        logger.info(f"Ingesting batch of {len(batch_data.batch)} items for user: {user_id}")
+        logger.info(f"Ingesting batch of {len(batch_data.items)} items for user: {user_id}")
         
         # Validate user exists
         if not await graph_ops.user_exists(user_id):
             logger.warning(f"Attempted to batch ingest for non-existent user: {user_id}")
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
         
-        if not batch_data.batch:
+        if not batch_data.items:
             raise HTTPException(status_code=400, detail="Batch cannot be empty")
 
-        result = await IngestService.ingest_batch(user_id, batch_data.batch, graph_ops)
-        logger.info(f"Batch ingestion completed for user {user_id}")
-        return result
+        # Use PersonaAdapter for batch ingestion
+        adapter = PersonaAdapter(user_id, graph_ops)
+        items_for_adapter = [{"content": item.content, "source_type": item.source_type} for item in batch_data.items]
+        results = await adapter.ingest_batch(items_for_adapter)
+        
+        total_memories = sum(len(r.memories) for r in results if r.success)
+        logger.info(f"Batch ingestion completed for user {user_id}: {total_memories} memories")
+        return {"message": f"Successfully ingested batch of {len(batch_data.items)} items", "memories_created": total_memories}
         
     except HTTPException:
         raise
@@ -213,7 +237,6 @@ async def rag_query_vector(
         logger.info(f"Processing vector RAG query for user {user_id}: {query.query[:100]}...")
         rag = RAGInterface(user_id)
         rag.graph_ops = graph_ops
-        rag.graph_context_retriever = GraphContextRetriever(graph_ops)
         
         response = await rag.query_vector_only(query.query)
         logger.info(f"Vector RAG query completed successfully for user {user_id}")

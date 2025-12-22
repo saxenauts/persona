@@ -146,10 +146,15 @@ class GraphOps:
         node_data = await self.graph_db.get_node(node_name, user_id)
         
         if node_data:
+            # Neo4j returns flat dict with all properties at top level.
+            # Extract everything except reserved/system fields as properties.
+            reserved_keys = {"name", "UserId", "embedding", "elementId"}
+            properties = {k: v for k, v in node_data.items() if k not in reserved_keys}
+            
             return NodeModel(
                 name=node_data["name"],
                 type=node_data.get("type"),
-                properties=node_data.get("properties", {})
+                properties=properties  # Now includes content, title, etc.
             )
         
         return NodeModel(name=node_name)
@@ -160,12 +165,13 @@ class GraphOps:
             return []
 
         nodes = await self.graph_db.get_all_nodes(user_id)
+        reserved_keys = {"name", "UserId", "embedding", "elementId"}
         
         return [
             NodeModel(
                 name=node['name'],
                 type=node.get('type'),
-                properties=node.get('properties', {})
+                properties={k: v for k, v in node.items() if k not in reserved_keys}
             ) 
             for node in nodes
         ]
@@ -526,13 +532,13 @@ class GraphContextRetriever:
         question_date: str | None = None,
         date_window_days: int = 60,
     ) -> str:
-        """Get relevant subgraph context for the given nodes."""
-        context = "# Relevant Graph Context\n\n"
+        """Get relevant subgraph context for the given nodes using semantic XML format."""
+        from persona.core.context import MemoryAdapter, ContextFormatter
         
         existing_nodes = await self.graph_ops.get_all_nodes(user_id)
         if not existing_nodes:
             logger.debug("No existing nodes in graph (t=0). Skipping context retrieval.")
-            return context
+            return "<memory_context></memory_context>"
         
         logger.debug(f"Found {len(existing_nodes)} existing nodes in graph")
         
@@ -552,62 +558,73 @@ class GraphContextRetriever:
                 max_hops=max_hops
             )
 
-        if subgraph:
-            from datetime import timedelta
-            scores: Dict[str, float] = {}
-            qdt = self._parse_date(question_date) if question_date else None
+        if not subgraph:
+            return "<memory_context></memory_context>"
+        
+        # Score nodes for ranking (keep existing scoring logic)
+        scores: Dict[str, float] = {}
+        qdt = self._parse_date(question_date) if question_date else None
+        
+        for node_name, data in subgraph.items():
+            s = 0.0
             
-            for node_name, data in subgraph.items():
-                s = 0.0
-                
-                if seed_scores and node_name in seed_scores:
-                    s += float(seed_scores[node_name])
-                
-                nd = None
-                props = data.get('properties') or {}
-                for key in ("date", "timestamp"):
-                    nd = nd or self._parse_date(str(props.get(key, "")))
-                
-                if qdt and nd:
-                    delta = abs((qdt - nd).days)
-                    if delta <= date_window_days:
-                        s += max(0.0, (date_window_days - delta) / date_window_days)
-                
-                ntype = data.get('type') or None
-                if filter_types and ntype in filter_types:
-                    s += 0.25
-                
-                scores[node_name] = s
-
-            ordered = sorted(
-                subgraph.items(), 
-                key=lambda kv: scores.get(kv[0], 0.0), 
-                reverse=True
-            )
-
-            context += "## Related Nodes and Relationships\n"
+            if seed_scores and node_name in seed_scores:
+                s += float(seed_scores[node_name])
             
-            for node_name, data in ordered:
-                context += f"\n### {node_name}\n"
-                
-                props = data.get('properties') or {}
-                if props:
-                    for k, v in props.items():
-                        context += f"- {k}: {v}\n"
-                
-                if data.get('relationships'):
-                    context += "Relationships:\n"
-                    for rel in data['relationships']:
-                        context += f"- {rel}\n"
+            nd = None
+            props = data.get('properties') or {}
+            for key in ("date", "timestamp"):
+                nd = nd or self._parse_date(str(props.get(key, "")))
+            
+            if qdt and nd:
+                delta = abs((qdt - nd).days)
+                if delta <= date_window_days:
+                    s += max(0.0, (date_window_days - delta) / date_window_days)
+            
+            ntype = data.get('type') or None
+            if filter_types and ntype in filter_types:
+                s += 0.25
+            
+            scores[node_name] = s
 
-            self._append_log({
-                "user_id": user_id,
-                "seeds": [n.name for n in seed_list],
-                "seed_scores": seed_scores or {},
-                "filter_types": list(filter_types) if filter_types else None,
-                "question_date": question_date,
-                "ranked_nodes": [name for name, _ in ordered[:10]],
-            })
+        # Sort by score
+        ordered = sorted(
+            subgraph.items(), 
+            key=lambda kv: scores.get(kv[0], 0.0), 
+            reverse=True
+        )
+        
+        # Convert to typed Memory models and format using new ContextFormatter
+        adapter = MemoryAdapter()
+        formatter = ContextFormatter()
+        
+        # Build raw dicts from subgraph (properties are already properly extracted)
+        raw_nodes = []
+        for node_name, data in ordered:
+            props = data.get('properties') or {}
+            raw_node = {
+                'name': node_name,
+                'id': props.get('id', node_name),  # Use id if available, else name
+                'type': data.get('type', 'episode'),
+                **props  # Include all properties (content, title, etc.)
+            }
+            raw_nodes.append(raw_node)
+        
+        # Convert to typed Memory models
+        from persona.core.context import convert_to_memories
+        memories = convert_to_memories(raw_nodes)
+        
+        # Format as semantic XML context
+        context = formatter.format_context(memories)
+        
+        self._append_log({
+            "user_id": user_id,
+            "seeds": [n.name for n in seed_list],
+            "seed_scores": seed_scores or {},
+            "filter_types": list(filter_types) if filter_types else None,
+            "question_date": question_date,
+            "ranked_nodes": [name for name, _ in ordered[:10]],
+        })
         
         return context
 
@@ -639,26 +656,29 @@ class GraphContextRetriever:
                 next_node = rel.target if rel.source == node_name else rel.source
                 await self._explore_node(next_node, subgraph, user_id, max_hops - 1)
 
-    async def get_entire_graph_context(self) -> str:
-        """Get entire graph context (not efficient for large graphs)."""
-        # TODO: Only get the context for the nodes that are relevant.
-        nodes = await self.graph_ops.get_all_nodes(self.user_id)
-        relationships = await self.graph_ops.get_all_relationships(self.user_id)
-       
-        context = "# Current Knowledge Graph\n\n## Nodes\n"
+    async def get_entire_graph_context(self, user_id: str) -> str:
+        """Get entire graph context using the new universal XML formatter."""
+        from persona.core.context import convert_to_memories, format_memories_for_llm
+        
+        nodes = await self.graph_ops.get_all_nodes(user_id)
+        # nodes already has properties correctly extracted from previous fix
+        
+        raw_nodes = []
         for node in nodes:
-            context += f"- {node.name}: {node.perspective}\n"
-        
-        context += "\n## Relationships\n"
-        for rel in relationships:
-            context += f"- {rel.source} {rel.relation} {rel.target}\n"
-        
-        return context
+            raw_nodes.append({
+                'name': node.name,
+                'id': node.properties.get('id', node.name),
+                'type': node.type or 'episode',
+                **node.properties
+            })
+            
+        memories = convert_to_memories(raw_nodes)
+        return format_memories_for_llm(memories)
 
     async def get_graph_context(self, query: str):
+        """Legacy method for similarity search context."""
         logger.debug(f"Getting graph context for query: {query}")
-        results = await self.graph_ops.perform_similarity_search(
+        return await self.graph_ops.perform_similarity_search(
             query=query, 
             user_id=self.user_id
         )
-        return results
