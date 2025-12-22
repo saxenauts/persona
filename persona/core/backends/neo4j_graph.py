@@ -76,17 +76,30 @@ class Neo4jGraphDatabase(GraphDatabase):
                 if node_type:
                     labels = f"NodeName:{node_type}"
                 
+                # Extract all properties as flat key-value pairs
+                # Skip 'name' and 'type' as they're handled separately
+                props = {k: v for k, v in node.items() if k not in ['name']}
+                
+                # Build dynamic SET clause for all properties
+                set_clauses = []
+                for key in props.keys():
+                    if props[key] is not None:  # Skip None values
+                        set_clauses.append(f"n.{key} = ${key}")
+                
+                set_clause = ", ".join(set_clauses) if set_clauses else "n.type = $type"
+                
                 query = (
                     f"MERGE (n:{labels} {{name: $name, UserId: $user_id}}) "
-                    "SET n.type = $type, n.properties = $properties"
+                    f"SET {set_clause}"
                 )
-                properties = json.dumps(node.get("properties", {}))
-                await session.run(query, {
+                
+                params = {
                     "name": node["name"],
                     "user_id": user_id,
-                    "type": node.get("type", ""),
-                    "properties": properties
-                })
+                    **{k: v for k, v in props.items() if v is not None}
+                }
+                
+                await session.run(query, params)
     
     async def get_node(self, node_name: str, user_id: str) -> Optional[Dict[str, Any]]:
         query = """
@@ -136,16 +149,19 @@ class Neo4jGraphDatabase(GraphDatabase):
         
         async with self.driver.session() as session:
             for relationship in relationships:
-                query = (
-                    "MATCH (source {UserId: $user_id}), (target {UserId: $user_id}) "
-                    "WHERE source.name = $source AND target.name = $target "
-                    "MERGE (source)-[r:`{relation}`]->(target) "
-                    "SET r.value = $relation"
-                )
+                relation_type = relationship["relation"].upper().replace(" ", "_")
+                
+                # Use dynamic relationship type (APOC or raw Cypher)
+                # For Neo4j 5+, we can use dynamic relationship creation
+                query = f"""
+                    MATCH (source {{UserId: $user_id}}), (target {{UserId: $user_id}})
+                    WHERE source.name = $source AND target.name = $target
+                    MERGE (source)-[r:{relation_type}]->(target)
+                    SET r.created_at = datetime()
+                """
                 await session.run(query, {
                     "source": relationship["source"],
                     "target": relationship["target"],
-                    "relation": relationship["relation"],
                     "user_id": user_id
                 })
     

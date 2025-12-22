@@ -46,27 +46,30 @@ class MemoryStore:
         if not memory.day_id:
             memory.day_id = memory.timestamp.strftime("%Y-%m-%d")
         
-        # Create the memory node
+        # Create the memory node with FLAT properties (not nested JSON)
+        # This is backend-agnostic: each field becomes a native property
         node_data = {
             "name": str(memory.id),
             "type": memory.type,
-            "properties": {
-                "id": str(memory.id),
-                "type": memory.type,
-                "title": memory.title,
-                "content": memory.content,
-                "timestamp": memory.timestamp.isoformat(),
-                "created_at": memory.created_at.isoformat(),
-                "day_id": memory.day_id,
-                "status": memory.status,
-                "due_date": memory.due_date.isoformat() if memory.due_date else None,
-                "session_id": memory.session_id,
-                "source_type": memory.source_type,
-                "source_ref": memory.source_ref,
-                "access_count": memory.access_count,
-                "last_accessed": memory.last_accessed.isoformat() if memory.last_accessed else None,
-                **memory.properties
-            }
+            # All fields as flat properties
+            "id": str(memory.id),
+            "title": memory.title,
+            "content": memory.content,
+            "timestamp": memory.timestamp.isoformat(),
+            "created_at": memory.created_at.isoformat(),
+            "day_id": memory.day_id,
+            "session_id": memory.session_id,
+            "source_type": memory.source_type,
+            "source_ref": memory.source_ref,
+            "access_count": memory.access_count,
+            # Optional fields
+            "status": memory.status,
+            "due_date": memory.due_date.isoformat() if memory.due_date else None,
+            "last_accessed": memory.last_accessed.isoformat() if memory.last_accessed else None,
+            # Embedding as list (for vector backends)
+            "embedding": memory.embedding,
+            # Extra properties dict (rarely used)
+            "extra": memory.properties if memory.properties else None,
         }
         
         await self.graph_db.create_nodes([node_data], memory.user_id)

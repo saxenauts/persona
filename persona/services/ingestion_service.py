@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from persona.models.memory import Memory, MemoryLink, EpisodeOutput, PsycheOutput, GoalOutput, IngestionOutput
 from persona.llm.client_factory import get_chat_client, get_embedding_client
+from persona.llm.providers.base import ChatMessage
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -211,8 +212,8 @@ class MemoryIngestionService:
         
         response = await self.chat_client.chat(
             messages=[
-                {"role": "system", "content": INGESTION_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
+                ChatMessage(role="system", content=INGESTION_SYSTEM_PROMPT),
+                ChatMessage(role="user", content=user_prompt)
             ],
             response_format={"type": "json_object"}
         )
@@ -235,7 +236,7 @@ class MemoryIngestionService:
         texts = [f"{m.title} | {m.content}" for m in memories]
         
         try:
-            embeddings = await self.embedding_client.embed(texts)
+            embeddings = await self.embedding_client.embeddings(texts)
             for i, m in enumerate(memories):
                 m.embedding = embeddings[i]
         except Exception as e:
