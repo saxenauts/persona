@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Docker & Docker Compose**: Required for running Neo4j and the application
-- **OpenAI API Key**: Required for LLM operations (will consume API calls during testing)
+- **OpenAI API Key**: Required for LLM operations
 - **Python 3.12+**: For local development
 
 ## Setup
@@ -17,9 +17,7 @@
 2. **Environment Variables**
    ```bash
    cp .env.example .env
-   # Edit .env with your settings:
-   # - OPENAI_API_KEY (required)
-   # - NEO4J credentials
+   # Edit .env with your settings
    ```
 
 3. **Start Services**
@@ -31,76 +29,41 @@
 
 ```
 persona/
-├── server/           # FastAPI server and API routes
-├── persona/          # Core application logic
-│   ├── core/         # Database operations and graph management
-│   ├── services/     # Business logic services
-│   ├── models/       # Pydantic models and schemas
-│   └── llm/          # LLM integration and embeddings
-├── tests/            # Test suite
-├── examples/         # Example scripts
-├── docs/             # Documentation
-└── docker-compose.yml # Docker services configuration
+├── adapters/         # High-level orchestrators (PersonaAdapter)
+├── core/             # Database operations, retrieval, context
+├── services/         # Business logic (ingestion, RAG, ask)
+├── models/           # Memory types and API schemas
+└── llm/              # LLM clients and functions
+
+server/
+├── main.py           # App entry point
+├── routers/          # API route definitions
+├── dependencies.py   # Dependency injection
+└── config.py         # Environment configuration
+
+tests/
+├── unit/             # Unit tests (no external deps)
+└── integration/      # Integration tests (requires Neo4j)
 ```
 
 ## Key Components
 
-1. **Graph Database Manager** (`persona/core/neo4j_database.py`)
-   - Handles all Neo4j operations
-   - Manages node and relationship creation
-   - Implements vector similarity search
+1. **PersonaAdapter** (`adapters/persona_adapter.py`)
+   - Unified entry point for ingestion
+   - Orchestrates extraction → linking → persistence
 
-2. **Services** (`persona/services/`)
-   - `user_service.py`: User management
-   - `ingest_service.py`: Data ingestion
+2. **Retriever** (`core/retrieval.py`)
+   - Vector similarity + graph traversal
+   - Returns formatted context for LLM
+
+3. **MemoryStore** (`core/memory_store.py`)
+   - CRUD operations for typed memories
+   - Handles temporal linking
+
+4. **Services** (`services/`)
+   - `ingestion_service.py`: Memory extraction from text
    - `rag_service.py`: RAG query processing
    - `ask_service.py`: Structured insights
-   - `custom_data_service.py`: Custom data handling
-
-3. **API Layer** (`server/routers/`)
-   - RESTful endpoints following `/users/{user_id}/...` pattern
-   - Request validation with Pydantic models
-   - Response formatting
-
-4. **Dependency Injection** (`server/dependencies.py`)
-   - FastAPI dependency injection for shared resources
-   - GraphOps instance management
-   - Ensures consistent resource lifecycle
-
-## Architecture Patterns
-
-### GraphOps Dependency Injection
-
-The application uses a **single global GraphOps instance** to manage database connections efficiently:
-
-**For API Routes:**
-```python
-from server.dependencies import get_graph_ops
-
-@router.post("/users/{user_id}")
-async def create_user(
-    user_id: str,
-    graph_ops: GraphOps = Depends(get_graph_ops)
-):
-    return await UserService.create_user(user_id, graph_ops)
-```
-
-**For Services:**
-```python
-class UserService:
-    @staticmethod
-    async def create_user(user_id: str, graph_ops: GraphOps):
-        await graph_ops.create_user(user_id)
-        return {"message": f"User {user_id} created successfully"}
-```
-
-**Benefits:**
-- Eliminates connection overhead (no new GraphOps instances per request)
-- Ensures consistent resource lifecycle
-- Simplifies testing with dependency injection
-- Shares Neo4j connection pool across all operations
-
-**Important:** Always inject GraphOps as a parameter rather than creating new instances within services.
 
 ## Development Workflow
 
@@ -111,75 +74,46 @@ class UserService:
 
 2. **Run Tests**
    ```bash
-   # Run all tests in Docker (recommended)
+   # Docker (recommended)
    docker compose run --rm test
    
-   # Or run specific test files
-   docker compose run --rm test pytest tests/test_api.py -v
+   # Local unit tests
+   poetry run pytest tests/unit -v
    ```
 
 3. **Code Style**
    ```bash
-   # Format code
    black .
-   
-   # Check types
    mypy .
-   
-   # Lint code
    flake8
    ```
 
-4. **Submit PR**
-   - Write clear PR description
-   - Include test coverage
-   - Link related issues
-
 ## Testing
 
-**Note**: Tests require Docker and will consume OpenAI API calls.
+```bash
+# Run all tests
+docker compose run --rm test
 
-1. **Run All Tests**
-   ```bash
-   docker compose run --rm test
-   ```
+# Unit tests only
+poetry run pytest tests/unit -v
 
-2. **Run Specific Test Categories**
-   ```bash
-   # Unit tests
-   docker compose run --rm test pytest tests/unit/
-   
-   # Integration tests
-   docker compose run --rm test pytest tests/integration/
-   
-   # API tests
-   docker compose run --rm test pytest tests/test_api.py
-   ```
-
-3. **Test with Verbose Output**
-   ```bash
-   docker compose run --rm test pytest -v
-   ```
+# Specific test file
+poetry run pytest tests/unit/test_memory.py -v
+```
 
 ## Common Development Tasks
 
-1. **Adding a New Endpoint**
-   - Add route in `server/routers/`
-   - Implement service logic in `persona/services/`
-   - Add tests in `tests/`
-   - Update API docs in `docs/API.md`
+### Adding a New Endpoint
+1. Add route in `server/routers/graph_api.py`
+2. Implement service logic in `persona/services/`
+3. Add tests in `tests/unit/`
+4. Update API docs
 
-2. **Modifying Graph Schema**
-   - Update models in `persona/models/schema.py`
-   - Update database operations in `persona/core/`
-   - Update affected services
-   - Add tests
-
-3. **Adding Custom Data Type**
-   - Extend `CustomDataService` in `persona/services/`
-   - Add validation in `persona/models/`
-   - Update graph schema
-   - Add example usage
+### Adding a New Memory Type
+1. Extend `persona/models/memory.py`
+2. Update `MemoryStore` in `persona/core/memory_store.py`
+3. Update `ContextFormatter` in `persona/core/context.py`
+4. Add tests
 
 ## Troubleshooting
 
@@ -190,61 +124,25 @@ class UserService:
 
 2. **API Issues**
    - Check FastAPI logs: `docker logs persona-app`
-   - Verify request format matches API docs
    - Use debug mode: `docker compose logs app`
 
 3. **Testing Problems**
-   - Ensure all services are running: `docker compose up -d`
-   - Check OpenAI API key is valid
-   - Verify test database connection
-
-4. **OpenAI API Costs**
-   - Tests will consume API calls
-   - Monitor usage in OpenAI dashboard
-   - Consider using test API keys for development
-
-## Best Practices
-
-1. **Code Quality**
-   - Write docstrings
-   - Add type hints
-   - Keep functions focused
-   - Use meaningful names
-
-2. **Testing**
-   - Write tests first (TDD)
-   - Mock external services when possible
-   - Use fixtures
-   - Test edge cases
-
-3. **Git Workflow**
-   - Small, focused commits
-   - Clear commit messages
-   - Regular rebasing
-   - Clean PR history
+   - Ensure services are running: `docker compose up -d`
+   - Check API key is valid
 
 ## API Usage Examples
 
-### Create a User
 ```bash
+# Create a user
 curl -X POST "http://localhost:8000/api/v1/users/my_user"
-```
 
-### Ingest Data
-```bash
+# Ingest data
 curl -X POST "http://localhost:8000/api/v1/users/my_user/ingest" \
   -H "Content-Type: application/json" \
   -d '{"content": "I love Python programming"}'
-```
 
-### Query the Graph
-```bash
+# Query
 curl -X POST "http://localhost:8000/api/v1/users/my_user/rag/query" \
   -H "Content-Type: application/json" \
   -d '{"query": "What do I like?"}'
 ```
-
-### View Data in Neo4j
-```cypher
-MATCH (n:NodeName {UserId: 'my_user'}) RETURN n
-``` 

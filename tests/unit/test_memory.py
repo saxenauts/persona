@@ -12,6 +12,7 @@ from persona.models.memory import Memory, MemoryLink, IngestionOutput, EpisodeOu
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
 
 
+
 # ============================================================================
 # Memory Model Tests
 # ============================================================================
@@ -21,7 +22,8 @@ class TestMemoryModel:
     
     def test_create_episode_memory(self):
         """Test creating an episode memory."""
-        memory = Memory(
+        from persona.models.memory import EpisodeMemory
+        memory = EpisodeMemory(
             type="episode",
             title="Coffee with Sam",
             content="Met Sam for coffee to discuss his startup.",
@@ -35,7 +37,8 @@ class TestMemoryModel:
     
     def test_create_psyche_memory(self):
         """Test creating a psyche memory."""
-        memory = Memory(
+        from persona.models.memory import PsycheMemory
+        memory = PsycheMemory(
             type="psyche",
             title="preference",
             content="Prefers remote work",
@@ -47,7 +50,8 @@ class TestMemoryModel:
     
     def test_create_goal_memory(self):
         """Test creating a goal memory."""
-        memory = Memory(
+        from persona.models.memory import GoalMemory
+        memory = GoalMemory(
             type="goal",
             title="Buy groceries",
             content="Pick up milk and eggs",
@@ -63,7 +67,8 @@ class TestMemoryModel:
     def test_memory_timestamps(self):
         """Test timestamp fields."""
         old_time = datetime(2024, 1, 1)
-        memory = Memory(
+        from persona.models.memory import EpisodeMemory
+        memory = EpisodeMemory(
             type="episode",
             title="Old memory",
             content="From last year",
@@ -114,7 +119,7 @@ class TestMemoryIngestion:
     @pytest.fixture
     def mock_embedding_client(self):
         mock = AsyncMock()
-        mock.embed = AsyncMock(return_value=[[0.1] * 1536])
+        mock.embeddings = AsyncMock(return_value=[[0.1] * 1536])
         return mock
     
     @pytest.mark.asyncio
@@ -148,7 +153,7 @@ class TestMemoryIngestion:
             "goals": [{"type": "task", "title": "Update resume", "content": "", "status": "active"}]
         })
         mock_chat_client.chat = AsyncMock(return_value=mock_response)
-        mock_embedding_client.embed = AsyncMock(return_value=[[0.1] * 1536, [0.2] * 1536, [0.3] * 1536])
+        mock_embedding_client.embeddings = AsyncMock(return_value=[[0.1] * 1536, [0.2] * 1536, [0.3] * 1536])
         
         with patch('persona.services.ingestion_service.get_chat_client', return_value=mock_chat_client), \
              patch('persona.services.ingestion_service.get_embedding_client', return_value=mock_embedding_client):
@@ -177,7 +182,7 @@ class TestMemoryIngestion:
             "goals": []
         })
         mock_chat_client.chat = AsyncMock(return_value=mock_response)
-        mock_embedding_client.embed = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+        mock_embedding_client.embeddings = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
         
         with patch('persona.services.ingestion_service.get_chat_client', return_value=mock_chat_client), \
              patch('persona.services.ingestion_service.get_embedding_client', return_value=mock_embedding_client):
@@ -186,4 +191,4 @@ class TestMemoryIngestion:
             result = await service.ingest("Test", "test-user")
             
             assert result.memories[0].embedding is not None
-            mock_embedding_client.embed.assert_called_once()
+            mock_embedding_client.embeddings.assert_called_once()

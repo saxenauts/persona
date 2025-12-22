@@ -1,56 +1,103 @@
 # LLM Codebase Overview
 
-This document describes the modules under `persona/llm` that implement the integration with OpenAI models. These utilities are used throughout the service layer to build and query the user's knowledge graph. If you are completely new to the repository, first skim [CODEBASE_OVERVIEW.md](CODEBASE_OVERVIEW.md) to see how the rest of the project is organised.
+This document describes the LLM integration modules under `persona/llm/`.
 
-## Modules
+## Architecture
 
-### `embeddings.py`
-- Provides `generate_embeddings` which calls the OpenAI embedding API.
-- Returns 1536 dimensional vectors used for Neo4j's vector index.
-
-```python
-openai_client = openai.Client(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
-
-def generate_embeddings(texts, model="text-embedding-3-small"):
-    response = openai_client.embeddings.create(input=texts, model=model, dimensions=1536)
-    embeddings = [data.embedding for data in response.data]
+```
+llm/
+├── client_factory.py      # Provider-agnostic client creation
+├── embeddings.py          # Embedding generation
+├── llm_graph.py           # LLM-powered functions
+├── prompts.py             # Prompt templates
+└── providers/
+    ├── base.py            # Abstract base class
+    ├── openai_client.py   # OpenAI implementation
+    ├── azure_openai_client.py
+    ├── anthropic_client.py
+    └── gemini_client.py
 ```
 
-### `prompts.py`
-- Stores all prompt templates that instruct the LLM.
-- Includes templates for node extraction, relationship extraction, community detection and structured Q&A.
+## Client Factory
 
-### `llm_graph.py`
-- Central async helper for calling the chat completion API.
-- Defines `Node` and `Relationship` schema objects and functions that drive graph construction and querying.
+The factory creates LLM clients based on environment configuration:
 
 ```python
-openai_client = openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
-client = instructor.from_openai(openai_client)
+from persona.llm.client_factory import get_chat_client, get_embedding_client
 
-class Node(OpenAISchema):
-    name: str = Field(..., description="The node content - can be a simple label ...")
-```
+# Get clients (cached singletons)
+chat_client = get_chat_client()
+embedding_client = get_embedding_client()
 
-Key functions include:
-- `get_nodes(text, graph_context)` – extracts important nodes from raw text.
-- `get_relationships(nodes, graph_context)` – infers relationships between nodes.
-- `generate_response_with_context(query, context)` – answers questions about a user using provided graph context.
-- `detect_communities(subgraphs_text)` – organizes subgraphs into meaningful communities.
-- `generate_structured_insights(ask_request, context)` – returns JSON formatted answers.
+# Use for chat
+response = await chat_client.chat(messages=[
+    ChatMessage(role="user", content="Hello")
+])
+print(response.content)
 
-```python
-response = await client.chat.completions.create(
-    model='gpt-4o-mini',
-    messages=[{"role": "system", "content": combined_instructions}, {"role": "user", "content": text}],
-    response_model=List[Node]
-)
+# Use for embeddings
+embeddings = await embedding_client.embeddings(["text to embed"])
 ```
 
 ## Configuration
 
-The OpenAI API key is loaded from the environment via `server.config`. Ensure `OPENAI_API_KEY` is defined in `.env` before running the application.
+Set via environment variables:
 
-## Summary
+```env
+# Format: provider/model
+LLM_SERVICE=openai/gpt-4o-mini
+EMBEDDING_SERVICE=openai/text-embedding-3-small
 
-These modules abstract all LLM interactions. Services such as the `GraphConstructor` or `RAGInterface` call into them to enrich the user's knowledge graph and to generate answers using Retrieval Augmented Generation.
+# Provider-specific keys
+OPENAI_API_KEY=sk-...
+AZURE_API_KEY=...
+ANTHROPIC_API_KEY=...
+```
+
+## Core Functions
+
+### `generate_response_with_context`
+
+Generates RAG responses using retrieved context:
+
+```python
+from persona.llm.llm_graph import generate_response_with_context
+
+response = await generate_response_with_context(
+    query="What projects am I working on?",
+    context="<memory_context>...</memory_context>"
+)
+```
+
+### `generate_structured_insights`
+
+Generates JSON-structured answers matching a schema:
+
+```python
+from persona.llm.llm_graph import generate_structured_insights
+from persona.models.schema import AskRequest
+
+request = AskRequest(
+    query="What are my preferences?",
+    output_schema={"preferences": ["example"], "summary": "string"}
+)
+
+result = await generate_structured_insights(request, context)
+# Returns: {"preferences": ["remote work"], "summary": "..."}
+```
+
+## Embeddings
+
+```python
+from persona.llm.embeddings import generate_embeddings_async
+
+# Returns list of 1536-dimensional vectors
+embeddings = await generate_embeddings_async(["text 1", "text 2"])
+```
+
+## Adding a New Provider
+
+1. Create `providers/new_provider_client.py`
+2. Extend `BaseLLMClient`
+3. Implement `chat()` and `embeddings()` methods
+4. Add to `client_factory.py`

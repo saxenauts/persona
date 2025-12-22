@@ -13,7 +13,6 @@ Returns the current API version.
 ### Create User
 ```http
 POST /users/{user_id}
-Content-Type: application/json
 
 Response: 201 Created
 {
@@ -31,47 +30,35 @@ Response: 200 OK
 }
 ```
 
-## Data Operations
+## Ingestion
 
-### Ingest Data
+### Ingest Content
 ```http
 POST /users/{user_id}/ingest
 Content-Type: application/json
 
 {
-    "content": "string"  // Conversation or text content
+    "content": "Had a great meeting with Sarah about the Q4 roadmap...",
+    "source_type": "conversation"
 }
 
 Response: 201 Created
 {
-    "message": "Data ingested successfully"
+    "message": "Content ingested successfully",
+    "memories_created": 3
 }
 ```
 
-### Add Custom Data
+### Batch Ingest
 ```http
-POST /users/{user_id}/custom-data
+POST /users/{user_id}/ingest/batch
 Content-Type: application/json
 
 {
-    "nodes": [
-        {
-            "name": "string",  // Unique identifier for this node
-            "properties": {
-                "key1": "value1",
-                "key2": "value2"
-            },
-            "target": "string",  // Optional target node
-            "relation": "string" // Optional relationship type
-        }
+    "items": [
+        {"content": "First entry...", "source_type": "notes"},
+        {"content": "Second entry...", "source_type": "conversation"}
     ]
-}
-
-Response: 200 OK
-{
-    "status": "success",
-    "message": "Added {n} nodes and {m} relationships",
-    "nodes": ["node1", "node2"]
 }
 ```
 
@@ -83,83 +70,44 @@ POST /users/{user_id}/rag/query
 Content-Type: application/json
 
 {
-    "query": "string"
+    "query": "What projects am I working on?"
 }
 
 Response: 200 OK
 {
-    "answer": "string"
+    "query": "What projects am I working on?",
+    "response": "Based on your memories, you're working on..."
 }
 ```
 
-### Vector-Only RAG Query
-```http
-POST /users/{user_id}/rag/query-vector
-Content-Type: application/json
-
-{
-    "query": "string"
-}
-
-Response: 200 OK
-{
-    "query": "string",
-    "response": "string"
-}
-```
-
-### Ask Insights
+### Ask (Structured Insights)
 ```http
 POST /users/{user_id}/ask
 Content-Type: application/json
 
 {
-    "query": "string",
+    "query": "What are my preferences?",
     "output_schema": {
-        // Expected output structure with example values
+        "preferences": ["example"],
+        "summary": "string"
     }
 }
 
 Response: 200 OK
 {
     "result": {
-        // Response matching output_schema
+        "preferences": ["remote work", "morning meetings"],
+        "summary": "User prefers flexible work arrangements"
     }
 }
 ```
 
-## Error Handling
+## Error Responses
 
-All endpoints may return the following error responses:
-
-### 400 Bad Request
-```json
-{
-    "detail": "Error message explaining what went wrong"
-}
-```
-
-### 404 Not Found
-```json
-{
-    "detail": "Resource not found"
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-    "detail": "Internal server error"
-}
-```
-
-### 503 Service Unavailable
-```json
-{
-    "detail": "Database connection error. Please ensure Neo4j is running and accessible."
-}
-```
-
-## Database Connection
-
-The API requires a running Neo4j instance. If Neo4j is not accessible, most endpoints will return a 503 error. Ensure Neo4j is running and properly configured in your environment variables before using the API.
+| Code | Description |
+|------|-------------|
+| 400 | Bad Request - Invalid input |
+| 404 | User not found |
+| 500 | Internal server error |
+| 502 | External service (LLM) error |
+| 503 | Database connection error |

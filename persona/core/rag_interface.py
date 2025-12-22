@@ -20,7 +20,7 @@ class RAGInterface:
     """
     Retrieval-Augmented Generation interface for Persona.
     
-    Uses the new Retriever (Vector Search + Graph Crawl) for context retrieval.
+    Uses the Retriever (Vector Search + Graph Crawl) for context retrieval.
     """
     
     def __init__(self, user_id: str):

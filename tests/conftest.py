@@ -9,7 +9,6 @@ from persona.core import GraphOps
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 from persona.core.backends.neo4j_vector import Neo4jVectorStore
 from server.config import config
-from persona.models.schema import Node
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -77,9 +76,12 @@ def mock_llm_clients(monkeypatch):
         return embeddings
     
     # Mock the generate_embeddings function used throughout the system
+    async def async_deterministic_embedding(texts):
+        return deterministic_embedding(texts)
+    
     monkeypatch.setattr(
-        "persona.core.graph_ops.generate_embeddings",
-        deterministic_embedding
+        "persona.llm.embeddings.generate_embeddings_async",
+        async_deterministic_embedding
     )
     
     # Mock the new LLM client system
@@ -103,16 +105,6 @@ def mock_llm_clients(monkeypatch):
 @pytest.fixture(autouse=True)
 def mock_llm_graph_calls(monkeypatch):
     """Mock LLM calls for graph construction and querying - always active to prevent real API calls."""
-    # Return a dummy node to allow ingestion pipeline to proceed
-    from persona.llm.llm_graph import Node
-    dummy_node = Node(name="Dummy Node", type="Test")
-    
-    async def mock_get_nodes(*args, **kwargs):
-        return [dummy_node]
-    
-    async def mock_get_relationships(*args, **kwargs):
-        return ([], {})
-    
     async def mock_generate_response_with_context(*args, **kwargs):
         return "This is a mocked RAG response based on the provided context."
     
@@ -121,8 +113,6 @@ def mock_llm_graph_calls(monkeypatch):
         return {k: f"mocked_{k}" if isinstance(v, str) else ["mocked_item"] if isinstance(v, list) else {"mocked_key": "mocked_value"} 
                 for k, v in ask_request.output_schema.items()}
     
-    monkeypatch.setattr("persona.llm.llm_graph.get_nodes", mock_get_nodes)
-    monkeypatch.setattr("persona.llm.llm_graph.get_relationships", mock_get_relationships)
     monkeypatch.setattr("persona.llm.llm_graph.generate_response_with_context", mock_generate_response_with_context)
     monkeypatch.setattr("persona.llm.llm_graph.generate_structured_insights", mock_generate_structured_insights)
 

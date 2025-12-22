@@ -1,0 +1,24 @@
+longmemeval:
+  source: evals/data/longmemeval_oracle.json
+  sample_sizes:
+    single-session-user: 35
+    multi-session: 60
+    temporal-reasoning: 60
+    knowledge-update: 40
+    single-session-preference: 25
+personamem:
+  source: evals/data/personamem
+  variant: 32k
+  sample_sizes:
+    recall_user_shared_facts: 30
+    track_full_preference_evolution: 30
+    generalizing_to_new_scenarios: 20
+    provide_preference_aligned_recommendations: 20
+    recalling_the_reasons_behind_previous_updates: 20
+global:
+  random_seed: 42
+  adapters:
+  - persona
+  parallel_workers: 5
+  checkpoint_dir: evals/results
+  deep_logging: true

@@ -1,0 +1,14 @@
+longmemeval:
+  source: evals/data/longmemeval_oracle.json
+  sample_sizes:
+    single-session-user: 35
+    multi-session: 60
+    temporal-reasoning: 60
+    knowledge-update: 40
+    single-session-preference: 25
+global:
+  random_seed: 42
+  adapters:
+  - persona
+  parallel_workers: 5
+  deep_logging: true

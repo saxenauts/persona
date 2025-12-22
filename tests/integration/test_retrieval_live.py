@@ -7,7 +7,7 @@ Run with: poetry run python tests/integration/test_retrieval_live.py
 import asyncio
 from persona.core.rag_interface import RAGInterface
 
-USER_ID = "goal_tracking_eval_user"
+USER_ID = "eval_goal_tracking_user_v2"
 
 QUERIES = [
     "What goals do I have?",

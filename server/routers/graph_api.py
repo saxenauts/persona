@@ -2,18 +2,17 @@ from fastapi import APIRouter, HTTPException, status, Path, Depends, Body, Respo
 from persona.core.graph_ops import GraphOps
 from persona.core.rag_interface import RAGInterface
 from persona.models.schema import UserCreate, RAGQuery, RAGResponse
-from persona.models.schema import AskRequest, AskResponse, CustomGraphUpdate
+from persona.models.schema import AskRequest, AskResponse
 from persona.services.user_service import UserService
 from persona.services.rag_service import RAGService
 from persona.services.ask_service import AskService
-from persona.services.custom_data_service import CustomDataService
 from persona.adapters import PersonaAdapter
 from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
 import re
-from persona.models.schema import LearnRequest, LearnResponse, CustomNodeData, CustomRelationshipData
+
 
 logger = get_logger(__name__)
 
@@ -218,39 +217,7 @@ async def rag_query(
             raise HTTPException(status_code=502, detail="External service error. Please try again later.")
         raise HTTPException(status_code=500, detail="Internal server error occurred while processing query")
 
-@router.post("/users/{user_id}/rag/query-vector", status_code=status.HTTP_200_OK)
-async def rag_query_vector(
-    user_id: str = Path(..., description="The unique identifier for the user"),
-    query: RAGQuery = None,
-    graph_ops: GraphOps = Depends(get_graph_ops)
-):
-    try:
-        if not query or not query.query:
-            logger.warning(f"Empty vector query received for user {user_id}")
-            raise HTTPException(status_code=400, detail="Query is required")
-            
-        # Validate user exists
-        if not await graph_ops.user_exists(user_id):
-            logger.warning(f"Vector RAG query attempted for non-existent user: {user_id}")
-            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-            
-        logger.info(f"Processing vector RAG query for user {user_id}: {query.query[:100]}...")
-        rag = RAGInterface(user_id)
-        rag.graph_ops = graph_ops
-        
-        response = await rag.query_vector_only(query.query)
-        logger.info(f"Vector RAG query completed successfully for user {user_id}")
-        return {"query": query.query, "response": response}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error during vector-only RAG query for user {user_id}: {e}")
-        if "Neo4j" in str(e) or "database" in str(e).lower():
-            raise HTTPException(status_code=503, detail="Database connection error. Please try again later.")
-        if "openai" in str(e).lower() or "api" in str(e).lower():
-            raise HTTPException(status_code=502, detail="External service error. Please try again later.")
-        raise HTTPException(status_code=500, detail="Internal server error occurred while processing vector query")
+
 
 @router.post("/users/{user_id}/ask", response_model=AskResponse, status_code=status.HTTP_200_OK)
 async def ask_insights(
@@ -289,44 +256,3 @@ async def ask_insights(
         if "openai" in str(e).lower() or "api" in str(e).lower():
             raise HTTPException(status_code=502, detail="External service error. Please try again later.")
         raise HTTPException(status_code=500, detail="Internal server error occurred while processing insights request")
-
-@router.post("/users/{user_id}/custom-data", status_code=status.HTTP_200_OK)
-async def update_custom_data(
-    user_id: str = Path(..., description="The unique identifier for the user"),
-    update: CustomGraphUpdate = None,
-    graph_ops: GraphOps = Depends(get_graph_ops)
-):
-    """
-    Update or create custom structured data in the graph
-    """
-    try:
-        if not update:
-            logger.warning(f"Empty custom data update received for user {user_id}")
-            raise HTTPException(status_code=400, detail="Request body is required")
-            
-        # Validate user exists
-        if not await graph_ops.user_exists(user_id):
-            logger.warning(f"Custom data update attempted for non-existent user: {user_id}")
-            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-            
-        # Validate update content
-        if not update.nodes and not update.relationships:
-            logger.warning(f"Empty custom data update for user {user_id}")
-            raise HTTPException(status_code=400, detail="At least one node or relationship must be provided")
-            
-        logger.info(f"Processing custom data update for user {user_id}: {len(update.nodes or [])} nodes, {len(update.relationships or [])} relationships")
-        custom_service = CustomDataService(graph_ops)
-        result = await custom_service.update_custom_data(user_id, update)
-        logger.info(f"Custom data update completed successfully for user {user_id}")
-        return result
-        
-    except HTTPException:
-        raise
-    except ValueError as e:
-        logger.warning(f"Invalid custom data format for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Invalid data format: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error in custom data update for user {user_id}: {str(e)}")
-        if "Neo4j" in str(e) or "database" in str(e).lower():
-            raise HTTPException(status_code=503, detail="Database connection error. Please try again later.")
-        raise HTTPException(status_code=500, detail="Internal server error occurred while updating custom data")

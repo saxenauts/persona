@@ -22,3 +22,5 @@ evals/results/
 # Benchmark Logs
 benchmark_*.log
 analysis/
+
+.claude/

@@ -1,5 +1,17 @@
+# Legacy requirements file - Project uses Poetry (pyproject.toml)
+# These dependencies have been added to pyproject.toml via Poetry
+
+# Original dependencies
 requests
 tqdm
 aiohttp
 openai
-pathlib
+
+# New evaluation framework dependencies
+datasets>=4.4.2
+huggingface-hub>=1.2.3
+pyyaml
+
+# Note: Install all dependencies via Poetry:
+#   poetry install
+#   poetry add datasets huggingface_hub

@@ -4,164 +4,130 @@
 
 ## Overview
 
-Persona is a language dependent digital identity system that evolves with a user's digital footprint.
+Persona is a language-dependent digital identity system that evolves with a user's digital footprint.
 
-It creates and maintains a dynamic knowledge graph for each user, it provides contextually rich information to any programming interface, particularly LLM-based systems, enabling next-generation personalization and user-centric experiences.
+It creates and maintains a dynamic knowledge graph for each user, providing contextually rich information to any programming interface—particularly LLM-based systems—enabling next-generation personalization and user-centric experiences.
 
-At its core, Persona aims to create a memetic digital organism that can evolve and grow with the user, representing the user's mindspace digitally.
+At its core, Persona aims to create a **memetic digital organism** that can evolve and grow with the user, representing the user's mindspace digitally.
 
 ## Vision 
 
-Digital future is getting more personalized, and our apps and our web are getting data rich. The interfaces should naturally evolve and allow more personalized and dynamic experiences. Personalization at it's fundamental is about understanding the user.
+The digital future is getting more personalized, and our apps and web are getting data rich. Interfaces should naturally evolve and allow more personalized, dynamic experiences. Personalization at its fundamental is about **understanding the user**.
 
-Traditionally we have been understanding user as fixed and static relational data points in tables or vector embeddings. But our minds and identities are associative and dynamic in nature.
+Traditionally we've represented users as fixed, static relational data points in tables or vector embeddings. But our minds and identities are associative and dynamic in nature.
 
 We use language to connect different parts of our lives. With LLMs it's possible to map this complexity and to make sense of it. So our user representation should not be left behind. 
 
-Read the motivation and design decisions in depth [here](https://saxenauts.io/blog/persona-graph)
+Read the motivation and design decisions in depth [here](https://saxenauts.io/blog/persona-graph).
 
-Read the docs [here](http://docs.buildpersona.ai), see the example of transforming a simple app and supercharge it with personalization. 
+## Memory Model
 
-Persona is designed to build graph from unstructured user data like interaction logs, emails, chats, etc. 
+Persona organizes user data into three fundamental memory types:
 
-While Persona can support storing conversational history, it's not the primary purpose. There are better tools for that like Mem0.ai, MemGPT, etc.
+| Type | Purpose | Examples |
+|------|---------|----------|
+| **Episode** | What happened | Events, conversations, experiences |
+| **Psyche** | Who they are | Traits, preferences, values, beliefs |
+| **Goal** | What they want | Tasks, projects, reminders |
 
+All memories are connected through a knowledge graph with **temporal linking** for narrative continuity.
 
 ## Features
 
-- **Dynamic User Knowledge Graph Construction:** Automatically builds and updates a user's knowledge graph based on their interactions data.
-- **Custom Knowledge API:** Provide custom schema specific to your application and learn that information from your app's interaction logs. 
-- **Contextual Query Processing using RAG:** Enhances query responses by leveraging the user's knowledge graph.
+- **Dynamic Knowledge Graph Construction**: Automatically builds and updates a user's knowledge graph from interaction data
+- **Typed Memory System**: Three memory classes with semantic meaning (Episode, Psyche, Goal)
+- **Temporal Chaining**: Automatic linking of episodes to track narrative progression
+- **Contextual Query Processing**: RAG with vector similarity + graph traversal
+- **Structured Insights**: Ask questions and get JSON-structured answers
 
+## Quick Start
 
-## Prerequisites
+### Prerequisites
 
-- **Docker & Docker Compose**: Required for running Neo4j and the application
-- **OpenAI API Key**: Required for LLM operations (will consume API calls during testing)
-- **Python 3.12+**: For local development (optional, for running examples locally)
+- **Docker & Docker Compose**: Required for Neo4j and the application
+- **OpenAI API Key**: Required for LLM operations
 
-## Installation and Setup
+### Installation
 
-1. **Clone the Repository:**
+```bash
+git clone https://github.com/saxenauts/persona.git
+cd persona
+```
 
-   ```bash
-   git clone https://github.com/saxenauts/persona.git
-   cd persona
-   ```
+Create a `.env` file:
 
-2. **Set Up Environment Variables:**
+```env
+URI_NEO4J=bolt://neo4j:7687
+USER_NEO4J=neo4j
+PASSWORD_NEO4J=your_secure_password
+NEO4J_AUTH=neo4j/your_secure_password
 
-   Create a `.env` file in the root directory with the following content:
+LLM_SERVICE=openai/gpt-4o-mini
+EMBEDDING_SERVICE=openai/text-embedding-3-small
+OPENAI_API_KEY=your_openai_api_key
+```
 
-   ```env
-   URI_NEO4J=bolt://neo4j:7687
-   USER_NEO4J=neo4j
-   PASSWORD_NEO4J=your_secure_password
+Start services:
 
-   OPENAI_API_KEY=your_openai_api_key
+```bash
+docker compose up -d
+```
 
-   NEO4J_AUTH=neo4j/your_secure_password
-   ```
+Access the API at `http://localhost:8000/docs`.
 
-   **Important**: Replace `your_openai_api_key` with a valid OpenAI API key. The application will consume API calls for LLM operations.
+## API Endpoints
 
-3. **Start the Services:**
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/users/{user_id}` | Create a new user |
+| `DELETE /api/v1/users/{user_id}` | Delete a user |
+| `POST /api/v1/users/{user_id}/ingest` | Ingest text and extract memories |
+| `POST /api/v1/users/{user_id}/rag/query` | Query with full context retrieval |
+| `POST /api/v1/users/{user_id}/ask` | Get structured JSON insights |
 
-   ```bash
-   docker compose up -d
-   ```
-
-4. **Access the API:**
-
-   The API will be available at `http://localhost:8000`. Access the API documentation at `http://localhost:8000/docs`.
-   Check swagger UI at `http://localhost:8000/docs` to go through the endpoints.
-
-5. **Run Tests**
-
-   Current recommended method to run tests is through container, as the entire setup is container dependant with Neo4j. 
-   Test container is part of the compose group, so tests are already run through 'docker compose up' command.
-   To run tests separately:
-
-   ```bash
-   docker compose run --rm test
-   ```
-   
-   **Note**: Tests will consume OpenAI API calls. Monitor your usage in the OpenAI dashboard.
-
-6. **Try the Example:**
-
-   Run the conversation example to see Persona in action:
-
-   ```bash
-   docker compose run --rm -e DOCKER_ENV=1 app python examples/conversation.py
-   ```
-
-   This will ingest a sample conversation and build a knowledge graph. You can then explore the results in Neo4j Browser at `http://localhost:7474`.
+See full API documentation at `http://localhost:8000/docs`.
 
 ## Architecture
 
-Persona has the following components:
+```
+persona/
+├── adapters/          # Unified ingestion orchestrator
+├── core/              # Database ops, retrieval, context
+├── models/            # Memory types (Episode, Psyche, Goal)
+├── llm/               # Multi-provider LLM clients
+└── services/          # Business logic
 
-- **GraphOps:** Abstraction layer for graph database operations. Currently supports Neo4j but extensible.
-- **Constructor:** Constructs the user's knowledge graph.
-- **GraphContextRetriever:** Functions to fetch the relevant context from user's graph.
-- **LLMGraph:** All OpenAI API calls in Persona for graph construction, community detection, etc.
-- **Services:** Business logic for ingesting data, creating communities, rag, learning, asking services, and for adding custom data to graph. 
-- **API:** FastAPI server to serve the API endpoints. Easy to extend with new functionalities.
+server/                # FastAPI application
+tests/                 # Test suite
+```
 
-Persona uses following technologies:
+**Key Components:**
+- **PersonaAdapter**: Unified entry point for all data ingestion
+- **Retriever**: Vector similarity + graph traversal for context
+- **ContextFormatter**: Memory → XML context for LLM consumption
 
-- **Neo4j:** Graph database to store user's knowledge graph.
-- **Neo4j:** For vector database, we use HNSW. Neo4j uses Apache Lucene for their vector Index. 
-- **OpenAI:** All LLM calls.
-- **FastAPI:** API server.
-- **Docker:** Containerization for easy deployment and scalability.
+## Running Tests
 
-We plan to add LLM, Graph & Vector DB abstractions to extend these functionalities to other tools and frameworks.
+```bash
+# Docker (recommended)
+docker compose run --rm test
 
-
-## API Documentation
-
-Detailed API documentation is available at `http://localhost:8000/docs` once the services are up and running.
-
-The API follows RESTful patterns with the following endpoints:
-
-- `POST /api/v1/users/{user_id}` - Create a new user
-- `DELETE /api/v1/users/{user_id}` - Delete a user
-- `POST /api/v1/users/{user_id}/ingest` - Ingest data for a user
-- `POST /api/v1/users/{user_id}/rag/query` - Query user's knowledge graph
-- `POST /api/v1/users/{user_id}/ask` - Ask structured insights from user's data
-- `POST /api/v1/users/{user_id}/custom-data` - Add custom structured data
-
-Have a look at [docs](http://docs.buildpersona.ai) for examples and API usage. 
-
-
-### Code Structure
-
-- **server/**: FastAPI server code.
-- **persona/**: Contains the main application code.
-  - **core/**: Core functionalities and database migrations.
-  - **llm/**: All LLM calls in Persona.
-  - **models/**: Pydantic models for the application.
-  - **services/**: Business logic for different functionalities.
-  - **utils/**: Utility functions.
-- **tests/**: Contains all test cases.
-- **docs/**: Documentation files.
-- **docker-compose.yml**: Docker configuration for setting up services.
-- **Dockerfile**: Dockerfile for building the application container.
-- **pyproject.toml**: Poetry configuration file.
-- **README.md**: Project overview and setup instructions.
-
+# Local
+poetry install
+poetry run pytest tests/unit -v
+```
 
 ## Roadmap
 
-- [ ] Add LLM, Graph & Vector DB Abstractions for custom services. 
-- [ ] Text2Cypher with Graph Schema, and multiple schema support. 
-- [ ] User BYOA: Text2Graph2RecSys
-- [ ] Quantifiable Functions for Graph
-- [ ] Multiple word phrases as memetic units 
-- [ ] Self Organizing and Self Growing Graph Agent with Forgetting Mechanism
+- [ ] Intelligent forgetting
+- [ ] Associativity weight
+- [ ] Memory relevance metric
+- [ ] Agentic memory update and linking
+- [ ] Agentic retrieval
+- [ ] Agentic manual edits
+- [ ] Real-time personalized context
+- [ ] Persona adapter cross-linking
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License
