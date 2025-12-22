@@ -201,7 +201,7 @@ async def rag_query(
             raise HTTPException(status_code=400, detail="Query is too long (max 1000 characters)")
             
         logger.info(f"Processing RAG query for user {user_id}: {query.query[:100]}...")
-        result = await RAGService.query(user_id, query.query, graph_ops)
+        result = await RAGService.query(user_id, query.query)
         logger.info(f"RAG query completed successfully for user {user_id}")
         return RAGResponse(answer=result)
         
@@ -273,7 +273,7 @@ async def ask_insights(
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
             
         logger.info(f"Processing ask insights for user {user_id}: {ask_request.query[:100]}...")
-        response = await AskService.ask_insights(user_id, ask_request, graph_ops)
+        response = await AskService.ask_insights(user_id, ask_request)
         logger.info(f"Ask insights completed successfully for user {user_id}")
         return response
         

@@ -22,6 +22,11 @@ class Retriever:
     
     V1 Implementation: Vector Search + Graph Crawl.
     
+    TODO:
+    - Agentic Retrieval: Implement multi-step retrieval loops to refine context.
+    - Reasoning Models: Enable toggle for o1/reasoning-style models for better query planning.
+    - Agent Loops: Instrumentation for multi-turn internal reasoning before final response.
+    
     Future Signals (TODO):
     - BM25: Keyword match for exact terms, proper nouns.
     - Type Filter: Restrict to specific memory types (goal, psyche).
