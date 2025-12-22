@@ -122,9 +122,10 @@ class MemoryIngestionService:
             
             # Create episode memory
             episode_id = uuid4()
-            episode = Memory(
+            from persona.models.memory import EpisodeMemory, PsycheMemory, GoalMemory
+            
+            episode = EpisodeMemory(
                 id=episode_id,
-                type="episode",
                 title=extraction.episode.title,
                 content=extraction.episode.content,
                 timestamp=timestamp,
@@ -139,9 +140,9 @@ class MemoryIngestionService:
             
             # Create psyche memories
             for p in extraction.psyche:
-                psyche = Memory(
+                psyche = PsycheMemory(
                     id=uuid4(),
-                    type="psyche",
+                    psyche_type=p.type,
                     title=p.type,
                     content=p.content,
                     timestamp=timestamp,
@@ -160,9 +161,9 @@ class MemoryIngestionService:
             
             # Create goal memories
             for g in extraction.goals:
-                goal = Memory(
+                goal = GoalMemory(
                     id=uuid4(),
-                    type="goal",
+                    goal_type=g.type,
                     title=g.title,
                     content=g.content,
                     status=g.status,
@@ -170,8 +171,7 @@ class MemoryIngestionService:
                     created_at=datetime.utcnow(),
                     day_id=day_id,
                     source_type=source_type,
-                    user_id=user_id,
-                    properties={"goal_type": g.type}
+                    user_id=user_id
                 )
                 memories.append(goal)
                 # Link goal to source episode

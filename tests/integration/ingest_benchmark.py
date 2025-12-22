@@ -17,12 +17,12 @@ from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 
 
-BENCHMARK_FILE = Path("/app/../evals/data/longmemeval/longmemeval_s_cleaned.json")
+BENCHMARK_FILE = Path("/app/tests/integration/fitness_benchmark_subset.json")
 
 # Questions to ingest (indices in the benchmark file)
-QUESTIONS_TO_INGEST = [0, 4]  # e47becba (degree), 1e043500 (spotify playlist)
+QUESTIONS_TO_INGEST = [0]  # Question 0 is "How many times a week do I have fitness class?" (47 sessions)
 
-USER_ID = "benchmark_user_v2"
+USER_ID = "fitness_test_v2"
 
 
 async def generate_memory_episode(
@@ -46,6 +46,9 @@ async def generate_memory_episode(
         print(f"  ❌ Failed: {result.error}")
         return None
     
+    # Get previous episode BEFORE creating new ones
+    previous = await memory_store.get_most_recent_episode(user_id)
+    
     # Persist all memories
     for memory in result.memories:
         memory_links = [l for l in result.links if l.source_id == memory.id]
@@ -53,10 +56,8 @@ async def generate_memory_episode(
     
     # Link episodes in temporal chain
     episode = next((m for m in result.memories if m.type == "episode"), None)
-    if episode:
-        previous = await memory_store.get_most_recent_episode(user_id)
-        if previous and previous.id != episode.id:
-            await memory_store.link_temporal_chain(episode, previous)
+    if episode and previous and previous.id != episode.id:
+        await memory_store.link_temporal_chain(episode, previous)
     
     return result
 
@@ -73,7 +74,7 @@ def format_session(session_messages):
 
 async def main():
     print("=" * 60)
-    print("LongMemEval Benchmark Ingestion")
+    print("LongMemEval Benchmark Ingestion: Fitness Question")
     print("=" * 60)
     
     # Load benchmark data
@@ -83,11 +84,14 @@ async def main():
     # Initialize services
     graph_db = Neo4jGraphDatabase()
     await graph_db.initialize()
+
+    # CLEANUP: Delete existing user data to ensure clean slate
+    print(f"🧹 Cleaning graph for user: {USER_ID}...")
+    await graph_db.delete_user(USER_ID)
     
-    # Ensure user exists
-    if not await graph_db.user_exists(USER_ID):
-        await graph_db.create_user(USER_ID)
-        print(f"✅ Created user: {USER_ID}")
+    # Create user (this will be a fresh start)
+    await graph_db.create_user(USER_ID)
+    print(f"✅ Created fresh user: {USER_ID}")
     
     memory_store = MemoryStore(graph_db)
     ingestion_service = MemoryIngestionService()
@@ -105,11 +109,11 @@ async def main():
         
         print(f"\n📌 Question: {q_text}")
         print(f"   Answer: {q_answer}")
-        print(f"   Sessions: {len(sessions)}")
+        print(f"   Total Sessions: {len(sessions)}")
         print("-" * 40)
         
-        # Ingest each session (limit to first 5 for speed in demo)
-        max_sessions = 5  # Change to len(sessions) to ingest ALL
+        # Ingest first 20 sessions
+        max_sessions = 20
         for i, (session, sid) in enumerate(zip(sessions[:max_sessions], session_ids[:max_sessions])):
             raw_content = format_session(session)
             
@@ -125,7 +129,7 @@ async def main():
             if result:
                 mem_count = len(result.memories)
                 total_memories += mem_count
-                print(f"  [{i+1}/{max_sessions}] {sid[:20]}... → {mem_count} memories")
+                print(f"  [{i+1}/{len(sessions)}] {sid[:20]}... → {mem_count} memories")
             
             total_sessions += 1
     
@@ -138,28 +142,32 @@ async def main():
     print(f"   User ID: {USER_ID}")
     print("=" * 60)
     
-    print("\n📊 NEO4J QUERIES TO VERIFY:")
+    print("\n📊 NEO4J QUERIES TO VERIFY (Use these in Neo4j Browser):")
     print("-" * 40)
+    
+    clean_uid = USER_ID.replace("-", "_").replace(" ", "_")
+    user_label = f"User_{clean_uid}"
+    
     print(f"""
-// Get all memories for this user
-MATCH (n) WHERE n.user_id = '{USER_ID}'
-RETURN n.type, n.title, n.content
-ORDER BY n.timestamp
+// 1. Verify User Isolation: Count nodes with correct label
+MATCH (n:{user_label}) 
+RETURN count(n) as {user_label}_count;
 
-// Count by type
-MATCH (n) WHERE n.user_id = '{USER_ID}'
-RETURN n.type, count(*) as count
+// 2. View most recent Episodes (Temporal Chain)
+MATCH (n:Episode:{user_label})
+RETURN n.id, n.created_at, n.summary
+ORDER BY n.created_at DESC
+LIMIT 10;
 
-// View all relationships
-MATCH (a)-[r]->(b)
-WHERE a.user_id = '{USER_ID}'
-RETURN a.title, type(r), b.title
-LIMIT 50
+// 3. Inspect Memory Hierarchy (Episode -> Psyche -> Goal)
+MATCH (e:Episode:{user_label})-[r]-(m:Psyche:{user_label})
+RETURN e.summary as Episode, type(r) as Relation, m.content as PsycheMemory
+LIMIT 20;
 
-// Visualize full graph
-MATCH (n) WHERE n.user_id = '{USER_ID}'
-OPTIONAL MATCH (n)-[r]-(m)
-RETURN n, r, m
+// 4. Check Vector Index Usage (Implicitly via a search query simulation)
+CALL db.index.vector.queryNodes('vector_idx_{clean_uid}', 5, [0.1, 0.1, ...]) 
+YIELD node, score
+RETURN node.name, score;
 """)
 
 

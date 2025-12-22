@@ -28,60 +28,78 @@ class Neo4jVectorStore(VectorStore):
         self.password = config.NEO4J.PASSWORD
         self._shared_driver = graph_driver is not None
         self.driver = graph_driver
-        self.index_name = "embeddings_index"
+        # Global index is deprecated in favor of per-user indexes
+        # self.index_name = "embeddings_index" 
     
     async def initialize(self) -> None:
-        """Initialize and ensure vector index exists."""
+        """Initialize connection."""
         if not self.driver:
             self.driver = AsyncGraphDatabase.driver(
                 self.uri,
                 auth=basic_auth(self.username, self.password),
                 max_connection_lifetime=3600
             )
-        await self._ensure_vector_index()
+        # No global index initialization needed anymore
     
     async def close(self) -> None:
         """Close connection if we own it."""
         if not self._shared_driver and self.driver:
             await self.driver.close()
             self.driver = None
-    
-    async def _ensure_vector_index(self) -> None:
-        """Create vector index if it doesn't exist."""
-        async with self.driver.session() as session:
-            result = await session.run("SHOW VECTOR INDEXES")
-            indexes = await result.data()
-            index_exists = any(idx['name'] == self.index_name for idx in indexes)
             
-            if not index_exists:
-                query = """
-                CREATE VECTOR INDEX embeddings_index
-                FOR (n:NodeName)
-                ON (n.embedding)
-                OPTIONS {indexConfig: {
-                    `vector.dimensions`: 1536,
-                    `vector.similarity_function`: 'cosine'
-                }}
-                """
-                try:
-                    await session.run(query)
-                    logger.info(f"Vector index '{self.index_name}' created.")
-                except Exception as e:
-                    if "EquivalentSchemaRuleAlreadyExists" in str(e):
-                        logger.debug(f"Vector index '{self.index_name}' already exists.")
-                    else:
-                        raise e
-            else:
-                logger.debug(f"Vector index '{self.index_name}' already exists.")
+    def _get_user_label(self, user_id: str) -> str:
+        """Get the dynamic label for a user's nodes."""
+        # Sanitize simple just in case, though backticks handle most
+        clean_id = user_id.replace("-", "_").replace(" ", "_")
+        return f"User_{clean_id}"
+
+    def _get_index_name(self, user_id: str) -> str:
+        """Get the dynamic vector index name for a user."""
+        clean_id = user_id.replace("-", "_").replace(" ", "_")
+        return f"vector_idx_{clean_id}"
+    
+    async def _ensure_user_index(self, user_id: str) -> None:
+        """Ensure a vector index exists for this specific user."""
+        index_name = self._get_index_name(user_id)
+        user_label = self._get_user_label(user_id)
+        
+        query = f"""
+        CREATE VECTOR INDEX {index_name} IF NOT EXISTS
+        FOR (n:{user_label})
+        ON (n.embedding)
+        OPTIONS {{indexConfig: {{
+            `vector.dimensions`: 1536,
+            `vector.similarity_function`: 'cosine'
+        }}}}
+        """
+        async with self.driver.session() as session:
+            try:
+                await session.run(query)
+                # logger.debug(f"Ensured vector index '{index_name}' exists.")
+            except Exception as e:
+                logger.error(f"Failed to create index {index_name}: {e}")
+                raise e
     
     async def add_embedding(self, node_name: str, embedding: List[float], user_id: str) -> None:
-        """Add or update embedding for a node."""
+        """Add or update embedding for a node.
+        
+        This also:
+        1. Adds the User_{ID} label to the node (required for the index).
+        2. Ensures the user's specific vector index exists.
+        """
         if not self._validate_embedding(embedding):
             logger.error(f"Invalid embedding format for node {node_name}.")
             return
         
-        query = """
-        MATCH (n {name: $node_name, UserId: $user_id})
+        # 1. Ensure index exists for this user
+        await self._ensure_user_index(user_id)
+        
+        user_label = self._get_user_label(user_id)
+        
+        # 2. Add embedding AND proper user label
+        query = f"""
+        MATCH (n {{name: $node_name, UserId: $user_id}})
+        SET n:{user_label}
         CALL db.create.setNodeVectorProperty(n, 'embedding', $embedding)
         """
         async with self.driver.session() as session:
@@ -93,37 +111,33 @@ class Neo4jVectorStore(VectorStore):
         user_id: str, 
         limit: int = 5
     ) -> List[Dict[str, Any]]:
-        """Search for similar vectors.
+        """Search for similar vectors using User-Specific Index.
         
-        Note: Uses a higher internal limit to handle multi-user index.
-        The WHERE filter is applied after vector search, so we need to
-        scan more candidates to find our user's nodes.
-        
-        Returns:
-            List of dicts with keys: node_name, score
+        This provides perfect isolation. We query ONLY the index for this user.
+        No global competition ("crowding out") is possible.
         """
-        # Use higher internal limit to handle multi-user index
-        # The WHERE clause filters after vector search, so we need more candidates
-        internal_limit = max(limit * 100, 500)
+        index_name = self._get_index_name(user_id)
         
-        query = """
-        CALL db.index.vector.queryNodes($indexName, $internal_limit, $embedding)
+        # Note: If the user has no index yet (no data), this might fail or return empty.
+        # We handle this gracefully.
+        
+        query = f"""
+        CALL db.index.vector.queryNodes($indexName, $limit, $embedding)
         YIELD node, score
-        WHERE node.UserId = $user_id
         RETURN node.name AS node_name, score
         ORDER BY score DESC
-        LIMIT $limit
         """
         results = []
         async with self.driver.session() as session:
+            # Check if index exists first to avoid error? 
+            # Or just try/catch the procedure call.
+            
             tx = await session.begin_transaction()
             try:
                 result = await tx.run(
                     query, 
-                    indexName=self.index_name, 
+                    indexName=index_name, 
                     embedding=embedding, 
-                    user_id=user_id,
-                    internal_limit=internal_limit,
                     limit=limit
                 )
                 async for record in result:
@@ -134,7 +148,11 @@ class Neo4jVectorStore(VectorStore):
                 await tx.commit()
             except Exception as e:
                 await tx.rollback()
-                raise
+                # If index doesn't exist, it means user has no vector data yet.
+                if "Procedure call provided invalid name" in str(e) or "Index not found" in str(e):
+                    logger.debug(f"Vector search for user {user_id} returned no results (index missing).")
+                    return []
+                raise e
             finally:
                 await tx.close()
         return results
@@ -144,11 +162,19 @@ class Neo4jVectorStore(VectorStore):
         """Validate embedding format."""
         return isinstance(embedding, list) and all(isinstance(item, float) for item in embedding)
     
-    async def drop_index(self) -> None:
-        """Drop the vector index (for testing)."""
+    async def drop_index(self, user_id: str = None) -> None:
+        """Drop vector index.
+        
+        Args:
+            user_id: If provided, drops ONLY that user's index.
+                     If None, attempts to drop the legacy global index.
+        """
         async with self.driver.session() as session:
-            result = await session.run("SHOW VECTOR INDEXES")
-            indexes = await result.data()
-            if any(idx['name'] == self.index_name for idx in indexes):
-                await session.run(f"DROP INDEX `{self.index_name}`")
-                logger.info(f"Vector index '{self.index_name}' dropped.")
+            if user_id:
+                index_name = self._get_index_name(user_id)
+                await session.run(f"DROP INDEX {index_name} IF EXISTS")
+                logger.info(f"Dropped vector index for user {user_id}")
+            else:
+                # Legacy global index drop
+                await session.run("DROP INDEX embeddings_index IF EXISTS")
+

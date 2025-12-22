@@ -72,13 +72,35 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             for node in nodes:
                 node_type = node.get("type", "").replace(" ", "").replace("/", "")
-                labels = "NodeName"
+                
+                # Dynamic User Label for Isolation
+                clean_uid = user_id.replace("-", "_").replace(" ", "_")
+                user_label = f"User_{clean_uid}"
+                
+                labels = f"NodeName:{user_label}"
                 if node_type:
-                    labels = f"NodeName:{node_type}"
+                    labels += f":{node_type}"
                 
                 # Extract all properties as flat key-value pairs
-                # Skip 'name' and 'type' as they're handled separately
-                props = {k: v for k, v in node.items() if k not in ['name']}
+                # Skip 'name' as it's handled in MERGE, but KEEP 'type' as a property
+                props = {}
+                for k, v in node.items():
+                    if k == 'name':
+                        continue
+                    
+                    # Serialize complex types (dict or lists of complex types) to JSON string
+                    # Neo4j supports lists of primitive types natively
+                    is_complex = isinstance(v, dict)
+                    if isinstance(v, list) and v:
+                        # If list contains dicts or other lists, it's complex
+                        if any(isinstance(item, (dict, list)) for item in v):
+                            is_complex = True
+                    
+                    if is_complex:
+                        import json
+                        props[k] = json.dumps(v)
+                    else:
+                        props[k] = v
                 
                 # Build dynamic SET clause for all properties
                 set_clauses = []

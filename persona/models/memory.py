@@ -11,97 +11,69 @@ Links connect memories to each other.
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union, Annotated, Literal
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 
-class Memory(BaseModel):
-    """
-    A unified memory unit.
-    
-    The `type` field determines what kind of memory this is:
-    - episode: narrative memory (what happened)
-    - psyche: trait, preference, value, belief
-    - goal: task, project, todo, reminder
-    
-    All memories can link to other memories via edges.
-    """
-    
+class BaseMemory(BaseModel):
+    """Base fields for all memory units."""
     id: UUID = Field(default_factory=uuid4)
+    type: str = Field(..., description="The discriminator field (episode, psyche, goal)")
     
-    # Type determines the memory category
-    type: str = Field(
-        ...,
-        description="Memory type: episode, psyche, goal, etc."
-    )
-    
-    # Content
-    title: str = Field(
-        default="",
-        description="Short title for display"
-    )
-    content: str = Field(
-        ...,
-        description="The memory content in natural language"
-    )
+    # Generic content
+    title: str = Field(default="", description="Short title for display")
+    content: str = Field(..., description="The memory content in natural language")
     
     # Temporal anchoring
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="When this memory refers to"
-    )
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="When this record was created in the system"
-    )
-    day_id: Optional[str] = Field(
-        default=None,
-        description="YYYY-MM-DD format for day-level queries"
-    )
-    
-    # Optional fields (used by specific types)
-    status: Optional[str] = Field(
-        default=None,
-        description="For goals: active, completed, blocked, etc."
-    )
-    due_date: Optional[datetime] = Field(
-        default=None,
-        description="For goals: deadline"
-    )
-    session_id: Optional[str] = Field(
-        default=None,
-        description="For episodes: groups memories within a session"
-    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    day_id: Optional[str] = Field(default=None)
     
     # Provenance
-    source_type: str = Field(
-        default="conversation",
-        description="Origin: conversation, instagram, spotify, etc."
-    )
-    source_ref: Optional[str] = Field(
-        default=None,
-        description="Original message ID, URL, etc."
-    )
+    source_type: str = Field(default="conversation")
+    source_ref: Optional[str] = Field(default=None)
     
     # Retrieval
-    embedding: Optional[List[float]] = Field(
-        default=None,
-        description="Vector embedding for similarity search"
-    )
+    embedding: Optional[List[float]] = Field(default=None)
     
-    # Decay mechanics
+    # User ownership
+    user_id: str = Field(...)
+    
+    # Retention
     access_count: int = Field(default=0)
     last_accessed: Optional[datetime] = Field(default=None)
     
-    # User ownership
-    user_id: str = Field(..., description="User this memory belongs to")
-    
-    # Additional properties (flexible)
-    properties: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional type-specific properties"
-    )
+    # Catch-all for forward compatibility
+    properties: Dict[str, Any] = Field(default_factory=dict)
+
+
+class EpisodeMemory(BaseMemory):
+    """Narrative memory of an event."""
+    type: Literal["episode"] = Field(default="episode")
+    session_id: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class PsycheMemory(BaseMemory):
+    """Identity related memory (trait, preference, value, belief)."""
+    type: Literal["psyche"] = Field(default="psyche")
+    psyche_type: Optional[str] = Field(default=None, description="trait, preference, value, belief")
+
+
+class GoalMemory(BaseMemory):
+    """Action oriented memory (task, project, todo, reminder)."""
+    type: Literal["goal"] = Field(default="goal")
+    goal_type: Optional[str] = Field(default=None, description="task, project, reminder, routine, etc.")
+    status: str = Field(default="active")
+    due_date: Optional[datetime] = None
+
+
+# The Unified Memory type using Discriminated Union
+Memory = Annotated[
+    Union[EpisodeMemory, PsycheMemory, GoalMemory],
+    Field(discriminator='type')
+]
 
 
 class MemoryLink(BaseModel):

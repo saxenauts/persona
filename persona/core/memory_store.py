@@ -48,29 +48,24 @@ class MemoryStore:
         
         # Create the memory node with FLAT properties (not nested JSON)
         # This is backend-agnostic: each field becomes a native property
-        node_data = {
-            "name": str(memory.id),
-            "type": memory.type,
-            # All fields as flat properties
-            "id": str(memory.id),
-            "title": memory.title,
-            "content": memory.content,
-            "timestamp": memory.timestamp.isoformat(),
-            "created_at": memory.created_at.isoformat(),
-            "day_id": memory.day_id,
-            "session_id": memory.session_id,
-            "source_type": memory.source_type,
-            "source_ref": memory.source_ref,
-            "access_count": memory.access_count,
-            # Optional fields
-            "status": memory.status,
-            "due_date": memory.due_date.isoformat() if memory.due_date else None,
-            "last_accessed": memory.last_accessed.isoformat() if memory.last_accessed else None,
-            # Embedding as list (for vector backends)
-            "embedding": memory.embedding,
-            # Extra properties dict (rarely used)
-            "extra": memory.properties if memory.properties else None,
-        }
+        node_data = memory.model_dump(exclude={'properties'})
+        node_data["name"] = str(memory.id)  # Neo4j uses 'name' for merges
+        
+        # Stringify UUIDs and Datetimes for Neo4j driver
+        for k, v in node_data.items():
+            if isinstance(v, UUID):
+                node_data[k] = str(v)
+            elif isinstance(v, datetime):
+                node_data[k] = v.isoformat()
+        
+        # Merge extra properties if any
+        if hasattr(memory, 'properties') and memory.properties:
+            node_data.update(memory.properties)
+            
+        # Ensure timestamp is ISO string for Neo4j
+        for field in ['timestamp', 'created_at', 'due_date', 'last_accessed']:
+            if field in node_data and isinstance(node_data[field], datetime):
+                node_data[field] = node_data[field].isoformat()
         
         await self.graph_db.create_nodes([node_data], memory.user_id)
         
@@ -182,33 +177,48 @@ class MemoryStore:
         )
     
     def _node_to_memory(self, node: Dict[str, Any], user_id: str) -> Memory:
-        """Convert a graph node to a Memory model."""
-        props = node.get('properties', {})
+        """Convert a graph node to the correct polymorphic Memory model."""
+        from pydantic import TypeAdapter, ValidationError
+        import json
         
+        props = node.get('properties', {})
         # Handle flat properties (new format) vs nested properties (old format)
-        # New format: properties are at node level
-        # Old format: properties are in a nested 'properties' dict
         if not props and 'title' in node:
-            # New flat format
             props = node
         
-        return Memory(
-            id=UUID(props.get('id', node.get('name'))),
-            type=props.get('type', node.get('type', 'episode')),
-            title=props.get('title', ''),
-            content=props.get('content', ''),
-            timestamp=datetime.fromisoformat(props['timestamp']) if props.get('timestamp') else datetime.utcnow(),
-            created_at=datetime.fromisoformat(props['created_at']) if props.get('created_at') else datetime.utcnow(),
-            day_id=props.get('day_id'),
-            status=props.get('status'),
-            due_date=datetime.fromisoformat(props['due_date']) if props.get('due_date') else None,
-            session_id=props.get('session_id'),
-            source_type=props.get('source_type', 'conversation'),
-            source_ref=props.get('source_ref'),
-            access_count=props.get('access_count', 0),
-            last_accessed=datetime.fromisoformat(props['last_accessed']) if props.get('last_accessed') else None,
-            user_id=user_id
-        )
+        # Deserialization: Parse JSON strings if any
+        # This handles nested dicts/lists that were JSON-serialized
+        processed_props = {}
+        for k, v in props.items():
+            if isinstance(v, str) and (v.startswith('{') or v.startswith('[')):
+                try:
+                    processed_props[k] = json.loads(v)
+                except (json.JSONDecodeError, TypeError):
+                    processed_props[k] = v
+            else:
+                processed_props[k] = v
+        
+        # Ensure 'id' is a valid UUID string
+        if 'id' not in processed_props and 'name' in node:
+            processed_props['id'] = node['name']
+        
+        # Ensure user_id is set
+        processed_props['user_id'] = user_id
+        
+        try:
+            # Pydantic's TypeAdapter handles the discriminated union automatically!
+            # It looks at the 'type' field and instantiates Episode/Psyche/Goal accordingly.
+            return TypeAdapter(Memory).validate_python(processed_props)
+        except ValidationError as e:
+            logger.error(f"Failed to reconstruct memory {processed_props.get('id')}: {e}")
+            # Fallback to generic Memory-like structure if validation fails
+            # This prevents crashing on bad data
+            from persona.models.memory import EpisodeMemory
+            return EpisodeMemory(
+                **{k: v for k, v in processed_props.items() if k in EpisodeMemory.model_fields},
+                type='episode', # Force valid type
+                user_id=user_id
+            )
     
     # ========== Search Methods ==========
     
