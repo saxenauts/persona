@@ -1,110 +1,113 @@
+"""
+RAG Interface for Persona.
+
+Provides context retrieval and query answering using the Memory architecture.
+"""
+
 from typing import List, Dict, Any, Optional
-from persona.core.graph_ops import GraphOps, GraphContextRetriever
+from persona.core.graph_ops import GraphOps
+from persona.core.retrieval import Retriever
+from persona.core.memory_store import MemoryStore
+from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
+from persona.core.context import format_memories_for_llm
 from persona.llm.llm_graph import generate_response_with_context
-from persona.models.schema import Node
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class RAGInterface:
+    """
+    Retrieval-Augmented Generation interface for Persona.
+    
+    Uses the new Retriever (Vector Search + Graph Crawl) for context retrieval.
+    """
+    
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.graph_ops = None
-        self.graph_context_retriever = None
         self._memory_store = None
-
+        self._retriever = None
+        self._graph_db = None
+    
     async def __aenter__(self):
+        """Initialize resources."""
         self.graph_ops = await GraphOps().__aenter__()
-        self.graph_context_retriever = GraphContextRetriever(self.graph_ops)
+        
+        # Initialize memory store
+        self._graph_db = Neo4jGraphDatabase()
+        await self._graph_db.initialize()
+        self._memory_store = MemoryStore(self._graph_db)
+        
+        # Initialize retriever
+        self._retriever = Retriever(
+            user_id=self.user_id,
+            store=self._memory_store,
+            graph_ops=self.graph_ops
+        )
+        
         return self
-
+    
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Cleanup resources."""
         if self.graph_ops:
             await self.graph_ops.__aexit__(exc_type, exc_val, exc_tb)
-
-    async def get_context(self, query: str, top_k: int = 5, max_hops: int = 2) -> str:
-        if not self.graph_ops:
+        if self._graph_db:
+            await self._graph_db.close()
+    
+    async def get_context(
+        self, 
+        query: str, 
+        top_k: int = 5, 
+        hop_depth: int = 1,
+        include_static: bool = True
+    ) -> str:
+        """
+        Get formatted context for a query.
+        
+        Uses the new Retriever with Vector Search + Graph Crawl.
+        
+        Args:
+            query: Natural language query.
+            top_k: Number of vector search results.
+            hop_depth: How many relationship hops to crawl.
+            include_static: Whether to include active goals and psyche.
+        
+        Returns:
+            XML-formatted context string.
+        """
+        if not self._retriever:
             await self.__aenter__()
-        similar_nodes = await self.graph_ops.text_similarity_search(query=query, user_id=self.user_id, limit=top_k)
-        results = similar_nodes.get('results', [])
-        nodes = [Node(name=item['nodeName'], type="Unknown") for item in results]
-        seed_scores = {item['nodeName']: float(item.get('score', 0.0)) for item in results}
-
-        # Analyze query for retrieval routing
-        filt_types, qdate, hops = self._analyze_query(query, default_hops=max_hops)
-        logger.info(f"Nodes for RAG query: {nodes}; filter_types={filt_types}; qdate={qdate}; hops={hops}")
-        context = await self.graph_context_retriever.get_relevant_graph_context(
-            user_id=self.user_id,
-            nodes=nodes,
-            max_hops=hops,
-            filter_types=filt_types,
-            seed_scores=seed_scores,
-            question_date=qdate,
+        
+        context = await self._retriever.get_context(
+            query=query,
+            top_k=top_k,
+            hop_depth=hop_depth,
+            include_static=include_static
         )
+        
+        logger.info(f"RAGInterface: got {len(context)} chars context for query: {query[:50]}...")
         return context
-
+    
     async def query(self, query: str) -> str:
-        if not self.graph_ops:
+        """
+        Get a generated response for a query.
+        
+        Retrieves context and generates a response using LLM.
+        """
+        if not self._retriever:
             await self.__aenter__()
+        
         context = await self.get_context(query)
-        logger.info(f"Context for RAG query: {context}")
+        logger.info(f"Context for RAG query: {context[:200]}...")
+        
         response = await generate_response_with_context(query, context)
         return response
-
-    async def close(self):
-        await self.__aexit__(None, None, None)
-
-    async def query_vector_only(self, query: str) -> str:
-        if not self.graph_ops:
-            await self.__aenter__()
-        similar_nodes = await self.graph_ops.text_similarity_search(query=query, user_id=self.user_id, limit=5)
-        nodes = str([Node(name=node['nodeName'], type="Unknown") for node in similar_nodes.get('results', [])])
-        logger.debug(f"Vector context for RAG query: {nodes}")
-        response = await generate_response_with_context(query, nodes)
-        return response
     
-    async def format_vector_context(self, similar_nodes: List[Dict[str, Any]]) -> str:
-        if not self.graph_ops:
-            await self.__aenter__()
-        formatted = "# Vector Search Context\n\n"
-        for node in similar_nodes:
-            formatted += f"## {node['nodeName']}\n"
-            formatted += f"Similarity Score: {node['score']}\n"
-            node_data = await self.graph_ops.get_node_data(node['nodeName'], self.user_id)
-            formatted += f"Type: {node_data.type}\n"
-            formatted += f"Properties: {', '.join([f'{k}: {v}' for k, v in node_data.properties.items()])}\n\n"
-        logger.debug(f"Formatted vector context: {formatted}")
-        return formatted
-
-    def _analyze_query(self, query: str, default_hops: int = 2):
-        """
-        Lightweight heuristic routing for retrieval.
-        Returns (filter_types, question_date, hops)
-        """
-        import re
-        filter_types = set()
-        hops = default_hops
-
-        q = query.lower()
-        # Extract (date: YYYY/.. or YYYY-..)
-        m = re.search(r"\(date:\s*([0-9]{4}[/-][0-9]{2}[/-][0-9]{2}(?:[^)]*)?)\)", query)
-        question_date = m.group(1).strip() if m else None
-
-        # Preference-focused
-        if any(tok in q for tok in ["favorite", "favourite", "prefer", "likes", "dislikes", "preference"]):
-            filter_types.add("Preference")
-            hops = min(hops, 1)
-
-        # Temporal cues – if date present or words implying time ordering
-        if question_date or any(tok in q for tok in ["before", "after", "first", "last", "earlier", "later", "when", "date", "days", "weeks", "months"]):
-            # no change to hops yet; date will be used for scoring
-            pass
-
-        # Assistant-sourced hints – future: filter by properties.source == 'Assistant'
-        # (Not applied yet due to property-level filter not implemented in traversal)
-
-        return (filter_types if filter_types else None, question_date, hops)
-
+    async def close(self):
+        """Close resources."""
+        await self.__aexit__(None, None, None)
+    
     # ========== V2 Memory Engine: get_user_context ==========
     
     async def get_user_context(
@@ -120,15 +123,8 @@ class RAGInterface:
         """
         Compose structured context from memory layers using the universal XML formatter.
         """
-        from persona.core.memory_store import MemoryStore
-        from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
-        from persona.core.context import format_memories_for_llm
-        
-        # Initialize memory store if needed
         if not self._memory_store:
-            graph_db = Neo4jGraphDatabase()
-            await graph_db.initialize()
-            self._memory_store = MemoryStore(graph_db)
+            await self.__aenter__()
         
         all_memories = []
         
@@ -160,4 +156,3 @@ class RAGInterface:
         
         logger.info(f"Generated universal user context: {len(all_memories)} memories, {len(context)} chars")
         return context
-

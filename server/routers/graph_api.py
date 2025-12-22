@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Path, Depends, Body, Response
-from persona.core.graph_ops import GraphOps, GraphContextRetriever
+from persona.core.graph_ops import GraphOps
 from persona.core.rag_interface import RAGInterface
 from persona.models.schema import UserCreate, RAGQuery, RAGResponse
 from persona.models.schema import AskRequest, AskResponse, CustomGraphUpdate
@@ -143,7 +143,7 @@ async def ingest_data(
         logger.error(f"Failed to ingest data for user {user_id}: {str(e)}")
         if "Neo4j" in str(e) or "database" in str(e).lower():
             raise HTTPException(status_code=503, detail="Database connection error. Please try again later.")
-        raise HTTPException(status_code=500, detail=\"Internal server error occurred while ingesting data\")
+        raise HTTPException(status_code=500, detail="Internal server error occurred while ingesting data")
 
 @router.post("/users/{user_id}/ingest/batch", status_code=201)
 async def ingest_batch_data(

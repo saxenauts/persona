@@ -1,23 +1,27 @@
+"""
+Ask Service for structured insight queries.
+
+Uses RAGInterface which internally uses the new Retriever.
+"""
+
 from persona.core.rag_interface import RAGInterface
 from persona.models.schema import AskRequest, AskResponse
-from persona.core.graph_ops import GraphOps, GraphContextRetriever
 from persona.llm.llm_graph import generate_structured_insights
-from typing import Dict, Any
+
 
 class AskService:
     @staticmethod
-    async def ask_insights(user_id: str, ask_request: AskRequest, graph_ops: GraphOps) -> AskResponse:
+    async def ask_insights(user_id: str, ask_request: AskRequest) -> AskResponse:
         """
-        Generate structured insights based on the requested schema
+        Generate structured insights based on the requested schema.
+        
+        Uses RAGInterface which handles its own resource management.
         """
-        rag = RAGInterface(user_id)
-        rag.graph_ops = graph_ops
-        rag.graph_context_retriever = GraphContextRetriever(graph_ops)
-        
-        # Get context using existing RAG functionality
-        context = await rag.get_context(ask_request.query)
-        
-        structured_response = await generate_structured_insights(ask_request, context)
-        
-        # Return the structured response
-        return AskResponse(result=structured_response)
+        async with RAGInterface(user_id) as rag:
+            # Get context using new Retriever
+            context = await rag.get_context(ask_request.query)
+            
+            # Generate structured response
+            structured_response = await generate_structured_insights(ask_request, context)
+            
+            return AskResponse(result=structured_response)

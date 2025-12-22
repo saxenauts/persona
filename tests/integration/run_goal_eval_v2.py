@@ -160,66 +160,61 @@ async def run_evaluation():
     
     # We use GraphOps context manager for the defined AskService lifecycle
     async with GraphOps() as graph_ops:
-        # Initialize RAG for context retrieval logging
+        # Initialize RAG for context retrieval - now using new Retriever internally
         from persona.core.rag_interface import RAGInterface
-        from persona.core.graph_ops import GraphContextRetriever
         from persona.llm.llm_graph import generate_structured_insights
         
-        rag = RAGInterface(USER_ID)
-        rag.graph_ops = graph_ops
-        rag.graph_context_retriever = GraphContextRetriever(graph_ops)
-        
-        for q in GOLDEN_QUESTIONS:
-            print(f"\n--- Evaluating {q['id']}: {q['question'][:50]}... ---")
-            
-            # Step 1: Get retrieved context (for logging)
-            try:
-                retrieved_context = await rag.get_context(q["question"])
-                print(f"  [Retrieved Context Length: {len(retrieved_context)} chars]")
+        async with RAGInterface(USER_ID) as rag:
+            for q in GOLDEN_QUESTIONS:
+                print(f"\n--- Evaluating {q['id']}: {q['question'][:50]}... ---")
                 
-                # Truncated preview for console
-                context_preview = retrieved_context[:500] + "..." if len(retrieved_context) > 500 else retrieved_context
-                print(f"  Context Preview: {context_preview[:200]}...")
-            except Exception as e:
-                print(f"  [Retrieval Error: {e}]")
-                retrieved_context = f"ERROR: {e}"
-            
-            # Step 2: Generate answer
-            output_schema = {
-                "answer": "Detailed answer to the user's question based on memory.",
-                "confidence": "High, Medium, or Low",
-                "reasoning": "Explanation of how the answer was derived from memory."
-            }
-            
-            request = AskRequest(
-                query=q["question"],
-                output_schema=output_schema
-            )
-            
-            try:
-                response = await AskService.ask_insights(USER_ID, request, graph_ops)
-                answer_data = response.result
+                # Step 1: Get retrieved context (for logging)
+                try:
+                    retrieved_context = await rag.get_context(q["question"])
+                    print(f"  [Retrieved Context Length: {len(retrieved_context)} chars]")
+                    
+                    # Truncated preview for console
+                    context_preview = retrieved_context[:500] + "..." if len(retrieved_context) > 500 else retrieved_context
+                    print(f"  Context Preview: {context_preview[:200]}...")
+                except Exception as e:
+                    print(f"  [Retrieval Error: {e}]")
+                    retrieved_context = f"ERROR: {e}"
                 
-                results[q["id"]] = {
-                    "question": q["question"],
-                    "expected_themes": q["expected_themes"],
-                    "generated_answer": answer_data.get("answer"),
-                    "confidence": answer_data.get("confidence"),
-                    "reasoning": answer_data.get("reasoning"),
-                    "retrieved_context": retrieved_context,  # FULL context for analysis
-                    "context_length": len(retrieved_context)
+                # Step 2: Generate answer
+                output_schema = {
+                    "answer": "Detailed answer to the user's question based on memory.",
+                    "confidence": "High, Medium, or Low",
+                    "reasoning": "Explanation of how the answer was derived from memory."
                 }
                 
-                print(f"  Answer: {answer_data.get('answer', '')[:100]}...")
-                print(f"  Confidence: {answer_data.get('confidence')}")
-            
-            except Exception as e:
-                print(f"  [LLM Error: {e}]")
-                results[q["id"]] = {
-                    "error": str(e),
-                    "retrieved_context": retrieved_context
-                }
-
+                request = AskRequest(
+                    query=q["question"],
+                    output_schema=output_schema
+                )
+                
+                try:
+                    response = await AskService.ask_insights(USER_ID, request)
+                    answer_data = response.result
+                    
+                    results[q["id"]] = {
+                        "question": q["question"],
+                        "expected_themes": q["expected_themes"],
+                        "generated_answer": answer_data.get("answer"),
+                        "confidence": answer_data.get("confidence"),
+                        "reasoning": answer_data.get("reasoning"),
+                        "retrieved_context": retrieved_context,  # FULL context for analysis
+                        "context_length": len(retrieved_context)
+                    }
+                    
+                    print(f"  Answer: {answer_data.get('answer', '')[:100]}...")
+                    print(f"  Confidence: {answer_data.get('confidence')}")
+                
+                except Exception as e:
+                    print(f"  [LLM Error: {e}]")
+                    results[q["id"]] = {
+                        "error": str(e),
+                        "retrieved_context": retrieved_context
+                    }
     # Save Results (with full context for manual inspection)
     output_file = "tests/integration/goal_eval_results.json"
     with open(output_file, "w") as f:

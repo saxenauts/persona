@@ -1,16 +1,24 @@
+"""
+RAG Service for query handling.
+
+Uses RAGInterface which internally uses the new Retriever.
+"""
+
 from persona.core.rag_interface import RAGInterface
-from persona.core.graph_ops import GraphOps, GraphContextRetriever
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class RAGService:
     @staticmethod
-    async def query(user_id: str, query: str, graph_ops: GraphOps):
-        rag = RAGInterface(user_id)
-        rag.graph_ops = graph_ops
-        rag.graph_context_retriever = GraphContextRetriever(graph_ops)
+    async def query(user_id: str, query: str):
+        """
+        Execute a RAG query for a user.
         
-        response = await rag.query(query)
-        logger.debug(f"RAG service response: {response}")
-        return response
+        Uses RAGInterface which handles its own resource management.
+        """
+        async with RAGInterface(user_id) as rag:
+            response = await rag.query(query)
+            logger.debug(f"RAG service response: {response}")
+            return response
