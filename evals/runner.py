@@ -23,7 +23,7 @@ from .logging.log_schema import (
 )
 from .adapters.base import MemorySystem
 from .adapters.persona_adapter import PersonaAdapter
-from .longmemeval.evaluate_qa import get_anscheck_prompt, query_openai_with_retry
+from .longmemeval.evaluate_qa import get_anscheck_prompt, query_openai_with_retry, parse_judge_response
 
 
 # Registry of available adapters
@@ -216,17 +216,26 @@ class EvaluationRunner:
             else:
                 sessions = self._prepare_personamem_sessions(question)
             
+            # Calculate content size for progress
+            total_chars = sum(len(s.get('content', '')) for s in sessions)
+            print(f"    📥 Ingesting {len(sessions)} sessions (~{total_chars//1000}k chars)...", flush=True)
+            
             # Ingest sessions
             start_ingest = time.time()
             adapter.add_sessions(user_id, sessions)
             ingest_time_ms = (time.time() - start_ingest) * 1000
+            print(f"    ✓ Ingestion complete ({ingest_time_ms/1000:.1f}s)", flush=True)
             
             # Query
+            print(f"    🔍 Retrieving context...", flush=True)
             start_query = time.time()
             generated_answer = adapter.query(user_id, question.question)
             query_time_ms = (time.time() - start_query) * 1000
+            print(f"    ✓ Retrieval complete ({query_time_ms/1000:.1f}s)", flush=True)
             
             # Evaluate answer
+            print(f"    ⚖️ Running judge...", flush=True)
+            start_judge = time.time()
             if benchmark_name == "longmemeval":
                 gold_answer = question.answer
                 correct, judge_response = self._evaluate_longmemeval(
@@ -237,6 +246,8 @@ class EvaluationRunner:
                 correct, judge_response = self._evaluate_personamem(
                     question, generated_answer
                 )
+            judge_time_ms = (time.time() - start_judge) * 1000
+            print(f"    ✓ Judge: {judge_response} ({judge_time_ms/1000:.1f}s)", flush=True)
             
             # Log result
             self._log_question(
@@ -307,7 +318,7 @@ class EvaluationRunner:
         )
         
         judge_response = query_openai_with_retry(prompt)
-        correct = "yes" in judge_response.lower() if judge_response else False
+        correct = parse_judge_response(judge_response)
         
         return correct, judge_response
 

@@ -74,12 +74,24 @@ We combine two benchmarks to test both **reasoning** and **recall**:
 | [LongMemEval](https://github.com/xiaowu0162/LongMemEval) | Temporal logic, multi-session aggregation | ICLR 2025 |
 | [PersonaMem](https://github.com/bowen-upenn/PersonaMem) | Factual precision, personalization | COLM 2025 |
 
-### Why 340 Questions?
+### Evaluation Approach
 
-We use **stratified sampling** to create a balanced golden set:
-- 340 samples provide 95% confidence at ±5% margin of error (see [sample size calculator](https://www.calculator.net/sample-size-calculator.html))
-- Each category (recall, temporal, updates, etc.) gets proportional representation
-- For quick smoke tests, use `--samples 5` per type (~30 questions)
+We report **two separate benchmark scores** (paper-aligned):
+- **LongMemEval** macro-by-qtype accuracy
+- **PersonaMem** macro-by-qtype accuracy
+
+**Scoring methodology:**
+- LongMemEval: LLM judge (configurable via `EVAL_JUDGE_MODEL`, default `gpt-5-mini`)
+- PersonaMem: Exact match on multiple choice
+- Macro-by-type: Each question type weighted equally (skill fairness)
+
+**Test set options:**
+| Set | Purpose | Size |
+|-----|---------|------|
+| `--samples 2` | Smoke test | ~12 questions |
+| `--samples 10` | Quick test | ~60 questions |
+| `--golden-set` | Full eval | ~340 questions |
+
 
 ### Capability Coverage
 
@@ -140,18 +152,21 @@ poetry run python -m evals.cli create-configs
 ### Environment Variables
 
 ```bash
-# LLM Service (required)
-export LLM_SERVICE="azure/gpt-5.2"
+# LLM Service (required for memory system)
+export LLM_SERVICE="foundry/gpt-5.2"
 export EMBEDDING_SERVICE="azure/text-embedding-3-small"
+
+# Eval Judge Model (optional, default: gpt-5-mini)
+export EVAL_JUDGE_MODEL="gpt-5-mini"
+
+# Parallel ingestion (optional, default: 5)
+export INGEST_SESSION_CONCURRENCY="5"
 
 # Azure OpenAI
 export AZURE_API_KEY="your-key"
 export AZURE_API_BASE="https://your-endpoint.openai.azure.com/"
-export AZURE_API_VERSION="2024-12-01-preview"
-export AZURE_CHAT_DEPLOYMENT="gpt-5.2"
-export AZURE_EMBEDDING_DEPLOYMENT="text-embedding-3-small"
 
-# Neo4j (for Persona server)
+# Neo4j (for Persona adapter)
 export NEO4J_URI="bolt://localhost:7687"
 export NEO4J_USERNAME="neo4j"
 export NEO4J_PASSWORD="your-password"

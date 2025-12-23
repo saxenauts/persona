@@ -47,8 +47,10 @@ class PersonaAdapter(MemorySystem):
         payload = {"items": items}
         
         try:
+            print(f"      → Calling /ingest/batch with {len(items)} items...", flush=True)
             resp = requests.post(f"{self.base_url}/users/{user_id}/ingest/batch", json=payload, timeout=300)
             resp.raise_for_status()
+            print(f"      → Batch ingest complete", flush=True)
         except Exception as e:
             print(f"[PersonaAdapter] Batch ingest failed: {e}")
             if hasattr(e, 'response') and e.response:
