@@ -1,15 +1,36 @@
 import os
 import sys
 import json
+import logging
 from tqdm import tqdm
 import requests
 import time
 from pathlib import Path
 from typing import Dict, List
 
-# from .config import EVAL_MODEL, TEMPERATURE
-EVAL_MODEL = "gpt-4o"
+logger = logging.getLogger(__name__)
+
+def get_eval_model() -> str:
+    """Get eval model from environment, supporting multiple providers."""
+    return os.environ.get("EVAL_JUDGE_MODEL", "gpt-5-mini")
+
+EVAL_MODEL = get_eval_model()
 TEMPERATURE = 0
+
+
+def parse_judge_response(response: str) -> bool:
+    """Strict parsing - must be exactly YES or NO."""
+    if not response:
+        return False
+    cleaned = response.strip().upper()
+    if cleaned in ("YES", "YES."):
+        return True
+    elif cleaned in ("NO", "NO."):
+        return False
+    else:
+        # Log ambiguous response, default to False
+        logger.warning(f"Ambiguous judge response: '{response}' - defaulting to False")
+        return False
 
 
 
@@ -53,12 +74,16 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
     from persona.llm.client_factory import get_chat_client
     from persona.llm.providers.base import ChatMessage
     
+    # Note: reset_clients() no longer needed - lazy client in AzureFoundryClient
+    # now handles event loop binding automatically via _get_client()
+    
     async def async_query():
         client = get_chat_client()
         messages = [ChatMessage(role="user", content=prompt)]
         
         for attempt in range(max_retries):
             try:
+                print(f"        [Judge attempt {attempt + 1}/{max_retries}]", flush=True)
                 response = await client.chat(
                     messages=messages,
                     temperature=TEMPERATURE,
@@ -66,19 +91,18 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
                 )
                 return response.content.strip()
             except Exception as e:
-                print(f"Attempt {attempt + 1} failed: {e}. Retrying...")
+                print(f"        Attempt {attempt + 1} failed: {e}. Retrying...", flush=True)
                 time.sleep(2 ** attempt)  # Exponential backoff
                 if attempt == max_retries - 1:
-                    # Instead of raising, we will return an empty string to be handled by the caller
                     return ""
         
         return ""
     
-    # Run the async function - Python 3.12+ compatible
+    # Run the async function
     try:
         return asyncio.run(async_query())
     except Exception as e:
-        print(f"Error in LLM query: {e}")
+        print(f"        Error in LLM query: {e}", flush=True)
         return ""
 
 def evaluate_qa(hypotheses_file: str, reference_file: str, 

@@ -161,6 +161,21 @@ def run(
         for qtype, stats in result.get('type_accuracies', {}).items():
             print(f"    {qtype:40s}: {stats['accuracy']:.2%} ({stats['correct']}/{stats['count']})")
 
+    # Print rate limiter stats
+    try:
+        from persona.llm.rate_limiter import get_rate_limiter_registry
+        registry = get_rate_limiter_registry()
+        stats = registry.get_all_stats()
+        if stats:
+            print("\n" + "-"*40)
+            print("RATE LIMITER METRICS:")
+            for s in stats:
+                print(f"  {s['name']}:")
+                print(f"    Requests: {s['total_requests']}, Tokens: {s['total_tokens']:,}")
+                print(f"    Wait time: {s['wait_time_ms']:.0f}ms, 429s: {s['retries_429']}")
+    except Exception as e:
+        pass  # Rate limiter not used
+
     print(f"\nResults saved to: {eval_config.output_dir}")
 
 

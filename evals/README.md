@@ -67,35 +67,54 @@ The framework supports multiple benchmarks (LongMemEval, PersonaMem) and memory 
 
 ## Unified Benchmark Architecture
 
-The framework uses a research-backed, stratified sampling approach to combine two world-class benchmarks into a single evaluation pipeline. This ensures your memory system is tested on both deep reasoning and surface-level recall.
+We combine two benchmarks to test both **reasoning** and **recall**:
 
-### 1. The "Combined" Rationale
+| Benchmark | What it Tests | Reference |
+|-----------|---------------|----------|
+| [LongMemEval](https://github.com/xiaowu0162/LongMemEval) | Temporal logic, multi-session aggregation | ICLR 2025 |
+| [PersonaMem](https://github.com/bowen-upenn/PersonaMem) | Factual precision, personalization | COLM 2025 |
 
-| Benchmark | Strength | Tokens | Focus |
-|-----------|----------|--------|-------|
-| **LongMemEval** | Temporal logic, Multi-session aggregation | ~115k | Reasoning & Continuity |
-| **PersonaMem** | Factual precision, Personalization | ~32k - 1M | Recall & Alignment |
+### Evaluation Approach
 
-By combining these, we avoid "local optimization" where a system might be good at recalling a name but fails to update a user's address change two sessions later.
+We report **two separate benchmark scores** (paper-aligned):
+- **LongMemEval** macro-by-qtype accuracy
+- **PersonaMem** macro-by-qtype accuracy
 
-### 2. Stratified Sampling Logic
+**Scoring methodology:**
+- LongMemEval: LLM judge (configurable via `EVAL_JUDGE_MODEL`, default `gpt-5-mini`)
+- PersonaMem: Exact match on multiple choice
+- Macro-by-type: Each question type weighted equally (skill fairness)
 
-To keep developer iterations fast without sacrificing statistical significance, the framework implements **Stratified Random Sampling**:
+**Test set options:**
+| Set | Purpose | Size |
+|-----|---------|------|
+| `--samples 2` | Smoke test | ~12 questions |
+| `--samples 10` | Quick test | ~60 questions |
+| `--golden-set` | Full eval | ~340 questions |
 
-- **Reproducibility**: Uses a fixed random seed (default: 42).
-- **Distribution**: Ensures samples are pulled proportionally from every category (e.g., 60 multi-session vs 35 single-session questions).
-- **Golden Sets**: Includes pre-calculated "Golden Sets" in `evals/data/golden_sets/` for 100% stable benchmarks across teams.
 
-### 3. Capability Coverage
+### Capability Coverage
 
-| Category | Capability Tested | Source |
-|----------|-------------------|--------|
-| **Recall** | Static facts (names, events) | PersonaMem |
-| **Temporal** | Date ordering, durations | LongMemEval |
-| **Logic** | Aggregation across time | LongMemEval |
-| **Updates** | Correcting old memories | LongMemEval |
-| **Strategy** | When to abstain (I don't know) | LongMemEval |
-| **Alignment** | Preference-based suggestions | PersonaMem |
+**Currently Tested:**
+
+| Category | Capability | Source |
+|----------|------------|--------|
+| Recall | Static facts (names, events) | PersonaMem |
+| Temporal | Date ordering, durations | LongMemEval |
+| Logic | Aggregation across sessions | LongMemEval |
+| Updates | Correcting outdated info | LongMemEval |
+| Abstention | Knowing when to say "I don't know" | LongMemEval |
+| Alignment | Preference-based suggestions | PersonaMem |
+
+**Persona-Specific (Future Tests):**
+
+| Category | Capability | Why Persona Excels |
+|----------|------------|-------------------|
+| Goal Tracking | "What are my current tasks?" | Explicit `Goal` nodes |
+| Inventory | Tracking items (food, ingredients) | Goal nodes with state |
+| Proactivity | "Remind me about X" | Temporal + Goal linking |
+| Multi-Hop | "Did I like X before Y changed?" | Graph traversal |
+| Narrative | Understanding life "stories" | Episode temporal chaining |
 
 ---
 
@@ -105,21 +124,17 @@ To keep developer iterations fast without sacrificing statistical significance, 
 
 - Python 3.12+
 - Poetry (package manager)
-- Docker (for Qdrant vector store)
-- Neo4j (optional, for graph-based systems)
+- Docker (for Neo4j graph database)
 
 ### Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/persona.git
+git clone https://github.com/saxenauts/persona.git
 cd persona
 
 # Install dependencies
 poetry install
-
-# Install evaluation-specific dependencies
-poetry add datasets huggingface_hub pyyaml
 
 # Download benchmark datasets
 poetry run python evals/scripts/download_personamem.py
@@ -137,17 +152,21 @@ poetry run python -m evals.cli create-configs
 ### Environment Variables
 
 ```bash
-# Azure OpenAI (for LLM and embeddings)
+# LLM Service (required for memory system)
+export LLM_SERVICE="foundry/gpt-5.2"
+export EMBEDDING_SERVICE="azure/text-embedding-3-small"
+
+# Eval Judge Model (optional, default: gpt-5-mini)
+export EVAL_JUDGE_MODEL="gpt-5-mini"
+
+# Parallel ingestion (optional, default: 5)
+export INGEST_SESSION_CONCURRENCY="5"
+
+# Azure OpenAI
 export AZURE_API_KEY="your-key"
 export AZURE_API_BASE="https://your-endpoint.openai.azure.com/"
-export AZURE_API_VERSION="2024-02-15-preview"
-export AZURE_CHAT_DEPLOYMENT="gpt-4o-mini"
-export AZURE_EMBEDDING_DEPLOYMENT="text-embedding-3-small"
 
-# Qdrant (vector store)
-export QDRANT_URL="http://localhost:6333"
-
-# Neo4j (optional, for graph-based systems)
+# Neo4j (for Persona adapter)
 export NEO4J_URI="bolt://localhost:7687"
 export NEO4J_USERNAME="neo4j"
 export NEO4J_PASSWORD="your-password"
@@ -180,8 +199,7 @@ poetry run python -m evals.cli analyze run_20241221_143052 --summary
 ## Results (Placeholders)
 
 > [!CAUTION]
-> **PLACEHOLDER DATA**: The metrics below are examples for documentation purposes. 
-> Real benchmark results will be generated after running a full sweep on the 340-question golden set.
+> **Placeholder (Incomplete)**: Results pending full benchmark run.
 
 ### Comparative Performance
 
@@ -342,7 +360,7 @@ poetry run python -m evals.cli compare \
                           ↓
 ┌─────────────────────────────────────────────────────────┐
 │                  Evaluation (Judge)                     │
-│  - LongMemEval: Binary (GPT-4o judge)                   │
+│  - LongMemEval: Binary (gpt-5.2 judge)                   │
 │  - PersonaMem: Exact match (a/b/c/d)                    │
 │  - Task-specific prompts                                │
 └─────────────────────────────────────────────────────────┘
@@ -690,7 +708,7 @@ If you use this evaluation framework in your research, please cite:
   title = {Persona Memory System - Evaluation Framework},
   author = {InnerNets AI},
   year = {2024},
-  url = {https://github.com/your-org/persona}
+  url = {https://github.com/saxenauts/persona}
 }
 ```
 
@@ -705,7 +723,7 @@ MIT License - See [LICENSE](../LICENSE) for details.
 ## Contact
 
 For questions or feedback:
-- GitHub Issues: [your-org/persona/issues](https://github.com/your-org/persona/issues)
+- GitHub Issues: [saxenauts/persona/issues](https://github.com/saxenauts/persona/issues)
 - Email: your-email@example.com
 
 ---

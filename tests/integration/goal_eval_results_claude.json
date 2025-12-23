@@ -1,0 +1,32 @@
+{
+  "Q1": {
+    "question": "How did my early diet choices affect my European trip planning?",
+    "answer": "# Answer\n\nYour early diet choices had a **direct financial impact** on your European trip planning. On Day 2 (Jan 3), you experienced major sticker shock after spending $200 at Whole Foods on expensiv",
+    "confidence": "High",
+    "context_length": 10058
+  },
+  "Q2": {
+    "question": "We decided on a tech stack a while ago, specifically for privacy. Did we ever implement it?",
+    "answer": "# Answer\n\nYes, you decided on **Next.js + Supabase** as your tech stack specifically because Supabase's Row Level Security (RLS) matched your privacy-first requirements. \n\nBased on your memory:\n- The ",
+    "confidence": "High",
+    "context_length": 8439
+  },
+  "Q3": {
+    "question": "I met someone at a meetup who liked my design choices. Who was it and what did they like?",
+    "answer": "Based on your memory:\n\n**Answer:** You met the \"Bald Guy\" investor at a tech meetup (originally on Day 20, Session 6), and later had coffee with him on Day 50 (Session 13). He specifically praised you",
+    "confidence": "High",
+    "context_length": 11229
+  },
+  "Q4": {
+    "question": "What happened to the Clean Body ritual?",
+    "answer": "Based on the memory context:\n\n**Answer:** The Clean Body ritual was broken on Day 32 (January 27th) when the user ate pizza and garlic knots after a late meeting. They felt significant guilt and disap",
+    "confidence": "High",
+    "context_length": 4854
+  },
+  "Q5": {
+    "question": "I had a random idea about using AI for the app. Did I follow up on it?",
+    "answer": "# Answer\n\n**Yes, you did follow up on it.**\n\nYou had the idea to use OpenAI to create an automatic summary feature that triggers at the end of focus blocks. You researched it on Day 40 (Session 9), pl",
+    "confidence": "High",
+    "context_length": 9176
+  }
+}

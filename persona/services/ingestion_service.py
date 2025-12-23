@@ -10,6 +10,7 @@ Uses LLM structured output for extraction, then generates embeddings.
 """
 
 import json
+import time
 from datetime import datetime
 from typing import Optional, List, Tuple
 from uuid import uuid4
@@ -115,7 +116,9 @@ class MemoryIngestionService:
         
         try:
             # Extract via LLM
+            start_extract = time.time()
             extraction = await self._extract(raw_content, timestamp, source_type)
+            extract_time_ms = (time.time() - start_extract) * 1000
             
             memories: List[Memory] = []
             links: List[MemoryLink] = []
@@ -182,9 +185,11 @@ class MemoryIngestionService:
                 ))
             
             # Generate embeddings
+            start_embed = time.time()
             memories = await self._add_embeddings(memories)
+            embed_time_ms = (time.time() - start_embed) * 1000
             
-            logger.info(f"Ingested {len(memories)} memories for user {user_id}")
+            logger.info(f"Ingested {len(memories)} memories for user {user_id} | LLM: {extract_time_ms:.0f}ms | Embed: {embed_time_ms:.0f}ms")
             
             return IngestionResult(
                 memories=memories,
@@ -209,6 +214,9 @@ class MemoryIngestionService:
             source_type=source_type,
             raw_content=raw_content
         )
+        
+        prompt_tokens_est = len(INGESTION_SYSTEM_PROMPT) // 4 + len(user_prompt) // 4
+        logger.debug(f"LLM extraction: ~{prompt_tokens_est} tokens input, {len(raw_content)} chars content")
         
         response = await self.chat_client.chat(
             messages=[

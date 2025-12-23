@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 from .providers.base import BaseLLMClient
 from .providers.openai_client import OpenAIClient
 from .providers.azure_openai_client import AzureOpenAIClient
+from .providers.azure_foundry_client import AzureFoundryClient
 from .providers.anthropic_client import AnthropicClient
 from .providers.gemini_client import GeminiClient
 from server.config import config
@@ -102,12 +103,31 @@ def create_gemini_client() -> GeminiClient:
     )
 
 
+def create_foundry_client() -> AzureFoundryClient:
+    """Create Azure AI Foundry client (new platform)"""
+    if not config.MACHINE_LEARNING.AZURE_API_KEY:
+        raise ValueError("AZURE_API_KEY is required for Foundry provider")
+    if not config.MACHINE_LEARNING.AZURE_API_BASE:
+        raise ValueError("AZURE_API_BASE is required for Foundry provider")
+    if not config.MACHINE_LEARNING.AZURE_CHAT_DEPLOYMENT:
+        raise ValueError("AZURE_CHAT_DEPLOYMENT is required for Foundry provider")
+    if not config.MACHINE_LEARNING.AZURE_EMBEDDING_DEPLOYMENT:
+        raise ValueError("AZURE_EMBEDDING_DEPLOYMENT is required for Foundry provider")
+    
+    return AzureFoundryClient(
+        api_key=config.MACHINE_LEARNING.AZURE_API_KEY,
+        api_base=config.MACHINE_LEARNING.AZURE_API_BASE,
+        chat_deployment=config.MACHINE_LEARNING.AZURE_CHAT_DEPLOYMENT,
+        embedding_deployment=config.MACHINE_LEARNING.AZURE_EMBEDDING_DEPLOYMENT
+    )
+
+
 def create_client(provider: str) -> BaseLLMClient:
     """
     Create a client for the specified provider.
     
     Args:
-        provider: Provider name (openai, azure, anthropic, gemini)
+        provider: Provider name (openai, azure, foundry, anthropic, gemini)
         
     Returns:
         BaseLLMClient instance
@@ -116,12 +136,14 @@ def create_client(provider: str) -> BaseLLMClient:
         return create_openai_client()
     elif provider == "azure":
         return create_azure_client()
+    elif provider == "foundry":
+        return create_foundry_client()
     elif provider == "anthropic":
         return create_anthropic_client()
     elif provider == "gemini":
         return create_gemini_client()
     else:
-        raise ValueError(f"Unsupported provider: {provider}")
+        raise ValueError(f"Unsupported provider: {provider}. Supported: openai, azure, foundry, anthropic, gemini")
 
 
 def get_chat_client() -> BaseLLMClient:
