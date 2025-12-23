@@ -5,6 +5,8 @@ from .base import MemorySystem
 class PersonaAdapter(MemorySystem):
     def __init__(self):
         self.base_url = "http://localhost:8000/api/v1"
+        self.last_ingest_stats = None
+        self.last_query_stats = None
 
     def add_session(self, user_id: str, session_data: str, date: str):
         # First ensure user exists
@@ -26,6 +28,10 @@ class PersonaAdapter(MemorySystem):
         if response.status_code != 201:
             print(f"Persona Ingest Error: {response.status_code} - {response.text}")
         response.raise_for_status()
+        try:
+            self.last_ingest_stats = response.json()
+        except ValueError:
+            self.last_ingest_stats = None
 
     def add_sessions(self, user_id: str, sessions: list):
         """
@@ -51,6 +57,10 @@ class PersonaAdapter(MemorySystem):
             resp = requests.post(f"{self.base_url}/users/{user_id}/ingest/batch", json=payload, timeout=300)
             resp.raise_for_status()
             print(f"      → Batch ingest complete", flush=True)
+            try:
+                self.last_ingest_stats = resp.json()
+            except ValueError:
+                self.last_ingest_stats = None
         except Exception as e:
             print(f"[PersonaAdapter] Batch ingest failed: {e}")
             if hasattr(e, 'response') and e.response:
@@ -64,7 +74,7 @@ class PersonaAdapter(MemorySystem):
         
         response = requests.post(
             f"{self.base_url}/users/{user_id}/rag/query",
-            json={"query": query}
+            json={"query": query, "include_stats": True}
         )
         if response.status_code != 200:
             print(f"Persona Query Error: {response.status_code} - {response.text}")
@@ -72,7 +82,10 @@ class PersonaAdapter(MemorySystem):
         # Expecting {"answer": "..."} or similar
         data = response.json()
         if isinstance(data, dict):
-            return data.get("answer") or data.get("result") or str(data)
+            if "answer" in data:
+                self.last_query_stats = data
+                return data.get("answer")
+            return data.get("result") or str(data)
         return str(data)
 
     def reset(self, user_id: str):

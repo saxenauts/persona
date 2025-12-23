@@ -11,6 +11,7 @@ from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
+import os
 import re
 
 
@@ -129,9 +130,20 @@ async def ingest_data(
         
         if not result.success:
             raise HTTPException(status_code=500, detail=f"Ingestion failed: {result.error}")
-            
+
+        type_counts = {}
+        for memory in result.memories:
+            mem_type = getattr(memory, "type", "unknown")
+            type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
+
+        links_created = len(result.links)
         logger.info(f"Data ingested successfully for user {user_id}: {len(result.memories)} memories")
-        return {"message": "Data ingested successfully", "memories_created": len(result.memories)}
+        return {
+            "message": "Data ingested successfully",
+            "memories_created": len(result.memories),
+            "memories_created_by_type": type_counts,
+            "links_created": links_created
+        }
         
     except HTTPException:
         raise
@@ -166,9 +178,25 @@ async def ingest_batch_data(
         items_for_adapter = [{"content": item.content, "source_type": item.source_type} for item in batch_data.items]
         results = await adapter.ingest_batch(items_for_adapter)
         
-        total_memories = sum(len(r.memories) for r in results if r.success)
+        total_memories = 0
+        total_links = 0
+        type_counts: Dict[str, int] = {}
+        for r in results:
+            if not r.success:
+                continue
+            total_memories += len(r.memories)
+            total_links += len(r.links)
+            for memory in r.memories:
+                mem_type = getattr(memory, "type", "unknown")
+                type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
+
         logger.info(f"Batch ingestion completed for user {user_id}: {total_memories} memories")
-        return {"message": f"Successfully ingested batch of {len(batch_data.items)} items", "memories_created": total_memories}
+        return {
+            "message": f"Successfully ingested batch of {len(batch_data.items)} items",
+            "memories_created": total_memories,
+            "memories_created_by_type": type_counts,
+            "links_created": total_links
+        }
         
     except HTTPException:
         raise
@@ -194,14 +222,20 @@ async def rag_query(
             logger.warning(f"RAG query attempted for non-existent user: {user_id}")
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
             
-        # Validate query length
-        if len(query.query.strip()) > 1000:
+        # Validate query length (configurable)
+        max_query_chars = int(os.getenv("RAG_QUERY_MAX_CHARS", "0"))
+        if max_query_chars > 0 and len(query.query.strip()) > max_query_chars:
             logger.warning(f"Query too long for user {user_id}: {len(query.query)} characters")
-            raise HTTPException(status_code=400, detail="Query is too long (max 1000 characters)")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Query is too long (max {max_query_chars} characters)"
+            )
             
         logger.info(f"Processing RAG query for user {user_id}: {query.query[:100]}...")
-        result = await RAGService.query(user_id, query.query)
+        result = await RAGService.query(user_id, query.query, include_stats=query.include_stats)
         logger.info(f"RAG query completed successfully for user {user_id}")
+        if isinstance(result, dict):
+            return RAGResponse(**result)
         return RAGResponse(answer=result)
         
     except HTTPException:

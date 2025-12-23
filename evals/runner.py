@@ -6,6 +6,10 @@ Core orchestrator for running benchmark evaluations against memory systems.
 
 import json
 import time
+import threading
+import re
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
@@ -79,10 +83,16 @@ class EvaluationRunner:
         self.config = config
         self.use_golden_set = use_golden_set
         self.logger = DeepLogger(output_dir=config.output_dir)
+        self._log_lock = threading.Lock()
+        self._print_lock = threading.Lock()
         
-        print(f"✓ Evaluation runner initialized")
-        print(f"  Run ID: {self.logger.run_id}")
-        print(f"  Output: {self.logger.run_dir}")
+        self._print(f"✓ Evaluation runner initialized")
+        self._print(f"  Run ID: {self.logger.run_id}")
+        self._print(f"  Output: {self.logger.run_dir}")
+
+    def _print(self, message: str, flush: bool = False) -> None:
+        with self._print_lock:
+            print(message, flush=flush)
 
     def run(self) -> Dict[str, Any]:
         """
@@ -95,9 +105,9 @@ class EvaluationRunner:
         
         # Run LongMemEval if configured
         if self.config.longmemeval:
-            print("\n" + "="*60)
-            print("Running LongMemEval Benchmark")
-            print("="*60)
+            self._print("\n" + "="*60)
+            self._print("Running LongMemEval Benchmark")
+            self._print("="*60)
             results["longmemeval"] = self._run_benchmark(
                 benchmark_name="longmemeval",
                 config=self.config.longmemeval
@@ -105,9 +115,9 @@ class EvaluationRunner:
         
         # Run PersonaMem if configured
         if self.config.personamem:
-            print("\n" + "="*60)
-            print("Running PersonaMem Benchmark")
-            print("="*60)
+            self._print("\n" + "="*60)
+            self._print("Running PersonaMem Benchmark")
+            self._print("="*60)
             results["personamem"] = self._run_benchmark(
                 benchmark_name="personamem",
                 config=self.config.personamem
@@ -135,46 +145,87 @@ class EvaluationRunner:
                 random_seed=self.config.random_seed
             )
         
-        print(f"\nLoaded {len(questions)} questions for {benchmark_name}")
+        self._print(f"\nLoaded {len(questions)} questions for {benchmark_name}")
         
         # Track results
         all_results: List[EvaluationResult] = []
         type_results: Dict[str, List[bool]] = {}
         
         # Run each adapter
+        total_questions = len(questions)
         for adapter_name in self.config.adapters:
-            print(f"\n--- Testing adapter: {adapter_name} ---")
-            
+            self._print(f"\n--- Testing adapter: {adapter_name} ---")
+
             try:
-                adapter = get_adapter(adapter_name)
+                get_adapter(adapter_name)
             except Exception as e:
-                print(f"Failed to load adapter {adapter_name}: {e}")
+                self._print(f"Failed to load adapter {adapter_name}: {e}")
                 continue
-            
-            # Evaluate each question
-            for i, question in enumerate(questions):
-                print(f"\n[{i+1}/{len(questions)}] {question.question_type}: {question.question[:50]}...")
-                
-                try:
+
+            if self.config.parallel_workers > 1:
+                def evaluate_one(index: int, q):
+                    adapter = get_adapter(adapter_name)
                     result = self._evaluate_question(
                         adapter=adapter,
-                        question=question,
-                        benchmark_name=benchmark_name
+                        question=q,
+                        benchmark_name=benchmark_name,
+                        verbose=False
                     )
-                    all_results.append(result)
-                    
-                    # Track by type
-                    qtype = result.question_type
-                    if qtype not in type_results:
-                        type_results[qtype] = []
-                    type_results[qtype].append(result.correct)
-                    
-                    status = "✓" if result.correct else "✗"
-                    print(f"  {status} Answer: {result.generated_answer[:80]}...")
-                    
-                except Exception as e:
-                    print(f"  ✗ Error: {e}")
-                    continue
+                    return index, q, result
+
+                with ThreadPoolExecutor(max_workers=self.config.parallel_workers) as executor:
+                    futures = [
+                        executor.submit(evaluate_one, i, question)
+                        for i, question in enumerate(questions)
+                    ]
+
+                    for future in as_completed(futures):
+                        try:
+                            idx, question, result = future.result()
+                        except Exception as e:
+                            self._print(f"  ✗ Error: {e}")
+                            continue
+
+                        all_results.append(result)
+
+                        qtype = result.question_type
+                        if qtype not in type_results:
+                            type_results[qtype] = []
+                        type_results[qtype].append(result.correct)
+
+                        status = "✓" if result.correct else "✗"
+                        self._print(
+                            f"[{idx+1}/{total_questions}] {qtype}: "
+                            f"{status} Answer: {result.generated_answer[:80]}..."
+                        )
+            else:
+                adapter = get_adapter(adapter_name)
+                for i, question in enumerate(questions):
+                    self._print(
+                        f"\n[{i+1}/{total_questions}] {question.question_type}: "
+                        f"{question.question[:50]}..."
+                    )
+
+                    try:
+                        result = self._evaluate_question(
+                            adapter=adapter,
+                            question=question,
+                            benchmark_name=benchmark_name,
+                            verbose=True
+                        )
+                        all_results.append(result)
+
+                        qtype = result.question_type
+                        if qtype not in type_results:
+                            type_results[qtype] = []
+                        type_results[qtype].append(result.correct)
+
+                        status = "✓" if result.correct else "✗"
+                        self._print(f"  {status} Answer: {result.generated_answer[:80]}...")
+
+                    except Exception as e:
+                        self._print(f"  ✗ Error: {e}")
+                        continue
         
         # Calculate metrics
         total = len(all_results)
@@ -199,7 +250,8 @@ class EvaluationRunner:
         self,
         adapter: MemorySystem,
         question: Union[LongMemEvalQuestion, PersonaMemQuestion],
-        benchmark_name: str
+        benchmark_name: str,
+        verbose: bool = True
     ) -> EvaluationResult:
         """Evaluate a single question."""
         
@@ -218,23 +270,34 @@ class EvaluationRunner:
             
             # Calculate content size for progress
             total_chars = sum(len(s.get('content', '')) for s in sessions)
-            print(f"    📥 Ingesting {len(sessions)} sessions (~{total_chars//1000}k chars)...", flush=True)
+            if verbose:
+                self._print(
+                    f"    📥 Ingesting {len(sessions)} sessions (~{total_chars//1000}k chars)...",
+                    flush=True
+                )
             
             # Ingest sessions
             start_ingest = time.time()
             adapter.add_sessions(user_id, sessions)
             ingest_time_ms = (time.time() - start_ingest) * 1000
-            print(f"    ✓ Ingestion complete ({ingest_time_ms/1000:.1f}s)", flush=True)
+            if verbose:
+                self._print(f"    ✓ Ingestion complete ({ingest_time_ms/1000:.1f}s)", flush=True)
             
             # Query
-            print(f"    🔍 Retrieving context...", flush=True)
+            if verbose:
+                self._print(f"    🔍 Retrieving context...", flush=True)
             start_query = time.time()
-            generated_answer = adapter.query(user_id, question.question)
+            query_text = question.question
+            if benchmark_name == "personamem":
+                query_text = self._format_personamem_query(question)
+            generated_answer = adapter.query(user_id, query_text)
             query_time_ms = (time.time() - start_query) * 1000
-            print(f"    ✓ Retrieval complete ({query_time_ms/1000:.1f}s)", flush=True)
+            if verbose:
+                self._print(f"    ✓ Retrieval complete ({query_time_ms/1000:.1f}s)", flush=True)
             
             # Evaluate answer
-            print(f"    ⚖️ Running judge...", flush=True)
+            if verbose:
+                self._print(f"    ⚖️ Running judge...", flush=True)
             start_judge = time.time()
             if benchmark_name == "longmemeval":
                 gold_answer = question.answer
@@ -247,9 +310,15 @@ class EvaluationRunner:
                     question, generated_answer
                 )
             judge_time_ms = (time.time() - start_judge) * 1000
-            print(f"    ✓ Judge: {judge_response} ({judge_time_ms/1000:.1f}s)", flush=True)
+            if verbose:
+                self._print(
+                    f"    ✓ Judge: {judge_response} ({judge_time_ms/1000:.1f}s)",
+                    flush=True
+                )
             
             # Log result
+            query_stats = getattr(adapter, "last_query_stats", None)
+            ingest_stats = getattr(adapter, "last_ingest_stats", None)
             self._log_question(
                 question=question,
                 user_id=user_id,
@@ -260,7 +329,10 @@ class EvaluationRunner:
                 judge_response=judge_response,
                 ingest_time_ms=ingest_time_ms,
                 query_time_ms=query_time_ms, 
-                sessions_count=len(sessions)
+                sessions_count=len(sessions),
+                query_text=query_text,
+                ingest_stats=ingest_stats,
+                query_stats=query_stats
             )
             
             return EvaluationResult(
@@ -303,6 +375,60 @@ class EvaluationRunner:
         # PersonaMem has context as a single string
         return [{"date": "unknown", "content": question.context}]
 
+    def _format_personamem_query(self, question: PersonaMemQuestion) -> str:
+        """Format PersonaMem multiple-choice prompt, optionally truncated by env."""
+        letters = ["a", "b", "c", "d"]
+        option_texts = {letter: question.options.get(letter, "").strip() for letter in letters}
+        question_text = question.question.strip()
+        max_chars_env = os.getenv("PERSONAMEM_PROMPT_MAX_CHARS")
+        max_chars = int(max_chars_env) if max_chars_env else None
+
+        def truncate(text: str, max_len: int) -> str:
+            if len(text) <= max_len:
+                return text
+            return text[: max_len - 3].rstrip() + "..."
+
+        def build(q_text: str, opts: Dict[str, str]) -> str:
+            options_str = " ".join(
+                f"({letter}) {opts[letter]}"
+                for letter in letters
+                if opts.get(letter)
+            )
+            return (
+                f"Question: {q_text}\n"
+                f"Options: {options_str}\n"
+                "Answer with only the letter (a/b/c/d)."
+            )
+
+        prompt = build(question_text, option_texts)
+        if max_chars is None or max_chars <= 0:
+            return prompt
+        if len(prompt) <= max_chars:
+            return prompt
+
+        for max_opt_len in [200, 160, 120, 100, 80, 60]:
+            truncated_opts = {
+                letter: truncate(option_texts[letter], max_opt_len)
+                for letter in letters
+                if option_texts.get(letter)
+            }
+            prompt = build(question_text, truncated_opts)
+            if len(prompt) <= max_chars:
+                return prompt
+
+        truncated_question = truncate(question_text, 200)
+        for max_opt_len in [80, 60, 40]:
+            truncated_opts = {
+                letter: truncate(option_texts[letter], max_opt_len)
+                for letter in letters
+                if option_texts.get(letter)
+            }
+            prompt = build(truncated_question, truncated_opts)
+            if len(prompt) <= max_chars:
+                return prompt
+
+        return prompt[:max_chars]
+
     def _evaluate_longmemeval(
         self, question: LongMemEvalQuestion, generated_answer: str
     ) -> tuple[bool, str]:
@@ -326,20 +452,26 @@ class EvaluationRunner:
         self, question: PersonaMemQuestion, generated_answer: str
     ) -> tuple[bool, str]:
         """Evaluate PersonaMem using exact match on option letter."""
-        # Extract option letter from answer
         generated_lower = generated_answer.lower().strip()
-        
-        # Check for exact match of option letter
-        for option in ['a', 'b', 'c', 'd']:
-            if generated_lower.startswith(option) or f"({option})" in generated_lower:
-                correct = (option == question.correct_answer.lower())
+        cleaned = re.sub(r"^\s*(answer|option)\s*[:\-]*\s*", "", generated_lower).strip()
+
+        tokens = cleaned.split()
+        if tokens:
+            candidate = tokens[0].strip("().")
+            if candidate in ["a", "b", "c", "d"]:
+                if len(tokens) == 1 or tokens[0].endswith((")", ".", ":", "-")):
+                    correct = candidate == question.correct_answer.lower()
+                    return correct, f"Extracted: {candidate}, Expected: {question.correct_answer}"
+
+        for option in ["a", "b", "c", "d"]:
+            if f"({option})" in cleaned:
+                correct = option == question.correct_answer.lower()
                 return correct, f"Extracted: {option}, Expected: {question.correct_answer}"
-        
-        # If no clear option, check if answer contains the correct option text
+
         correct_text = question.options.get(question.correct_answer.lower(), "")
         if correct_text and correct_text.lower() in generated_lower:
-            return True, f"Contains correct answer text"
-        
+            return True, "Contains correct answer text"
+
         return False, f"Could not extract option from: {generated_answer[:50]}"
 
     def _log_question(
@@ -353,9 +485,41 @@ class EvaluationRunner:
         judge_response: str,
         ingest_time_ms: float,
         query_time_ms: float,
-        sessions_count: int
+        sessions_count: int,
+        query_text: str,
+        ingest_stats: Optional[dict] = None,
+        query_stats: Optional[dict] = None
     ):
         """Log question evaluation to deep logger."""
+        safe_gold_answer = "" if gold_answer is None else str(gold_answer)
+        safe_generated_answer = "" if generated_answer is None else str(generated_answer)
+
+        type_counts = {}
+        if ingest_stats and isinstance(ingest_stats, dict):
+            type_counts = ingest_stats.get("memories_created_by_type", {}) or {}
+        total_memories = 0
+        if ingest_stats and isinstance(ingest_stats, dict):
+            total_memories = ingest_stats.get("memories_created", 0) or 0
+        links_created = 0
+        if ingest_stats and isinstance(ingest_stats, dict):
+            links_created = ingest_stats.get("links_created", 0) or 0
+
+        retrieval_stats = {}
+        if query_stats and isinstance(query_stats, dict):
+            retrieval_stats = query_stats.get("retrieval", {}) or {}
+        vector_stats = retrieval_stats.get("vector_search", {}) or {}
+        graph_stats = retrieval_stats.get("graph_traversal", {}) or {}
+
+        prompt_tokens = 0
+        completion_tokens = 0
+        model_name = "unknown"
+        temperature = 0
+        if query_stats and isinstance(query_stats, dict):
+            prompt_tokens = query_stats.get("prompt_tokens") or 0
+            completion_tokens = query_stats.get("completion_tokens") or 0
+            model_name = query_stats.get("model") or "unknown"
+            temperature = query_stats.get("temperature") or 0
+
         question_log = QuestionLog(
             question_id=question.question_id,
             user_id=user_id,
@@ -365,34 +529,44 @@ class EvaluationRunner:
             ingestion=IngestionLog(
                 duration_ms=ingest_time_ms,
                 sessions_count=sessions_count,
-                memories_created=MemoryCreationStats(episodes=0, psyche=0, goals=0),
-                nodes_created=0,
-                relationships_created=0,
-                embeddings_generated=0
+                memories_created=MemoryCreationStats(
+                    episodes=type_counts.get("episode", 0),
+                    psyche=type_counts.get("psyche", 0),
+                    goals=type_counts.get("goal", 0),
+                    events=type_counts.get("event", 0)
+                ),
+                nodes_created=total_memories,
+                relationships_created=links_created,
+                embeddings_generated=total_memories
             ),
             retrieval=RetrievalLog(
-                query=question.question,
+                query=query_text,
                 duration_ms=query_time_ms,
-                vector_search=VectorSearchLog(top_k=5, seeds=[], duration_ms=0),
-                graph_traversal=GraphTraversalLog(
-                    max_hops=2,
-                    nodes_visited=0,
-                    relationships_traversed=0,
-                    final_ranked_nodes=[],
-                    duration_ms=0
+                vector_search=VectorSearchLog(
+                    top_k=vector_stats.get("top_k", 5),
+                    seeds=vector_stats.get("seeds", []),
+                    duration_ms=vector_stats.get("duration_ms", 0)
                 ),
-                context_size_tokens=0
+                graph_traversal=GraphTraversalLog(
+                    max_hops=graph_stats.get("max_hops", 2),
+                    nodes_visited=graph_stats.get("nodes_visited", 0),
+                    relationships_traversed=graph_stats.get("relationships_traversed", 0),
+                    final_ranked_nodes=graph_stats.get("final_ranked_nodes", []),
+                    duration_ms=graph_stats.get("duration_ms", 0)
+                ),
+                context_size_tokens=prompt_tokens,
+                retrieved_context=retrieval_stats.get("context_preview")
             ),
             generation=GenerationLog(
                 duration_ms=0,
-                model="unknown",
-                temperature=0,
-                prompt_tokens=0,
-                completion_tokens=0,
-                answer=generated_answer
+                model=model_name,
+                temperature=temperature,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                answer=safe_generated_answer
             ),
             evaluation=EvaluationLog(
-                gold_answer=gold_answer,
+                gold_answer=safe_gold_answer,
                 correct=correct,
                 judge_response=judge_response,
                 judge_model="gpt-4o",
@@ -400,7 +574,8 @@ class EvaluationRunner:
             )
         )
         
-        self.logger.log_question(question_log)
+        with self._log_lock:
+            self.logger.log_question(question_log)
 
     def _load_golden_set(self, benchmark_name: str) -> List:
         """Load pre-generated golden set."""

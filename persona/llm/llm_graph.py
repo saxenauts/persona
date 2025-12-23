@@ -7,7 +7,7 @@ These are the core LLM-powered functions used by the Persona system:
 """
 
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 from persona.llm.prompts import GENERATE_STRUCTURED_INSIGHTS
 from persona.models.schema import AskRequest
 from persona.llm.client_factory import get_chat_client
@@ -17,8 +17,7 @@ from server.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-async def generate_response_with_context(query: str, context: str) -> str:
-    """Generate a response based on query and context using the configured LLM service."""
+def _build_rag_messages(query: str, context: str) -> list[ChatMessage]:
     prompt = f"""
     Given the following context from a knowledge graph and a query, provide a detailed answer:
 
@@ -30,20 +29,50 @@ async def generate_response_with_context(query: str, context: str) -> str:
     Please provide a comprehensive answer based on the given context:
     """
 
+    return [
+        ChatMessage(
+            role="system",
+            content="You are a helpful assistant that answers queries about a user based on the provided context from their graph."
+        ),
+        ChatMessage(role="user", content=prompt)
+    ]
+
+
+async def generate_response_with_context(query: str, context: str) -> str:
+    """Generate a response based on query and context using the configured LLM service."""
     try:
-        messages = [
-            ChatMessage(role="system", content="You are a helpful assistant that answers queries about a user based on the provided context from their graph."),
-            ChatMessage(role="user", content=prompt)
-        ]
-        
+        messages = _build_rag_messages(query, context)
         client = get_chat_client()
         response = await client.chat(messages=messages, temperature=0.7)
-        
         return response.content
-        
     except Exception as e:
         logger.error(f"Error generating response with context: {e}")
         return "I apologize, but I encountered an error while processing your request."
+
+
+async def generate_response_with_context_with_stats(
+    query: str, context: str
+) -> Tuple[str, Dict[str, Any]]:
+    """Generate a response and return model usage stats for logging."""
+    try:
+        messages = _build_rag_messages(query, context)
+        client = get_chat_client()
+        response = await client.chat(messages=messages, temperature=0.7)
+        usage = response.usage or {}
+        stats = {
+            "model": response.model,
+            "usage": usage,
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "completion_tokens": usage.get("completion_tokens"),
+            "temperature": 0.7
+        }
+        return response.content, stats
+    except Exception as e:
+        logger.error(f"Error generating response with context (stats): {e}")
+        return (
+            "I apologize, but I encountered an error while processing your request.",
+            {"model": "error", "usage": {}, "prompt_tokens": None, "completion_tokens": None, "temperature": 0.7}
+        )
 
 
 async def generate_structured_insights(ask_request: AskRequest, context: str) -> Dict[str, Any]:

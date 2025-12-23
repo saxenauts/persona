@@ -10,7 +10,10 @@ from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 from persona.core.context import format_memories_for_llm
-from persona.llm.llm_graph import generate_response_with_context
+from persona.llm.llm_graph import (
+    generate_response_with_context,
+    generate_response_with_context_with_stats
+)
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -89,7 +92,7 @@ class RAGInterface:
         logger.info(f"RAGInterface: got {len(context)} chars context for query: {query[:50]}...")
         return context
     
-    async def query(self, query: str) -> str:
+    async def query(self, query: str, include_stats: bool = False):
         """
         Get a generated response for a query.
         
@@ -97,12 +100,31 @@ class RAGInterface:
         """
         if not self._retriever:
             await self.__aenter__()
-        
-        context = await self.get_context(query)
+
+        retrieval_stats = None
+        if include_stats:
+            context, retrieval_stats = await self._retriever.get_context_with_stats(query)
+        else:
+            context = await self.get_context(query)
+
         logger.info(f"Context for RAG query: {context[:200]}...")
-        
-        response = await generate_response_with_context(query, context)
-        return response
+
+        if include_stats:
+            answer, llm_stats = await generate_response_with_context_with_stats(query, context)
+            retrieval_stats = retrieval_stats or {}
+            retrieval_stats["context_preview"] = context[:1000]
+            return {
+                "answer": answer,
+                "model": llm_stats.get("model"),
+                "usage": llm_stats.get("usage"),
+                "temperature": llm_stats.get("temperature"),
+                "prompt_tokens": llm_stats.get("prompt_tokens"),
+                "completion_tokens": llm_stats.get("completion_tokens"),
+                "context_chars": len(context),
+                "retrieval": retrieval_stats
+            }
+
+        return await generate_response_with_context(query, context)
     
     async def close(self):
         """Close resources."""

@@ -7,8 +7,10 @@ and saves it locally for evaluation.
 
 import json
 import os
+import shutil
 from pathlib import Path
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 
 
 def download_personamem_32k(output_dir: str = "evals/data/personamem"):
@@ -65,6 +67,17 @@ def download_personamem_32k(output_dir: str = "evals/data/personamem"):
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
         print(f"\nMetadata saved to {metadata_file}")
+
+        # Download shared contexts file
+        contexts_filename = "shared_contexts_32k.jsonl"
+        contexts_path = hf_hub_download(
+            repo_id="bowen-upenn/PersonaMem",
+            filename=contexts_filename,
+            repo_type="dataset"
+        )
+        dest_path = output_path / contexts_filename
+        shutil.copy(contexts_path, dest_path)
+        print(f"Saved shared contexts to {dest_path}")
 
         print("\n✓ PersonaMem 32k dataset downloaded successfully!")
 

@@ -6,7 +6,7 @@ see persona.models.memory instead.
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 # =============================================================================
@@ -18,9 +18,17 @@ class UserCreate(BaseModel):
 
 class RAGQuery(BaseModel):
     query: str
+    include_stats: bool = False
 
 class RAGResponse(BaseModel):
     answer: str
+    model: Optional[str] = None
+    usage: Optional[Dict[str, Any]] = None
+    temperature: Optional[float] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    context_chars: Optional[int] = None
+    retrieval: Optional[Dict[str, Any]] = None
 
 class AskRequest(BaseModel):
     query: str

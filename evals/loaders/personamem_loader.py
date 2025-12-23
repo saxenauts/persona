@@ -6,6 +6,8 @@ Loads and processes the PersonaMem benchmark dataset for evaluation.
 
 import json
 import csv
+import re
+import ast
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -62,12 +64,21 @@ class PersonaMemLoader:
 
         # Path to questions file
         self.questions_path = self.data_dir / f"questions_{variant}_{variant}.json"
+        self.contexts_path = self.data_dir / f"shared_contexts_{variant}.jsonl"
 
         if not self.questions_path.exists():
             raise FileNotFoundError(
                 f"PersonaMem {variant} data not found at {self.questions_path}. "
                 f"Run 'python evals/scripts/download_personamem.py' to download."
             )
+
+        if not self.contexts_path.exists():
+            raise FileNotFoundError(
+                f"PersonaMem {variant} shared contexts not found at {self.contexts_path}. "
+                f"Run 'python evals/scripts/download_personamem.py' to download."
+            )
+
+        self.shared_contexts = self._load_shared_contexts()
 
     def load(self) -> List[PersonaMemQuestion]:
         """
@@ -102,11 +113,7 @@ class PersonaMemLoader:
             PersonaMemQuestion object
         """
         # Extract options
-        options = {}
-        for key in ['a', 'b', 'c', 'd']:
-            option_key = f"option_{key}"
-            if option_key in item:
-                options[key] = item[option_key]
+        options = self._parse_options(item)
 
         # Generate question ID if not present
         question_id = item.get('id', f"personamem_{self.variant}_{idx}")
@@ -114,22 +121,93 @@ class PersonaMemLoader:
         # Extract question type
         question_type = item.get('question_type', 'unknown')
 
+        question_text = (
+            item.get('question')
+            or item.get('user_question_or_message')
+            or ''
+        )
+
+        shared_context_id = item.get('shared_context_id')
+        context = self.shared_contexts.get(shared_context_id, item.get('context', ''))
+
         return PersonaMemQuestion(
             question_id=question_id,
             question_type=question_type,
-            question=item.get('question', ''),
+            question=question_text,
             options=options,
-            correct_answer=item.get('answer', '').lower().strip(),
-            context=item.get('context', ''),
+            correct_answer=self._parse_correct_answer(item),
+            context=context,
             metadata={
                 "variant": self.variant,
                 "index": idx,
                 **{k: v for k, v in item.items() if k not in [
-                    'id', 'question_type', 'question', 'option_a', 'option_b',
-                    'option_c', 'option_d', 'answer', 'context'
+                    'id', 'question_type', 'question', 'user_question_or_message',
+                    'option_a', 'option_b', 'option_c', 'option_d', 'all_options',
+                    'answer', 'correct_answer', 'context', 'shared_context_id'
                 ]}
             }
         )
+
+    def _load_shared_contexts(self) -> Dict[str, str]:
+        contexts: Dict[str, str] = {}
+
+        with open(self.contexts_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                payload = json.loads(line)
+                for context_id, turns in payload.items():
+                    contexts[context_id] = self._format_context(turns)
+
+        return contexts
+
+    def _format_context(self, turns: List[Dict[str, Any]]) -> str:
+        parts = []
+        for turn in turns:
+            role = str(turn.get("role", "user")).capitalize()
+            content = str(turn.get("content", "")).strip()
+            parts.append(f"{role}: {content}")
+        return "\n".join(parts)
+
+    def _parse_options(self, item: Dict[str, Any]) -> Dict[str, str]:
+        raw_options = item.get("all_options") or item.get("options")
+        options_list: List[str] = []
+
+        if isinstance(raw_options, list):
+            options_list = raw_options
+        elif isinstance(raw_options, dict):
+            return {str(k).lower(): str(v) for k, v in raw_options.items()}
+        elif isinstance(raw_options, str):
+            try:
+                options_list = json.loads(raw_options)
+            except json.JSONDecodeError:
+                try:
+                    options_list = ast.literal_eval(raw_options)
+                except (ValueError, SyntaxError):
+                    options_list = [raw_options]
+
+        options: Dict[str, str] = {}
+        fallback_letters = ["a", "b", "c", "d"]
+        for idx, option in enumerate(options_list):
+            option_text = str(option)
+            match = re.match(r"\s*\(?([a-dA-D])\)?\s*[:\). -]*\s*(.*)", option_text)
+            if match:
+                letter = match.group(1).lower()
+                text = match.group(2).strip()
+            else:
+                letter = fallback_letters[idx] if idx < len(fallback_letters) else ""
+                text = option_text.strip()
+            if letter:
+                options[letter] = text
+
+        return options
+
+    def _parse_correct_answer(self, item: Dict[str, Any]) -> str:
+        raw = item.get("answer") or item.get("correct_answer") or ""
+        raw = str(raw).strip().lower()
+        match = re.search(r"[a-d]", raw)
+        return match.group(0) if match else raw
 
     def load_by_type(self, question_type: str) -> List[PersonaMemQuestion]:
         """

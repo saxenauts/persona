@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 
-from persona.core.interfaces import GraphDatabase
+from persona.core.interfaces import GraphDatabase, VectorStore
 from persona.models.memory import Memory, MemoryLink, MemoryQueryResponse
 from server.logging_config import get_logger
 
@@ -24,8 +24,9 @@ class MemoryStore:
     Links between memories are edges.
     """
     
-    def __init__(self, graph_db: GraphDatabase):
+    def __init__(self, graph_db: GraphDatabase, vector_store: Optional[VectorStore] = None):
         self.graph_db = graph_db
+        self.vector_store = vector_store
     
     async def create(
         self, 
@@ -68,6 +69,18 @@ class MemoryStore:
                 node_data[field] = node_data[field].isoformat()
         
         await self.graph_db.create_nodes([node_data], memory.user_id)
+
+        if self.vector_store and memory.embedding:
+            try:
+                await self.vector_store.add_embedding(
+                    node_name=node_data["name"],
+                    embedding=memory.embedding,
+                    user_id=memory.user_id
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to persist embedding for memory {node_data['name']}: {e}"
+                )
         
         # Create links if provided
         if links:
@@ -387,4 +400,3 @@ class MemoryStore:
         
         logger.info(f"Updated memory {memory_id}: {list(updates.keys())}")
         return await self.get(memory_id, user_id)
-
