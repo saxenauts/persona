@@ -20,19 +20,22 @@ from evals.loaders.unified_loader import UnifiedBenchmarkLoader, SampleConfig
 
 
 DEFAULT_LONGMEMEVAL_SAMPLES = {
-    "single-session-user": 35,
+    "single-session-user": 30,
+    "single-session-assistant": 25,
     "multi-session": 60,
     "temporal-reasoning": 60,
-    "knowledge-update": 40,
-    "single-session-preference": 25,
+    "knowledge-update": 30,
+    "single-session-preference": 15,
 }
 
 DEFAULT_PERSONAMEM_SAMPLES = {
-    "recall_user_shared_facts": 30,
-    "track_full_preference_evolution": 30,
-    "generalizing_to_new_scenarios": 20,
-    "provide_preference_aligned_recommendations": 20,
-    "recalling_the_reasons_behind_previous_updates": 20,
+    "recall_user_shared_facts": 24,
+    "track_full_preference_evolution": 26,
+    "generalizing_to_new_scenarios": 12,
+    "provide_preference_aligned_recommendations": 12,
+    "recalling_the_reasons_behind_previous_updates": 18,
+    "suggest_new_ideas": 18,
+    "recalling_facts_mentioned_by_the_user": 10,
 }
 
 
@@ -74,6 +77,30 @@ def load_combined_config(config_path: Path) -> Dict[str, Any]:
     }
 
 
+def validate_sample_sizes(
+    loader: UnifiedBenchmarkLoader,
+    sample_sizes: Dict[str, int],
+    benchmark_label: str
+) -> None:
+    distribution = loader.get_type_distribution()
+    available_types = set(distribution.keys())
+    configured_types = set(sample_sizes.keys())
+
+    missing = sorted(available_types - configured_types)
+    extra = sorted(configured_types - available_types)
+
+    if missing or extra:
+        message_parts = []
+        if missing:
+            message_parts.append(f"missing types: {', '.join(missing)}")
+        if extra:
+            message_parts.append(f"unknown types: {', '.join(extra)}")
+        raise ValueError(
+            f"{benchmark_label} sample_sizes invalid ({'; '.join(message_parts)}). "
+            "Update evals/configs/golden_set.yaml to match dataset types."
+        )
+
+
 def generate_longmemeval_golden_set(sample_sizes: Dict[str, int], random_seed: int, output_dir: str):
     """Generate LongMemEval golden set."""
     print("=== LongMemEval Golden Set ===\n")
@@ -84,6 +111,7 @@ def generate_longmemeval_golden_set(sample_sizes: Dict[str, int], random_seed: i
     )
 
     loader = UnifiedBenchmarkLoader(benchmark="longmemeval")
+    validate_sample_sizes(loader, sample_sizes, "LongMemEval")
     manifest = loader.create_golden_set(config, output_dir=output_dir)
 
     return manifest
@@ -105,6 +133,7 @@ def generate_personamem_golden_set(
     )
 
     loader = UnifiedBenchmarkLoader(benchmark="personamem", variant=variant)
+    validate_sample_sizes(loader, sample_sizes, "PersonaMem")
     manifest = loader.create_golden_set(config, output_dir=output_dir)
 
     return manifest
