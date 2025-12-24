@@ -22,6 +22,11 @@ services:
       - ./tests:/app/tests
     env_file:
       - .env
+    environment:
+      - UVICORN_HOST=${UVICORN_HOST:-0.0.0.0}
+      - UVICORN_PORT=${UVICORN_PORT:-8000}
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
+      - UVICORN_RELOAD=${UVICORN_RELOAD:-true}
     ports:
       - "8000:8000"
     depends_on:

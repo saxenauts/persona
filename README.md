@@ -65,6 +65,10 @@ PASSWORD_NEO4J=your_secure_password
 LLM_SERVICE=openai/gpt-4o
 EMBEDDING_SERVICE=openai/text-embedding-3-small
 OPENAI_API_KEY=your_openai_api_key
+
+# Server runtime
+UVICORN_WORKERS=1
+UVICORN_RELOAD=true
 ```
 
 Start the stack:
