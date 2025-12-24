@@ -13,6 +13,7 @@ Usage:
 
 from datetime import datetime
 from typing import Optional
+import time
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
@@ -65,7 +66,9 @@ class PersonaAdapter:
         session_id = session_id or f"session_{timestamp.strftime('%Y%m%d_%H%M%S')}"
         
         logger.info(f"PersonaAdapter.ingest: user={self.user_id}, source={source_type}, persist={persist}")
-        
+
+        start_total = time.time()
+
         # Step 1: Extract memories (in-memory)
         result = await self.ingestion_service.ingest(
             raw_content=content,
@@ -82,7 +85,9 @@ class PersonaAdapter:
         logger.info(f"Extracted {len(result.memories)} memories, {len(result.links)} links")
         
         # Step 2: Persist (unless dry-run)
+        persist_time_ms = 0.0
         if persist:
+            persist_start = time.time()
             # Get previous episode BEFORE creating new ones (for temporal chain)
             previous_episode = await self.store.get_most_recent_episode(self.user_id)
             
@@ -96,6 +101,11 @@ class PersonaAdapter:
             if episode and previous_episode and previous_episode.id != episode.id:
                 await self.store.link_temporal_chain(episode, previous_episode)
                 logger.info(f"Linked episode '{episode.title}' -> '{previous_episode.title}'")
+
+            persist_time_ms = (time.time() - persist_start) * 1000
+
+        result.persist_time_ms = persist_time_ms
+        result.total_time_ms = (time.time() - start_total) * 1000
         
         return result
     
@@ -169,6 +179,7 @@ class PersonaAdapter:
             logger.info(f"Persisting session {idx+1}/{len(items)}: {len(result.memories)} memories")
             
             if persist:
+                persist_start = time.time()
                 await self.store.create_many(result.memories, result.links, self.user_id)
                 
                 # Link episode to previous in temporal chain
@@ -179,8 +190,37 @@ class PersonaAdapter:
                 
                 if episode:
                     previous_episode = episode
+
+                result.persist_time_ms = (time.time() - persist_start) * 1000
+            else:
+                result.persist_time_ms = 0.0
+
+            if result.extract_time_ms is None:
+                result.extract_time_ms = 0.0
+            if result.embed_time_ms is None:
+                result.embed_time_ms = 0.0
+            result.total_time_ms = (
+                (result.extract_time_ms or 0.0)
+                + (result.embed_time_ms or 0.0)
+                + (result.persist_time_ms or 0.0)
+            )
             
             final_results.append(result)
+
+        if final_results:
+            for res in final_results:
+                if res.extract_time_ms is None:
+                    res.extract_time_ms = 0.0
+                if res.embed_time_ms is None:
+                    res.embed_time_ms = 0.0
+                if res.persist_time_ms is None:
+                    res.persist_time_ms = 0.0
+                if res.total_time_ms is None:
+                    res.total_time_ms = (
+                        (res.extract_time_ms or 0.0)
+                        + (res.embed_time_ms or 0.0)
+                        + (res.persist_time_ms or 0.0)
+                    )
         
         logger.info(f"Batch ingestion complete: {len(final_results)} results")
         return final_results

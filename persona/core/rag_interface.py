@@ -5,6 +5,7 @@ Provides context retrieval and query answering using the Memory architecture.
 """
 
 from typing import List, Dict, Any, Optional
+import time
 from persona.core.graph_ops import GraphOps
 from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
@@ -102,15 +103,19 @@ class RAGInterface:
             await self.__aenter__()
 
         retrieval_stats = None
+        retrieval_start = time.time()
         if include_stats:
             context, retrieval_stats = await self._retriever.get_context_with_stats(query)
         else:
             context = await self.get_context(query)
+        retrieval_ms = (time.time() - retrieval_start) * 1000
 
         logger.info(f"Context for RAG query: {context[:200]}...")
 
         if include_stats:
+            generation_start = time.time()
             answer, llm_stats = await generate_response_with_context_with_stats(query, context)
+            generation_ms = (time.time() - generation_start) * 1000
             retrieval_stats = retrieval_stats or {}
             retrieval_stats["context_preview"] = context[:1000]
             return {
@@ -121,7 +126,9 @@ class RAGInterface:
                 "prompt_tokens": llm_stats.get("prompt_tokens"),
                 "completion_tokens": llm_stats.get("completion_tokens"),
                 "context_chars": len(context),
-                "retrieval": retrieval_stats
+                "retrieval": retrieval_stats,
+                "retrieval_ms": retrieval_ms,
+                "generation_ms": generation_ms
             }
 
         return await generate_response_with_context(query, context)

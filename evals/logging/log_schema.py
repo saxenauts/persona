@@ -60,6 +60,10 @@ class IngestionLog(BaseModel):
     nodes_created: int
     relationships_created: int
     embeddings_generated: int
+    extract_ms: Optional[float] = None
+    embed_ms: Optional[float] = None
+    persist_ms: Optional[float] = None
+    total_ms: Optional[float] = None
     errors: List[str] = Field(default_factory=list)
 
 

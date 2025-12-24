@@ -29,6 +29,8 @@ class RAGResponse(BaseModel):
     completion_tokens: Optional[int] = None
     context_chars: Optional[int] = None
     retrieval: Optional[Dict[str, Any]] = None
+    retrieval_ms: Optional[float] = None
+    generation_ms: Optional[float] = None
 
 class AskRequest(BaseModel):
     query: str

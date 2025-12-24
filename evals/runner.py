@@ -539,11 +539,19 @@ class EvaluationRunner:
         completion_tokens = 0
         model_name = "unknown"
         temperature = 0
+        retrieval_duration_ms = query_time_ms
+        generation_duration_ms = 0
         if query_stats and isinstance(query_stats, dict):
             prompt_tokens = query_stats.get("prompt_tokens") or 0
             completion_tokens = query_stats.get("completion_tokens") or 0
             model_name = query_stats.get("model") or "unknown"
             temperature = query_stats.get("temperature") or 0
+            retrieval_duration_ms = query_stats.get("retrieval_ms") or query_time_ms
+            generation_duration_ms = query_stats.get("generation_ms") or 0
+
+        ingest_timings = {}
+        if ingest_stats and isinstance(ingest_stats, dict):
+            ingest_timings = ingest_stats.get("timings_ms", {}) or {}
 
         question_log = QuestionLog(
             question_id=question.question_id,
@@ -562,11 +570,15 @@ class EvaluationRunner:
                 ),
                 nodes_created=total_memories,
                 relationships_created=links_created,
-                embeddings_generated=total_memories
+                embeddings_generated=total_memories,
+                extract_ms=ingest_timings.get("extract"),
+                embed_ms=ingest_timings.get("embed"),
+                persist_ms=ingest_timings.get("persist"),
+                total_ms=ingest_timings.get("total")
             ),
             retrieval=RetrievalLog(
                 query=query_text,
-                duration_ms=query_time_ms,
+                duration_ms=retrieval_duration_ms,
                 vector_search=VectorSearchLog(
                     top_k=vector_stats.get("top_k", 5),
                     seeds=vector_stats.get("seeds", []),
@@ -583,7 +595,7 @@ class EvaluationRunner:
                 retrieved_context=retrieval_stats.get("context_preview")
             ),
             generation=GenerationLog(
-                duration_ms=0,
+                duration_ms=generation_duration_ms,
                 model=model_name,
                 temperature=temperature,
                 prompt_tokens=prompt_tokens,

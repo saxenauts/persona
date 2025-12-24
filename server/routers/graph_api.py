@@ -142,7 +142,13 @@ async def ingest_data(
             "message": "Data ingested successfully",
             "memories_created": len(result.memories),
             "memories_created_by_type": type_counts,
-            "links_created": links_created
+            "links_created": links_created,
+            "timings_ms": {
+                "extract": result.extract_time_ms or 0.0,
+                "embed": result.embed_time_ms or 0.0,
+                "persist": result.persist_time_ms or 0.0,
+                "total": result.total_time_ms or 0.0
+            }
         }
         
     except HTTPException:
@@ -181,11 +187,21 @@ async def ingest_batch_data(
         total_memories = 0
         total_links = 0
         type_counts: Dict[str, int] = {}
+        timing_totals = {
+            "extract": 0.0,
+            "embed": 0.0,
+            "persist": 0.0,
+            "total": 0.0
+        }
         for r in results:
             if not r.success:
                 continue
             total_memories += len(r.memories)
             total_links += len(r.links)
+            timing_totals["extract"] += r.extract_time_ms or 0.0
+            timing_totals["embed"] += r.embed_time_ms or 0.0
+            timing_totals["persist"] += r.persist_time_ms or 0.0
+            timing_totals["total"] += r.total_time_ms or 0.0
             for memory in r.memories:
                 mem_type = getattr(memory, "type", "unknown")
                 type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
@@ -195,7 +211,8 @@ async def ingest_batch_data(
             "message": f"Successfully ingested batch of {len(batch_data.items)} items",
             "memories_created": total_memories,
             "memories_created_by_type": type_counts,
-            "links_created": total_links
+            "links_created": total_links,
+            "timings_ms": timing_totals
         }
         
     except HTTPException:

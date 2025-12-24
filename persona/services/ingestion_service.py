@@ -82,6 +82,10 @@ class IngestionResult(BaseModel):
     links: List[MemoryLink] = Field(default_factory=list)
     success: bool = True
     error: Optional[str] = None
+    extract_time_ms: Optional[float] = None
+    embed_time_ms: Optional[float] = None
+    persist_time_ms: Optional[float] = None
+    total_time_ms: Optional[float] = None
 
 
 # ============================================================================
@@ -194,7 +198,9 @@ class MemoryIngestionService:
             return IngestionResult(
                 memories=memories,
                 links=links,
-                success=True
+                success=True,
+                extract_time_ms=extract_time_ms,
+                embed_time_ms=embed_time_ms
             )
             
         except Exception as e:
