@@ -62,6 +62,7 @@ def _format_metric(value: float, allow_zero: bool = False) -> str:
 def _aggregate_run(run_id: str, manifest: Dict[Tuple[str, str], str]) -> Dict[str, Any]:
     manifest_keys = set(manifest.keys())
     seen_keys = set()
+    expected_types = sorted(set(manifest.values()))
 
     by_type: Dict[str, Dict[str, Any]] = {}
     total_correct = 0
@@ -132,6 +133,18 @@ def _aggregate_run(run_id: str, manifest: Dict[Tuple[str, str], str]) -> Dict[st
             "avg_completion_tokens": _mean(stats["completion_tokens"]),
         }
 
+    macro_values = [stats["accuracy"] for stats in summary["by_type"].values() if stats["total"] > 0]
+    summary["macro_accuracy"] = _mean(macro_values)
+    expected_macro_values = []
+    for qtype in expected_types:
+        stats = summary["by_type"].get(qtype)
+        if stats and stats["total"] > 0:
+            expected_macro_values.append(stats["accuracy"])
+        else:
+            expected_macro_values.append(0.0)
+    summary["macro_accuracy_expected"] = _mean(expected_macro_values) if expected_types else 0.0
+    summary["expected_types"] = expected_types
+
     return summary
 
 
@@ -139,6 +152,8 @@ def _print_run_summary(summary: Dict[str, Any]) -> None:
     print(f"\n=== {summary['run_id']} ===")
     print(f"Total: {summary['total_questions']} | Missing: {summary['missing_questions']}")
     print(f"Accuracy: {summary['accuracy']:.2%}")
+    print(f"Macro accuracy (observed types): {summary['macro_accuracy']:.2%}")
+    print(f"Macro accuracy (expected types): {summary['macro_accuracy_expected']:.2%}")
 
 
 def _print_comparison(summaries: Dict[str, Dict[str, Any]], qtypes: list[str]) -> None:
