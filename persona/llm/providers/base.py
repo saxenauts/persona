@@ -83,4 +83,8 @@ class BaseLLMClient(ABC):
     @abstractmethod
     def supports_embeddings(self) -> bool:
         """Return whether the provider supports embeddings"""
-        pass 
+        pass
+
+    async def close(self) -> None:
+        """Close any underlying client resources."""
+        return None

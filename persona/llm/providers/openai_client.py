@@ -96,4 +96,14 @@ class OpenAIClient(BaseLLMClient):
         return True
     
     def supports_embeddings(self) -> bool:
-        return True 
+        return True
+
+    async def close(self) -> None:
+        try:
+            await self.async_client.close()
+        except Exception as e:
+            logger.debug(f"OpenAI async client close failed: {e}")
+        try:
+            self.sync_client.close()
+        except Exception as e:
+            logger.debug(f"OpenAI sync client close failed: {e}")

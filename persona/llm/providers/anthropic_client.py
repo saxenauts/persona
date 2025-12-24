@@ -92,4 +92,10 @@ class AnthropicClient(BaseLLMClient):
         return True  # We simulate JSON mode with system prompts
     
     def supports_embeddings(self) -> bool:
-        return False 
+        return False
+
+    async def close(self) -> None:
+        try:
+            await self.client.close()
+        except Exception as e:
+            logger.debug(f"Anthropic client close failed: {e}")

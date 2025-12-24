@@ -238,3 +238,12 @@ class AzureFoundryClient(BaseLLMClient):
     
     def supports_embeddings(self) -> bool:
         return True
+
+    async def close(self) -> None:
+        if self._async_client:
+            try:
+                await self._async_client.close()
+            except Exception as e:
+                logger.debug(f"Foundry async client close failed: {e}")
+            self._async_client = None
+            self._client_loop_id = None

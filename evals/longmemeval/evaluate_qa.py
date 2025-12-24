@@ -71,32 +71,81 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
     from dotenv import load_dotenv
     load_dotenv(project_root / ".env")
     
-    from persona.llm.client_factory import get_chat_client
+    import openai
+    from server.config import config
+    from persona.llm.client_factory import get_chat_client, parse_llm_service
     from persona.llm.providers.base import ChatMessage
     
     # Note: reset_clients() no longer needed - lazy client in AzureFoundryClient
     # now handles event loop binding automatically via _get_client()
     
+    def _build_async_client(provider: str):
+        if provider == "foundry":
+            api_base = (config.MACHINE_LEARNING.AZURE_API_BASE or "").rstrip("/")
+            if not api_base.endswith("/openai/v1"):
+                api_base = f"{api_base}/openai/v1/"
+            else:
+                api_base = f"{api_base}/"
+            return openai.AsyncOpenAI(
+                api_key=config.MACHINE_LEARNING.AZURE_API_KEY,
+                base_url=api_base
+            )
+        if provider == "openai":
+            return openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
+        return None
+
     async def async_query():
-        client = get_chat_client()
+        provider, model = parse_llm_service(config.MACHINE_LEARNING.LLM_SERVICE)
         messages = [ChatMessage(role="user", content=prompt)]
-        
-        for attempt in range(max_retries):
+        direct_client = _build_async_client(provider)
+        if direct_client:
+            model_name = (model or "").lower()
+            uses_completion_tokens = model_name.startswith(("gpt-5", "o1", "o3"))
             try:
-                print(f"        [Judge attempt {attempt + 1}/{max_retries}]", flush=True)
-                response = await client.chat(
-                    messages=messages,
-                    temperature=TEMPERATURE,
-                    max_tokens=10
-                )
-                return response.content.strip()
-            except Exception as e:
-                print(f"        Attempt {attempt + 1} failed: {e}. Retrying...", flush=True)
-                time.sleep(2 ** attempt)  # Exponential backoff
-                if attempt == max_retries - 1:
-                    return ""
-        
-        return ""
+                for attempt in range(max_retries):
+                    try:
+                        print(f"        [Judge attempt {attempt + 1}/{max_retries}]", flush=True)
+                        request_params = {
+                            "model": model,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": TEMPERATURE,
+                        }
+                        if uses_completion_tokens:
+                            request_params["max_completion_tokens"] = 10
+                        else:
+                            request_params["max_tokens"] = 10
+                        response = await direct_client.chat.completions.create(
+                            **request_params
+                        )
+                        return response.choices[0].message.content.strip()
+                    except Exception as e:
+                        print(f"        Attempt {attempt + 1} failed: {e}. Retrying...", flush=True)
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                        if attempt == max_retries - 1:
+                            return ""
+                return ""
+            finally:
+                await direct_client.close()
+
+        client = get_chat_client()
+        try:
+            for attempt in range(max_retries):
+                try:
+                    print(f"        [Judge attempt {attempt + 1}/{max_retries}]", flush=True)
+                    response = await client.chat(
+                        messages=messages,
+                        temperature=TEMPERATURE,
+                        max_tokens=10
+                    )
+                    return response.content.strip()
+                except Exception as e:
+                    print(f"        Attempt {attempt + 1} failed: {e}. Retrying...", flush=True)
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    if attempt == max_retries - 1:
+                        return ""
+            return ""
+        finally:
+            await client.close()
     
     # Run the async function
     try:

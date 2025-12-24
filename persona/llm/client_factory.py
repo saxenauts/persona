@@ -196,4 +196,24 @@ def reset_clients():
     """Reset client instances (useful for testing)"""
     global _chat_client, _embedding_client
     _chat_client = None
-    _embedding_client = None 
+    _embedding_client = None
+
+
+async def close_clients():
+    """Close client resources and reset cached instances."""
+    global _chat_client, _embedding_client
+
+    clients = []
+    if _chat_client:
+        clients.append(_chat_client)
+    if _embedding_client and _embedding_client is not _chat_client:
+        clients.append(_embedding_client)
+
+    for client in clients:
+        try:
+            await client.close()
+        except Exception as e:
+            logger.debug(f"Failed to close client: {e}")
+
+    _chat_client = None
+    _embedding_client = None

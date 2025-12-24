@@ -248,4 +248,12 @@ class AzureOpenAIClient(BaseLLMClient):
     
     def supports_embeddings(self) -> bool:
         return True
+
+    async def close(self) -> None:
+        for client in self._async_clients.values():
+            try:
+                await client.close()
+            except Exception as e:
+                logger.debug(f"Azure OpenAI client close failed: {e}")
+        self._async_clients = {}
  
