@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 class BenchmarkConfig:
     """Configuration for a single benchmark"""
     source: str
-    sample_sizes: Dict[str, int]
+    sample_sizes: Optional[Dict[str, int]] = None
     variant: Optional[str] = None
+    full_dataset: bool = False
 
 
 @dataclass
@@ -56,20 +57,24 @@ class EvalConfig:
         longmemeval = None
         if 'longmemeval' in data:
             lme_data = data['longmemeval']
+            lme_full = bool(lme_data.get('full_dataset', False))
             longmemeval = BenchmarkConfig(
                 source=lme_data.get('source', 'evals/data/longmemeval_oracle.json'),
-                sample_sizes=lme_data.get('sample_sizes', {}),
-                variant=lme_data.get('variant')
+                sample_sizes=None if lme_full else lme_data.get('sample_sizes', {}),
+                variant=lme_data.get('variant'),
+                full_dataset=lme_full
             )
 
         # Parse PersonaMem config
         personamem = None
         if 'personamem' in data:
             pm_data = data['personamem']
+            pm_full = bool(pm_data.get('full_dataset', False))
             personamem = BenchmarkConfig(
                 source=pm_data.get('source', 'evals/data/personamem'),
-                sample_sizes=pm_data.get('sample_sizes', {}),
-                variant=pm_data.get('variant', '32k')
+                sample_sizes=None if pm_full else pm_data.get('sample_sizes', {}),
+                variant=pm_data.get('variant', '32k'),
+                full_dataset=pm_full
             )
 
         return cls(
@@ -101,17 +106,21 @@ class EvalConfig:
         if self.longmemeval:
             result['longmemeval'] = {
                 'source': self.longmemeval.source,
-                'sample_sizes': self.longmemeval.sample_sizes,
+                'full_dataset': self.longmemeval.full_dataset,
             }
+            if self.longmemeval.sample_sizes is not None:
+                result['longmemeval']['sample_sizes'] = self.longmemeval.sample_sizes
             if self.longmemeval.variant:
                 result['longmemeval']['variant'] = self.longmemeval.variant
 
         if self.personamem:
             result['personamem'] = {
                 'source': self.personamem.source,
-                'sample_sizes': self.personamem.sample_sizes,
+                'full_dataset': self.personamem.full_dataset,
                 'variant': self.personamem.variant,
             }
+            if self.personamem.sample_sizes is not None:
+                result['personamem']['sample_sizes'] = self.personamem.sample_sizes
 
         return result
 
@@ -137,22 +146,25 @@ def create_default_configs():
         'longmemeval': {
             'source': 'evals/data/longmemeval_oracle.json',
             'sample_sizes': {
-                'single-session-user': 35,
+                'single-session-user': 60,
+                'single-session-assistant': 56,
                 'multi-session': 60,
                 'temporal-reasoning': 60,
-                'knowledge-update': 40,
-                'single-session-preference': 25,
+                'knowledge-update': 60,
+                'single-session-preference': 30,
             }
         },
         'personamem': {
             'source': 'evals/data/personamem',
             'variant': '32k',
             'sample_sizes': {
-                'recall_user_shared_facts': 30,
-                'track_full_preference_evolution': 30,
-                'generalizing_to_new_scenarios': 20,
-                'provide_preference_aligned_recommendations': 20,
-                'recalling_the_reasons_behind_previous_updates': 20,
+                'recall_user_shared_facts': 60,
+                'track_full_preference_evolution': 60,
+                'generalizing_to_new_scenarios': 57,
+                'provide_preference_aligned_recommendations': 55,
+                'recalling_the_reasons_behind_previous_updates': 60,
+                'suggest_new_ideas': 60,
+                'recalling_facts_mentioned_by_the_user': 17,
             }
         },
         'global': {
@@ -172,9 +184,25 @@ def create_default_configs():
         'longmemeval': {
             'source': 'evals/data/longmemeval_oracle.json',
             'sample_sizes': {
-                'single-session-user': 5,
-                'multi-session': 5,
-                'temporal-reasoning': 5,
+                'single-session-user': 2,
+                'single-session-assistant': 2,
+                'multi-session': 2,
+                'temporal-reasoning': 2,
+                'knowledge-update': 2,
+                'single-session-preference': 2,
+            }
+        },
+        'personamem': {
+            'source': 'evals/data/personamem',
+            'variant': '32k',
+            'sample_sizes': {
+                'recall_user_shared_facts': 2,
+                'track_full_preference_evolution': 2,
+                'generalizing_to_new_scenarios': 2,
+                'provide_preference_aligned_recommendations': 2,
+                'recalling_the_reasons_behind_previous_updates': 2,
+                'suggest_new_ideas': 2,
+                'recalling_facts_mentioned_by_the_user': 2,
             }
         },
         'global': {
@@ -193,11 +221,12 @@ def create_default_configs():
         'longmemeval': {
             'source': 'evals/data/longmemeval_oracle.json',
             'sample_sizes': {
-                'single-session-user': 35,
+                'single-session-user': 60,
+                'single-session-assistant': 56,
                 'multi-session': 60,
                 'temporal-reasoning': 60,
-                'knowledge-update': 40,
-                'single-session-preference': 25,
+                'knowledge-update': 60,
+                'single-session-preference': 30,
             }
         },
         'global': {
@@ -211,10 +240,34 @@ def create_default_configs():
     with open(configs_dir / "longmemeval_only.yaml", 'w') as f:
         yaml.dump(longmemeval_only, f, default_flow_style=False, sort_keys=False)
 
+    # Full dataset config
+    full_dataset = {
+        'longmemeval': {
+            'source': 'evals/data/longmemeval_oracle.json',
+            'full_dataset': True,
+        },
+        'personamem': {
+            'source': 'evals/data/personamem',
+            'variant': '32k',
+            'full_dataset': True,
+        },
+        'global': {
+            'random_seed': 42,
+            'adapters': ['persona'],
+            'parallel_workers': 5,
+            'checkpoint_dir': 'evals/results',
+            'deep_logging': True,
+        }
+    }
+
+    with open(configs_dir / "full_dataset.yaml", 'w') as f:
+        yaml.dump(full_dataset, f, default_flow_style=False, sort_keys=False)
+
     print("✓ Created default config files:")
     print("  - evals/configs/full_eval.yaml")
     print("  - evals/configs/quick_test.yaml")
     print("  - evals/configs/longmemeval_only.yaml")
+    print("  - evals/configs/full_dataset.yaml")
 
 
 # Example usage
@@ -235,10 +288,16 @@ if __name__ == "__main__":
 
     if config.longmemeval:
         print(f"\nLongMemEval samples:")
-        for qtype, count in config.longmemeval.sample_sizes.items():
-            print(f"  {qtype}: {count}")
+        if config.longmemeval.sample_sizes:
+            for qtype, count in config.longmemeval.sample_sizes.items():
+                print(f"  {qtype}: {count}")
+        else:
+            print("  full_dataset: true")
 
     if config.personamem:
         print(f"\nPersonaMem samples ({config.personamem.variant}):")
-        for qtype, count in config.personamem.sample_sizes.items():
-            print(f"  {qtype}: {count}")
+        if config.personamem.sample_sizes:
+            for qtype, count in config.personamem.sample_sizes.items():
+                print(f"  {qtype}: {count}")
+        else:
+            print("  full_dataset: true")

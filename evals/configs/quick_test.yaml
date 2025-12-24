@@ -1,9 +1,23 @@
 longmemeval:
   source: evals/data/longmemeval_oracle.json
   sample_sizes:
-    single-session-user: 5
-    multi-session: 5
-    temporal-reasoning: 5
+    single-session-user: 2
+    single-session-assistant: 2
+    multi-session: 2
+    temporal-reasoning: 2
+    knowledge-update: 2
+    single-session-preference: 2
+personamem:
+  source: evals/data/personamem
+  variant: 32k
+  sample_sizes:
+    recall_user_shared_facts: 2
+    track_full_preference_evolution: 2
+    generalizing_to_new_scenarios: 2
+    provide_preference_aligned_recommendations: 2
+    recalling_the_reasons_behind_previous_updates: 2
+    suggest_new_ideas: 2
+    recalling_facts_mentioned_by_the_user: 2
 global:
   random_seed: 42
   adapters:

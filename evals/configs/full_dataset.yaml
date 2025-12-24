@@ -1,0 +1,14 @@
+longmemeval:
+  source: evals/data/longmemeval_oracle.json
+  full_dataset: true
+personamem:
+  source: evals/data/personamem
+  variant: 32k
+  full_dataset: true
+global:
+  random_seed: 42
+  adapters:
+  - persona
+  parallel_workers: 5
+  checkpoint_dir: evals/results
+  deep_logging: true

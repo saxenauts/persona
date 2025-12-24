@@ -43,7 +43,7 @@ The framework supports multiple benchmarks (LongMemEval, PersonaMem) and memory 
 - [PersonaMem](https://github.com/bowen-upenn/PersonaMem) (COLM 2025) - 589+ questions, 7 personalization skills
 
 ✅ **Stratified Sampling**
-- Reproducible golden sets (340 curated questions)
+- Reproducible golden sets (695 curated questions)
 - Balanced coverage across question types
 - Fixed random seeds for reproducibility
 
@@ -90,11 +90,14 @@ We report **two separate benchmark scores** (paper-aligned):
 |-----|---------|------|
 | `--samples 2` | Smoke test | ~12 questions |
 | `--samples 10` | Quick test | ~60 questions |
-| `--golden-set` | Full eval | ~340 questions |
+| `--golden-set` | Full eval | ~695 questions |
 
 **Unified golden set config:**
 - `evals/configs/golden_set.yaml` defines the combined sampling plan across LongMemEval + PersonaMem.
 - `evals/scripts/generate_golden_sets.py` writes per-benchmark golden sets plus `combined_golden_set_manifest.json` for cross-system comparisons.
+
+**Full dataset config (paper-complete):**
+- `evals/configs/full_dataset.yaml` runs all questions (~1089 total).
 
 
 ### Capability Coverage
@@ -146,7 +149,7 @@ poetry run python evals/scripts/download_personamem.py
 # Verify LongMemEval dataset
 poetry run python evals/scripts/verify_longmemeval_oracle.py
 
-# Generate golden sets (340 stratified questions)
+# Generate golden sets (695 stratified questions)
 # Uses evals/configs/golden_set.yaml and writes combined_golden_set_manifest.json
 poetry run python evals/scripts/generate_golden_sets.py
 
@@ -184,13 +187,13 @@ export NEO4J_PASSWORD="your-password"
 ### Run Your First Evaluation
 
 ```bash
-# Quick test (15 questions, ~2 minutes)
+# Quick test (sample 5 per type, LongMemEval subset)
 poetry run python -m evals.cli run \
   --benchmark longmemeval \
   --samples 5 \
   --seed 42
 
-# Use pre-generated golden set (340 questions, ~30 minutes)
+# Use pre-generated golden set (~695 questions)
 poetry run python -m evals.cli run \
   --config evals/configs/full_eval.yaml \
   --golden-set
@@ -260,8 +263,11 @@ poetry run python -m evals.cli analyze run_20241221_143052 --summary
 #### Option 1: Using Config Files (Recommended)
 
 ```bash
-# Full evaluation (both benchmarks, 340 questions)
+# Full evaluation (both benchmarks, ~695 questions)
 poetry run python -m evals.cli run --config evals/configs/full_eval.yaml
+
+# Full dataset run (paper-complete, ~1089 questions)
+poetry run python -m evals.cli run --config evals/configs/full_dataset.yaml
 
 # Quick test (small sample)
 poetry run python -m evals.cli run --config evals/configs/quick_test.yaml
@@ -355,7 +361,7 @@ poetry run python evals/scripts/compare_runs.py \
 │                    Data Loading                         │
 │  - LongMemEval Oracle (500 questions)                   │
 │  - PersonaMem 32k (589 questions)                       │
-│  - Stratified sampling → Golden sets (340 questions)    │
+│  - Stratified sampling → Golden sets (695 questions)    │
 └─────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────┐

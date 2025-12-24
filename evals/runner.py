@@ -140,10 +140,13 @@ class EvaluationRunner:
                 data_dir=config.source,
                 variant=getattr(config, 'variant', None)
             )
-            questions = loader.stratified_sample(
-                sample_sizes=config.sample_sizes,
-                random_seed=self.config.random_seed
-            )
+            if getattr(config, "full_dataset", False) or not config.sample_sizes:
+                questions = loader.load()
+            else:
+                questions = loader.stratified_sample(
+                    sample_sizes=config.sample_sizes,
+                    random_seed=self.config.random_seed
+                )
         
         self._print(f"\nLoaded {len(questions)} questions for {benchmark_name}")
         

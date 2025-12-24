@@ -4,19 +4,19 @@ output_dir: evals/data/golden_sets
 benchmarks:
   longmemeval:
     sample_sizes:
-      single-session-user: 30
-      single-session-assistant: 25
+      single-session-user: 60
+      single-session-assistant: 56
       multi-session: 60
       temporal-reasoning: 60
-      knowledge-update: 30
-      single-session-preference: 15
+      knowledge-update: 60
+      single-session-preference: 30
   personamem:
     variant: 32k
     sample_sizes:
-      recall_user_shared_facts: 24
-      track_full_preference_evolution: 26
-      generalizing_to_new_scenarios: 12
-      provide_preference_aligned_recommendations: 12
-      recalling_the_reasons_behind_previous_updates: 18
-      suggest_new_ideas: 18
-      recalling_facts_mentioned_by_the_user: 10
+      recall_user_shared_facts: 60
+      track_full_preference_evolution: 60
+      generalizing_to_new_scenarios: 57
+      provide_preference_aligned_recommendations: 55
+      recalling_the_reasons_behind_previous_updates: 60
+      suggest_new_ideas: 60
+      recalling_facts_mentioned_by_the_user: 17
