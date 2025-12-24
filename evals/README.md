@@ -92,6 +92,10 @@ We report **two separate benchmark scores** (paper-aligned):
 | `--samples 10` | Quick test | ~60 questions |
 | `--golden-set` | Full eval | ~340 questions |
 
+**Unified golden set config:**
+- `evals/configs/golden_set.yaml` defines the combined sampling plan across LongMemEval + PersonaMem.
+- `evals/scripts/generate_golden_sets.py` writes per-benchmark golden sets plus `combined_golden_set_manifest.json` for cross-system comparisons.
+
 
 ### Capability Coverage
 
@@ -143,6 +147,7 @@ poetry run python evals/scripts/download_personamem.py
 poetry run python evals/scripts/verify_longmemeval_oracle.py
 
 # Generate golden sets (340 stratified questions)
+# Uses evals/configs/golden_set.yaml and writes combined_golden_set_manifest.json
 poetry run python evals/scripts/generate_golden_sets.py
 
 # Create default config files

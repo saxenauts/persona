@@ -1,0 +1,19 @@
+random_seed: 42
+output_dir: evals/data/golden_sets
+
+benchmarks:
+  longmemeval:
+    sample_sizes:
+      single-session-user: 35
+      multi-session: 60
+      temporal-reasoning: 60
+      knowledge-update: 40
+      single-session-preference: 25
+  personamem:
+    variant: 32k
+    sample_sizes:
+      recall_user_shared_facts: 30
+      track_full_preference_evolution: 30
+      generalizing_to_new_scenarios: 20
+      provide_preference_aligned_recommendations: 20
+      recalling_the_reasons_behind_previous_updates: 20
