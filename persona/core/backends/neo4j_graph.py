@@ -68,60 +68,44 @@ class Neo4jGraphDatabase(GraphDatabase):
         if not await self.user_exists(user_id):
             logger.warning(f"User {user_id} does not exist. Cannot create nodes.")
             return
-        
+
+        clean_uid = user_id.replace("-", "_").replace(" ", "_")
+        user_label = f"User_{clean_uid}"
+
+        grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
+        for node in nodes:
+            node_type = node.get("type", "").replace(" ", "").replace("/", "")
+            labels = f"NodeName:{user_label}"
+            if node_type:
+                labels += f":{node_type}"
+
+            props = {}
+            for k, v in node.items():
+                if k == "name" or v is None:
+                    continue
+
+                is_complex = isinstance(v, dict)
+                if isinstance(v, list) and v:
+                    if any(isinstance(item, (dict, list)) for item in v):
+                        is_complex = True
+
+                props[k] = json.dumps(v) if is_complex else v
+
+            grouped_rows.setdefault(labels, []).append({
+                "name": node["name"],
+                "props": props
+            })
+
         async with self.driver.session() as session:
-            for node in nodes:
-                node_type = node.get("type", "").replace(" ", "").replace("/", "")
-                
-                # Dynamic User Label for Isolation
-                clean_uid = user_id.replace("-", "_").replace(" ", "_")
-                user_label = f"User_{clean_uid}"
-                
-                labels = f"NodeName:{user_label}"
-                if node_type:
-                    labels += f":{node_type}"
-                
-                # Extract all properties as flat key-value pairs
-                # Skip 'name' as it's handled in MERGE, but KEEP 'type' as a property
-                props = {}
-                for k, v in node.items():
-                    if k == 'name':
-                        continue
-                    
-                    # Serialize complex types (dict or lists of complex types) to JSON string
-                    # Neo4j supports lists of primitive types natively
-                    is_complex = isinstance(v, dict)
-                    if isinstance(v, list) and v:
-                        # If list contains dicts or other lists, it's complex
-                        if any(isinstance(item, (dict, list)) for item in v):
-                            is_complex = True
-                    
-                    if is_complex:
-                        import json
-                        props[k] = json.dumps(v)
-                    else:
-                        props[k] = v
-                
-                # Build dynamic SET clause for all properties
-                set_clauses = []
-                for key in props.keys():
-                    if props[key] is not None:  # Skip None values
-                        set_clauses.append(f"n.{key} = ${key}")
-                
-                set_clause = ", ".join(set_clauses) if set_clauses else "n.type = $type"
-                
-                query = (
-                    f"MERGE (n:{labels} {{name: $name, UserId: $user_id}}) "
-                    f"SET {set_clause}"
-                )
-                
-                params = {
-                    "name": node["name"],
-                    "user_id": user_id,
-                    **{k: v for k, v in props.items() if v is not None}
-                }
-                
-                await session.run(query, params)
+            for labels, rows in grouped_rows.items():
+                if not rows:
+                    continue
+                query = f"""
+                UNWIND $rows AS row
+                MERGE (n:{labels} {{name: row.name, UserId: $user_id}})
+                SET n += row.props
+                """
+                await session.run(query, rows=rows, user_id=user_id)
     
     async def get_node(self, node_name: str, user_id: str) -> Optional[Dict[str, Any]]:
         # Return all node properties as flat dict
@@ -166,24 +150,31 @@ class Neo4jGraphDatabase(GraphDatabase):
         if not await self.user_exists(user_id):
             logger.warning(f"User {user_id} does not exist. Cannot create relationships.")
             return
-        
+
+        grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
+        for relationship in relationships:
+            relation_type = relationship["relation"].upper().replace(" ", "_")
+            grouped_rows.setdefault(relation_type, []).append({
+                "source": relationship["source"],
+                "target": relationship["target"],
+                "value": relationship.get("value")
+            })
+
         async with self.driver.session() as session:
-            for relationship in relationships:
-                relation_type = relationship["relation"].upper().replace(" ", "_")
-                
-                # Use dynamic relationship type (APOC or raw Cypher)
-                # For Neo4j 5+, we can use dynamic relationship creation
+            for relation_type, rows in grouped_rows.items():
+                if not rows:
+                    continue
                 query = f"""
-                    MATCH (source {{UserId: $user_id}}), (target {{UserId: $user_id}})
-                    WHERE source.name = $source AND target.name = $target
+                    UNWIND $rows AS row
+                    MATCH (source {{UserId: $user_id, name: row.source}})
+                    MATCH (target {{UserId: $user_id, name: row.target}})
                     MERGE (source)-[r:{relation_type}]->(target)
                     SET r.created_at = datetime()
+                    FOREACH (_ IN CASE WHEN row.value IS NULL THEN [] ELSE [1] END |
+                        SET r.value = row.value
+                    )
                 """
-                await session.run(query, {
-                    "source": relationship["source"],
-                    "target": relationship["target"],
-                    "user_id": user_id
-                })
+                await session.run(query, rows=rows, user_id=user_id)
     
     async def get_node_relationships(self, node_name: str, user_id: str) -> List[Dict[str, Any]]:
         query = """

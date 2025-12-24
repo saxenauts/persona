@@ -169,10 +169,7 @@ class PersonaAdapter:
             logger.info(f"Persisting session {idx+1}/{len(items)}: {len(result.memories)} memories")
             
             if persist:
-                # Persist all memories
-                for memory in result.memories:
-                    memory_links = [l for l in result.links if l.source_id == memory.id]
-                    await self.store.create(memory, links=memory_links)
+                await self.store.create_many(result.memories, result.links, self.user_id)
                 
                 # Link episode to previous in temporal chain
                 episode = next((m for m in result.memories if m.type == "episode"), None)

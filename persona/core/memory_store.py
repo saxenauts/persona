@@ -27,6 +27,29 @@ class MemoryStore:
     def __init__(self, graph_db: GraphDatabase, vector_store: Optional[VectorStore] = None):
         self.graph_db = graph_db
         self.vector_store = vector_store
+
+    def _memory_to_node_data(self, memory: Memory) -> Dict[str, Any]:
+        # Set day_id if not provided
+        if not memory.day_id:
+            memory.day_id = memory.timestamp.strftime("%Y-%m-%d")
+
+        node_data = memory.model_dump(exclude={'properties'})
+        node_data["name"] = str(memory.id)
+
+        for k, v in node_data.items():
+            if isinstance(v, UUID):
+                node_data[k] = str(v)
+            elif isinstance(v, datetime):
+                node_data[k] = v.isoformat()
+
+        if hasattr(memory, 'properties') and memory.properties:
+            node_data.update(memory.properties)
+
+        for field in ['timestamp', 'created_at', 'due_date', 'last_accessed']:
+            if field in node_data and isinstance(node_data[field], datetime):
+                node_data[field] = node_data[field].isoformat()
+
+        return node_data
     
     async def create(
         self, 
@@ -43,30 +66,9 @@ class MemoryStore:
         Returns:
             The created Memory
         """
-        # Set day_id if not provided
-        if not memory.day_id:
-            memory.day_id = memory.timestamp.strftime("%Y-%m-%d")
-        
         # Create the memory node with FLAT properties (not nested JSON)
         # This is backend-agnostic: each field becomes a native property
-        node_data = memory.model_dump(exclude={'properties'})
-        node_data["name"] = str(memory.id)  # Neo4j uses 'name' for merges
-        
-        # Stringify UUIDs and Datetimes for Neo4j driver
-        for k, v in node_data.items():
-            if isinstance(v, UUID):
-                node_data[k] = str(v)
-            elif isinstance(v, datetime):
-                node_data[k] = v.isoformat()
-        
-        # Merge extra properties if any
-        if hasattr(memory, 'properties') and memory.properties:
-            node_data.update(memory.properties)
-            
-        # Ensure timestamp is ISO string for Neo4j
-        for field in ['timestamp', 'created_at', 'due_date', 'last_accessed']:
-            if field in node_data and isinstance(node_data[field], datetime):
-                node_data[field] = node_data[field].isoformat()
+        node_data = self._memory_to_node_data(memory)
         
         await self.graph_db.create_nodes([node_data], memory.user_id)
 
@@ -89,6 +91,44 @@ class MemoryStore:
         
         logger.info(f"Created {memory.type} memory '{memory.title}' for user {memory.user_id}")
         return memory
+
+    async def create_many(
+        self,
+        memories: List[Memory],
+        links: Optional[List[MemoryLink]],
+        user_id: str
+    ) -> None:
+        if not memories:
+            return
+
+        node_data = [self._memory_to_node_data(memory) for memory in memories]
+        await self.graph_db.create_nodes(node_data, user_id)
+
+        if self.vector_store:
+            for memory in memories:
+                if not memory.embedding:
+                    continue
+                try:
+                    await self.vector_store.add_embedding(
+                        node_name=str(memory.id),
+                        embedding=memory.embedding,
+                        user_id=user_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to persist embedding for memory {memory.id}: {e}"
+                    )
+
+        if links:
+            relationships = [
+                {
+                    "source": str(link.source_id),
+                    "target": str(link.target_id),
+                    "relation": link.relation
+                }
+                for link in links
+            ]
+            await self.graph_db.create_relationships(relationships, user_id)
     
     async def create_link(self, link: MemoryLink, user_id: str) -> None:
         """Create a link between two memories."""
