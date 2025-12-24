@@ -105,18 +105,17 @@ class MemoryStore:
         await self.graph_db.create_nodes(node_data, user_id)
 
         if self.vector_store:
-            for memory in memories:
-                if not memory.embedding:
-                    continue
+            rows = [
+                {"node_name": str(memory.id), "embedding": memory.embedding}
+                for memory in memories
+                if memory.embedding
+            ]
+            if rows:
                 try:
-                    await self.vector_store.add_embedding(
-                        node_name=str(memory.id),
-                        embedding=memory.embedding,
-                        user_id=user_id
-                    )
+                    await self.vector_store.add_embeddings(rows, user_id)
                 except Exception as e:
                     logger.warning(
-                        f"Failed to persist embedding for memory {memory.id}: {e}"
+                        f"Failed to persist embeddings for batch: {e}"
                     )
 
         if links:

@@ -118,6 +118,16 @@ class VectorStore(ABC):
             user_id: User ID for filtering
         """
         pass
+
+    @abstractmethod
+    async def add_embeddings(self, rows: List[Dict[str, Any]], user_id: str) -> None:
+        """Add or update embeddings for multiple nodes in a batch.
+
+        Args:
+            rows: List of dicts with keys: node_name, embedding
+            user_id: User ID for filtering
+        """
+        pass
     
     @abstractmethod
     async def search_similar(

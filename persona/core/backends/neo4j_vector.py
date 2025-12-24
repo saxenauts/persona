@@ -104,6 +104,35 @@ class Neo4jVectorStore(VectorStore):
         """
         async with self.driver.session() as session:
             await session.run(query, node_name=node_name, embedding=embedding, user_id=user_id)
+
+    async def add_embeddings(self, rows: List[Dict[str, Any]], user_id: str) -> None:
+        """Add or update embeddings for multiple nodes in a batch."""
+        if not rows:
+            return
+
+        valid_rows = []
+        for row in rows:
+            embedding = row.get("embedding")
+            node_name = row.get("node_name")
+            if not node_name or not self._validate_embedding(embedding):
+                logger.error(f"Invalid embedding format for node {node_name}.")
+                continue
+            valid_rows.append({"node_name": node_name, "embedding": embedding})
+
+        if not valid_rows:
+            return
+
+        await self._ensure_user_index(user_id)
+        user_label = self._get_user_label(user_id)
+
+        query = f"""
+        UNWIND $rows AS row
+        MATCH (n {{name: row.node_name, UserId: $user_id}})
+        SET n:{user_label}
+        CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
+        """
+        async with self.driver.session() as session:
+            await session.run(query, rows=valid_rows, user_id=user_id)
     
     async def search_similar(
         self, 
@@ -177,4 +206,3 @@ class Neo4jVectorStore(VectorStore):
             else:
                 # Legacy global index drop
                 await session.run("DROP INDEX embeddings_index IF EXISTS")
-
