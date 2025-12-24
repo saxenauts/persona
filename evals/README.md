@@ -336,6 +336,14 @@ poetry run python -m evals.cli compare \
   zep_20241221
 ```
 
+For per-type latency/token comparisons using the unified golden set:
+
+```bash
+poetry run python evals/scripts/compare_runs.py \
+  --runs run_a,run_b \
+  --manifest evals/data/golden_sets/combined_golden_set_manifest.json
+```
+
 ---
 
 ## Architecture
