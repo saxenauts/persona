@@ -55,7 +55,7 @@ class EvaluationResult:
     """Result of evaluating a single question."""
     question_id: str
     question_type: str
-    correct: bool
+    correct: Optional[bool]
     generated_answer: str
     gold_answer: str
     ingestion_time_ms: float
@@ -194,9 +194,13 @@ class EvaluationRunner:
                         qtype = result.question_type
                         if qtype not in type_results:
                             type_results[qtype] = []
-                        type_results[qtype].append(result.correct)
+                        if result.correct is not None:
+                            type_results[qtype].append(result.correct)
 
-                        status = "✓" if result.correct else "✗"
+                        if result.correct is None:
+                            status = "·"
+                        else:
+                            status = "✓" if result.correct else "✗"
                         self._print(
                             f"[{idx+1}/{total_questions}] {qtype}: "
                             f"{status} Answer: {result.generated_answer[:80]}..."
@@ -221,9 +225,13 @@ class EvaluationRunner:
                         qtype = result.question_type
                         if qtype not in type_results:
                             type_results[qtype] = []
-                        type_results[qtype].append(result.correct)
+                        if result.correct is not None:
+                            type_results[qtype].append(result.correct)
 
-                        status = "✓" if result.correct else "✗"
+                        if result.correct is None:
+                            status = "·"
+                        else:
+                            status = "✓" if result.correct else "✗"
                         self._print(f"  {status} Answer: {result.generated_answer[:80]}...")
 
                     except Exception as e:
@@ -232,7 +240,10 @@ class EvaluationRunner:
         
         # Calculate metrics
         total = len(all_results)
-        correct = sum(1 for r in all_results if r.correct)
+        judged_results = [r for r in all_results if r.correct is not None]
+        judged_total = len(judged_results)
+        correct = sum(1 for r in judged_results if r.correct)
+        skipped = total - judged_total
         
         type_accuracies = {}
         for qtype, results_list in type_results.items():
@@ -243,8 +254,10 @@ class EvaluationRunner:
             }
         
         return {
-            "overall_accuracy": correct / total if total > 0 else 0,
+            "overall_accuracy": correct / judged_total if judged_total > 0 else 0,
             "total_questions": total,
+            "judged_questions": judged_total,
+            "skipped_questions": skipped,
             "correct": correct,
             "type_accuracies": type_accuracies
         }
@@ -299,25 +312,34 @@ class EvaluationRunner:
                 self._print(f"    ✓ Retrieval complete ({query_time_ms/1000:.1f}s)", flush=True)
             
             # Evaluate answer
-            if verbose:
-                self._print(f"    ⚖️ Running judge...", flush=True)
-            start_judge = time.time()
-            if benchmark_name == "longmemeval":
+            skip_judge = self.config.skip_judge and benchmark_name == "longmemeval"
+            if skip_judge:
                 gold_answer = question.answer
-                correct, judge_response = self._evaluate_longmemeval(
-                    question, generated_answer
-                )
+                correct = None
+                judge_response = "skipped"
+                judge_time_ms = 0.0
+                if verbose:
+                    self._print("    ⚖️ Judge skipped (deferred)", flush=True)
             else:
-                gold_answer = question.correct_answer
-                correct, judge_response = self._evaluate_personamem(
-                    question, generated_answer
-                )
-            judge_time_ms = (time.time() - start_judge) * 1000
-            if verbose:
-                self._print(
-                    f"    ✓ Judge: {judge_response} ({judge_time_ms/1000:.1f}s)",
-                    flush=True
-                )
+                if verbose:
+                    self._print(f"    ⚖️ Running judge...", flush=True)
+                start_judge = time.time()
+                if benchmark_name == "longmemeval":
+                    gold_answer = question.answer
+                    correct, judge_response = self._evaluate_longmemeval(
+                        question, generated_answer
+                    )
+                else:
+                    gold_answer = question.correct_answer
+                    correct, judge_response = self._evaluate_personamem(
+                        question, generated_answer
+                    )
+                judge_time_ms = (time.time() - start_judge) * 1000
+                if verbose:
+                    self._print(
+                        f"    ✓ Judge: {judge_response} ({judge_time_ms/1000:.1f}s)",
+                        flush=True
+                    )
             
             # Log result
             query_stats = getattr(adapter, "last_query_stats", None)
@@ -572,8 +594,16 @@ class EvaluationRunner:
                 gold_answer=safe_gold_answer,
                 correct=correct,
                 judge_response=judge_response,
-                judge_model="gpt-4o",
-                score_type="binary" if benchmark_name == "longmemeval" else "exact_match"
+                judge_model=(
+                    os.getenv("EVAL_JUDGE_MODEL", "gpt-4o")
+                    if benchmark_name == "longmemeval" and correct is not None
+                    else None
+                ),
+                score_type=(
+                    "deferred"
+                    if benchmark_name == "longmemeval" and correct is None
+                    else ("binary" if benchmark_name == "longmemeval" else "exact_match")
+                )
             )
         )
         

@@ -131,7 +131,11 @@ class DeepLogger:
             }
 
         total = len(logs)
-        correct = sum(1 for log in logs if log['evaluation']['correct'])
+        results = [log['evaluation'].get('correct') for log in logs]
+        judged = [value for value in results if value is not None]
+        correct = sum(1 for value in judged if value)
+        judged_total = len(judged)
+        skipped = total - judged_total
 
         retrieval_times = [log['retrieval']['duration_ms'] for log in logs]
         generation_times = [log['generation']['duration_ms'] for log in logs]
@@ -139,8 +143,9 @@ class DeepLogger:
         summary = {
             "total_questions": total,
             "correct": correct,
-            "incorrect": total - correct,
-            "accuracy": correct / total if total > 0 else 0.0,
+            "incorrect": judged_total - correct,
+            "skipped": skipped,
+            "accuracy": correct / judged_total if judged_total > 0 else 0.0,
             "avg_retrieval_time_ms": sum(retrieval_times) / len(retrieval_times) if retrieval_times else 0.0,
             "avg_generation_time_ms": sum(generation_times) / len(generation_times) if generation_times else 0.0,
         }
@@ -150,10 +155,15 @@ class DeepLogger:
         for log in logs:
             qtype = log['question_type']
             if qtype not in type_stats:
-                type_stats[qtype] = {"total": 0, "correct": 0}
+                type_stats[qtype] = {"total": 0, "correct": 0, "skipped": 0}
+
+            result = log['evaluation'].get('correct')
+            if result is None:
+                type_stats[qtype]["skipped"] += 1
+                continue
 
             type_stats[qtype]["total"] += 1
-            if log['evaluation']['correct']:
+            if result:
                 type_stats[qtype]["correct"] += 1
 
         # Calculate accuracy per type
@@ -174,6 +184,7 @@ class DeepLogger:
         print(f"Total Questions: {summary['total_questions']}")
         print(f"Correct: {summary['correct']}")
         print(f"Incorrect: {summary['incorrect']}")
+        print(f"Skipped: {summary.get('skipped', 0)}")
         print(f"Accuracy: {summary['accuracy']:.2%}")
         print(f"\nAvg Retrieval Time: {summary['avg_retrieval_time_ms']:.1f} ms")
         print(f"Avg Generation Time: {summary['avg_generation_time_ms']:.1f} ms")

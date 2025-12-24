@@ -31,6 +31,7 @@ class EvalConfig:
     parallel_workers: int = 5
     checkpoint_dir: str = "evals/results"
     deep_logging: bool = True
+    skip_judge: bool = False
 
     # Output settings
     output_dir: str = "evals/results"
@@ -85,6 +86,7 @@ class EvalConfig:
             parallel_workers=global_config.get('parallel_workers', 5),
             checkpoint_dir=global_config.get('checkpoint_dir', 'evals/results'),
             deep_logging=global_config.get('deep_logging', True),
+            skip_judge=global_config.get('skip_judge', False),
             output_dir=global_config.get('output_dir', 'evals/results'),
             save_retrieval_logs=global_config.get('save_retrieval_logs', True),
         )
@@ -98,6 +100,7 @@ class EvalConfig:
                 'parallel_workers': self.parallel_workers,
                 'checkpoint_dir': self.checkpoint_dir,
                 'deep_logging': self.deep_logging,
+                'skip_judge': self.skip_judge,
                 'output_dir': self.output_dir,
                 'save_retrieval_logs': self.save_retrieval_logs,
             }

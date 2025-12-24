@@ -76,10 +76,10 @@ class GenerationLog(BaseModel):
 class EvaluationLog(BaseModel):
     """Logs from evaluation/scoring phase"""
     gold_answer: str
-    correct: bool
+    correct: Optional[bool] = None
     judge_response: Optional[str] = None
     judge_model: Optional[str] = None
-    score_type: str  # 'binary' or 'exact_match'
+    score_type: str  # 'binary', 'exact_match', or 'deferred'
 
 
 class QuestionLog(BaseModel):

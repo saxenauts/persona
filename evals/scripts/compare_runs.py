@@ -67,6 +67,7 @@ def _aggregate_run(run_id: str, manifest: Dict[Tuple[str, str], str]) -> Dict[st
     by_type: Dict[str, Dict[str, Any]] = {}
     total_correct = 0
     total_count = 0
+    total_skipped = 0
 
     for log in _load_logs(run_id):
         benchmark = log.get("benchmark")
@@ -83,16 +84,23 @@ def _aggregate_run(run_id: str, manifest: Dict[Tuple[str, str], str]) -> Dict[st
         stats = by_type.setdefault(qtype, {
             "total": 0,
             "correct": 0,
+            "skipped": 0,
             "retrieval_ms": [],
             "generation_ms": [],
             "prompt_tokens": [],
             "completion_tokens": []
         })
 
+        correct_value = log.get("evaluation", {}).get("correct")
+        if correct_value is None:
+            stats["skipped"] += 1
+            total_skipped += 1
+            continue
+
         stats["total"] += 1
         total_count += 1
 
-        if log.get("evaluation", {}).get("correct"):
+        if correct_value:
             stats["correct"] += 1
             total_correct += 1
 
@@ -116,6 +124,7 @@ def _aggregate_run(run_id: str, manifest: Dict[Tuple[str, str], str]) -> Dict[st
         "total_questions": total_count,
         "correct": total_correct,
         "accuracy": total_correct / total_count if total_count else 0.0,
+        "skipped_questions": total_skipped,
         "missing_questions": missing,
         "by_type": {}
     }
@@ -150,7 +159,11 @@ def _aggregate_run(run_id: str, manifest: Dict[Tuple[str, str], str]) -> Dict[st
 
 def _print_run_summary(summary: Dict[str, Any]) -> None:
     print(f"\n=== {summary['run_id']} ===")
-    print(f"Total: {summary['total_questions']} | Missing: {summary['missing_questions']}")
+    print(
+        f"Total: {summary['total_questions']} | "
+        f"Skipped: {summary.get('skipped_questions', 0)} | "
+        f"Missing: {summary['missing_questions']}"
+    )
     print(f"Accuracy: {summary['accuracy']:.2%}")
     print(f"Macro accuracy (observed types): {summary['macro_accuracy']:.2%}")
     print(f"Macro accuracy (expected types): {summary['macro_accuracy_expected']:.2%}")

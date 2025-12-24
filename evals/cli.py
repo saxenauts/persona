@@ -63,6 +63,11 @@ def run(
         "--golden-set",
         help="Use pre-generated golden sets instead of sampling"
     ),
+    skip_judge: bool = typer.Option(
+        False,
+        "--skip-judge",
+        help="Skip LongMemEval LLM judge (log responses for later evaluation)"
+    ),
 ):
     """
     Run evaluation benchmarks
@@ -89,6 +94,8 @@ def run(
     if config:
         eval_config = EvalConfig.from_yaml(config)
         print(f"✓ Loaded configuration from: {config}")
+        if skip_judge:
+            eval_config.skip_judge = True
     else:
         # Create config from CLI arguments
         from .config import BenchmarkConfig
@@ -143,6 +150,7 @@ def run(
         eval_config.random_seed = seed
         eval_config.parallel_workers = workers
         eval_config.output_dir = output_dir
+        eval_config.skip_judge = skip_judge
 
     # Create and run evaluation
     runner = EvaluationRunner(eval_config, use_golden_set=use_golden_set)
@@ -157,6 +165,10 @@ def run(
         print(f"\n{benchmark_name.upper()}:")
         print(f"  Overall Accuracy: {result['overall_accuracy']:.2%}")
         print(f"  Total Questions: {result['total_questions']}")
+        if "judged_questions" in result:
+            print(f"  Judged Questions: {result['judged_questions']}")
+        if "skipped_questions" in result:
+            print(f"  Skipped Questions: {result['skipped_questions']}")
         print("\n  By Question Type:")
         for qtype, stats in result.get('type_accuracies', {}).items():
             print(f"    {qtype:40s}: {stats['accuracy']:.2%} ({stats['correct']}/{stats['count']})")
