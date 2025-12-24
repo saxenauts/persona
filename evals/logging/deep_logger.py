@@ -139,6 +139,10 @@ class DeepLogger:
 
         retrieval_times = [log['retrieval']['duration_ms'] for log in logs]
         generation_times = [log['generation']['duration_ms'] for log in logs]
+        extract_times = [log['ingestion'].get('extract_ms') for log in logs if log['ingestion'].get('extract_ms') is not None]
+        embed_times = [log['ingestion'].get('embed_ms') for log in logs if log['ingestion'].get('embed_ms') is not None]
+        persist_times = [log['ingestion'].get('persist_ms') for log in logs if log['ingestion'].get('persist_ms') is not None]
+        total_ingest_times = [log['ingestion'].get('total_ms') for log in logs if log['ingestion'].get('total_ms') is not None]
 
         summary = {
             "total_questions": total,
@@ -148,6 +152,10 @@ class DeepLogger:
             "accuracy": correct / judged_total if judged_total > 0 else 0.0,
             "avg_retrieval_time_ms": sum(retrieval_times) / len(retrieval_times) if retrieval_times else 0.0,
             "avg_generation_time_ms": sum(generation_times) / len(generation_times) if generation_times else 0.0,
+            "avg_extract_time_ms": sum(extract_times) / len(extract_times) if extract_times else 0.0,
+            "avg_embed_time_ms": sum(embed_times) / len(embed_times) if embed_times else 0.0,
+            "avg_persist_time_ms": sum(persist_times) / len(persist_times) if persist_times else 0.0,
+            "avg_total_ingest_time_ms": sum(total_ingest_times) / len(total_ingest_times) if total_ingest_times else 0.0,
         }
 
         # Breakdown by question type
@@ -188,6 +196,14 @@ class DeepLogger:
         print(f"Accuracy: {summary['accuracy']:.2%}")
         print(f"\nAvg Retrieval Time: {summary['avg_retrieval_time_ms']:.1f} ms")
         print(f"Avg Generation Time: {summary['avg_generation_time_ms']:.1f} ms")
+        if summary.get("avg_total_ingest_time_ms", 0.0):
+            print(
+                "Avg Ingest Time: "
+                f"{summary.get('avg_total_ingest_time_ms', 0.0):.1f} ms "
+                f"(extract {summary.get('avg_extract_time_ms', 0.0):.1f}, "
+                f"embed {summary.get('avg_embed_time_ms', 0.0):.1f}, "
+                f"persist {summary.get('avg_persist_time_ms', 0.0):.1f})"
+            )
 
         if "type_breakdown" in summary:
             print("\n" + "-"*60)

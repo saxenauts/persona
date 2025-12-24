@@ -8,7 +8,6 @@ from .providers.openai_client import OpenAIClient
 from .providers.azure_openai_client import AzureOpenAIClient
 from .providers.azure_foundry_client import AzureFoundryClient
 from .providers.anthropic_client import AnthropicClient
-from .providers.gemini_client import GeminiClient
 from server.config import config
 from server.logging_config import get_logger
 
@@ -90,8 +89,10 @@ def create_anthropic_client() -> AnthropicClient:
     )
 
 
-def create_gemini_client() -> GeminiClient:
+def create_gemini_client() -> BaseLLMClient:
     """Create Google Gemini client"""
+    from .providers.gemini_client import GeminiClient
+
     if not config.MACHINE_LEARNING.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is required for Gemini provider")
     if not config.MACHINE_LEARNING.GEMINI_CHAT_MODEL:

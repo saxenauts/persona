@@ -4,9 +4,12 @@ CLI Interface for Evaluation Framework
 Provides command-line interface for running evaluations.
 """
 
-import typer
+import json
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+
+import typer
 
 from .config import EvalConfig
 
@@ -14,6 +17,25 @@ app = typer.Typer(
     name="evals",
     help="Persona Memory System Evaluation Framework"
 )
+
+
+def _normalize_run_id(run_id: str) -> str:
+    return run_id[4:] if run_id.startswith("run_") else run_id
+
+
+def _load_logs(run_id: str) -> List[Dict[str, Any]]:
+    run_id = _normalize_run_id(run_id)
+    log_path = Path("evals/results") / f"run_{run_id}" / "deep_logs.jsonl"
+    if not log_path.exists():
+        raise FileNotFoundError(f"Run logs not found: {log_path}")
+
+    logs = []
+    with open(log_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                logs.append(json.loads(line))
+    return logs
 
 
 @app.command()
@@ -285,9 +307,10 @@ def compare(
 
     summaries = []
     for run_id in run_ids:
-        logger = DeepLogger(run_id=run_id)
+        clean_id = _normalize_run_id(run_id)
+        logger = DeepLogger(run_id=clean_id)
         summary = logger.get_summary()
-        summary['run_id'] = run_id
+        summary['run_id'] = clean_id
         summaries.append(summary)
 
     # Print comparison table
@@ -319,6 +342,189 @@ def compare(
                 if type_stats:
                     acc = type_stats.get('accuracy', 0)
                     print(f"  {summary['run_id']:<20s}: {acc:>6.1%}")
+
+
+@app.command()
+def aggregate(
+    runs: str = typer.Option(..., "--runs", help="Comma-separated run IDs"),
+    output_json: Optional[str] = typer.Option(None, "--output-json", help="Optional JSON output path"),
+):
+    """
+    Aggregate timing metrics across multiple runs.
+    """
+    run_ids = [r.strip() for r in runs.split(",") if r.strip()]
+    if not run_ids:
+        print("No run IDs provided.")
+        raise typer.Exit(code=1)
+
+    def parse_ts(ts: str) -> datetime:
+        try:
+            return datetime.fromisoformat(ts)
+        except ValueError:
+            return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f")
+
+    def mean(values: List[float]) -> float:
+        return sum(values) / len(values) if values else 0.0
+
+    summaries = []
+    for run_id in run_ids:
+        logs = _load_logs(run_id)
+        if not logs:
+            continue
+
+        start = min(parse_ts(log["timestamp"]) for log in logs)
+        end = max(parse_ts(log["timestamp"]) for log in logs)
+        elapsed = (end - start).total_seconds()
+        qpm = len(logs) / (elapsed / 60) if elapsed > 0 else 0.0
+
+        ingest_times = [log["ingestion"]["duration_ms"] for log in logs]
+        retrieval_times = [log["retrieval"]["duration_ms"] for log in logs]
+        generation_times = [log["generation"]["duration_ms"] for log in logs]
+        prompt_tokens = [log["generation"]["prompt_tokens"] for log in logs if log["generation"]["prompt_tokens"]]
+        completion_tokens = [log["generation"]["completion_tokens"] for log in logs if log["generation"]["completion_tokens"]]
+        extract_times = [log["ingestion"].get("extract_ms") for log in logs if log["ingestion"].get("extract_ms") is not None]
+        embed_times = [log["ingestion"].get("embed_ms") for log in logs if log["ingestion"].get("embed_ms") is not None]
+        persist_times = [log["ingestion"].get("persist_ms") for log in logs if log["ingestion"].get("persist_ms") is not None]
+        total_ingest_times = [log["ingestion"].get("total_ms") for log in logs if log["ingestion"].get("total_ms") is not None]
+
+        summary = {
+            "run_id": _normalize_run_id(run_id),
+            "questions": len(logs),
+            "elapsed_s": elapsed,
+            "qpm": qpm,
+            "avg_ingest_ms": mean(ingest_times),
+            "avg_extract_ms": mean(extract_times),
+            "avg_embed_ms": mean(embed_times),
+            "avg_persist_ms": mean(persist_times),
+            "avg_total_ingest_ms": mean(total_ingest_times),
+            "avg_retrieval_ms": mean(retrieval_times),
+            "avg_generation_ms": mean(generation_times),
+            "avg_prompt_tokens": mean(prompt_tokens),
+            "avg_completion_tokens": mean(completion_tokens),
+        }
+        summaries.append(summary)
+
+        print(
+            f"{summary['run_id']}: qpm {summary['qpm']:.2f} | "
+            f"ingest {summary['avg_ingest_ms']:.0f}ms "
+            f"(extract {summary['avg_extract_ms']:.0f}, embed {summary['avg_embed_ms']:.0f}, "
+            f"persist {summary['avg_persist_ms']:.0f}) | "
+            f"retrieval {summary['avg_retrieval_ms']:.0f}ms | "
+            f"generation {summary['avg_generation_ms']:.0f}ms"
+        )
+
+    if summaries:
+        def mean_key(key: str) -> float:
+            return mean([s[key] for s in summaries])
+
+        aggregate_summary = {
+            "runs": [s["run_id"] for s in summaries],
+            "avg_qpm": mean_key("qpm"),
+            "avg_ingest_ms": mean_key("avg_ingest_ms"),
+            "avg_extract_ms": mean_key("avg_extract_ms"),
+            "avg_embed_ms": mean_key("avg_embed_ms"),
+            "avg_persist_ms": mean_key("avg_persist_ms"),
+            "avg_total_ingest_ms": mean_key("avg_total_ingest_ms"),
+            "avg_retrieval_ms": mean_key("avg_retrieval_ms"),
+            "avg_generation_ms": mean_key("avg_generation_ms"),
+            "avg_prompt_tokens": mean_key("avg_prompt_tokens"),
+            "avg_completion_tokens": mean_key("avg_completion_tokens"),
+        }
+
+        print(
+            "\nAverage: "
+            f"qpm {aggregate_summary['avg_qpm']:.2f} | "
+            f"ingest {aggregate_summary['avg_ingest_ms']:.0f}ms | "
+            f"retrieval {aggregate_summary['avg_retrieval_ms']:.0f}ms | "
+            f"generation {aggregate_summary['avg_generation_ms']:.0f}ms"
+        )
+
+        if output_json:
+            with open(output_json, "w") as f:
+                json.dump({"runs": summaries, "aggregate": aggregate_summary}, f, indent=2)
+            print(f"Saved aggregate stats to: {output_json}")
+
+
+@app.command()
+def judge(
+    run_id: str = typer.Argument(..., help="Run ID to judge"),
+    input_path: Optional[str] = typer.Option(None, "--input", help="Optional input log path"),
+    output_path: Optional[str] = typer.Option(None, "--output", help="Optional output log path"),
+):
+    """
+    Judge LongMemEval questions for an existing eval run.
+    """
+    from .longmemeval.evaluate_qa import (
+        get_anscheck_prompt,
+        query_openai_with_retry,
+        parse_judge_response,
+    )
+
+    run_id = _normalize_run_id(run_id)
+    default_path = Path("evals/results") / f"run_{run_id}" / "deep_logs.jsonl"
+    input_file = Path(input_path) if input_path else default_path
+    if not input_file.exists():
+        print(f"Log file not found: {input_file}")
+        raise typer.Exit(code=1)
+
+    output_file = Path(output_path) if output_path else input_file
+    backup_path = None
+    temp_path = None
+    if output_file == input_file:
+        backup_path = input_file.with_suffix(".raw.jsonl")
+        if not backup_path.exists():
+            input_file.replace(backup_path)
+        input_file = backup_path
+        temp_path = output_file.with_suffix(".tmp.jsonl")
+        output_file = temp_path
+
+    judged = 0
+    total = 0
+
+    with output_file.open("w") as f:
+        with input_file.open("r") as source:
+            for line in source:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                total += 1
+
+                if entry.get("benchmark") == "longmemeval":
+                    evaluation = entry.get("evaluation") or {}
+                    if evaluation.get("correct") is None:
+                        question_type = entry.get("question_type", "")
+                        question = entry.get("question", "")
+                        gold_answer = evaluation.get("gold_answer", "")
+                        response = (entry.get("generation") or {}).get("answer", "")
+                        abstention = "_abs" in entry.get("question_id", "")
+
+                        prompt = get_anscheck_prompt(
+                            task=question_type,
+                            question=question,
+                            answer=gold_answer,
+                            response=response,
+                            abstention=abstention
+                        )
+                        judge_response = query_openai_with_retry(prompt)
+                        correct = parse_judge_response(judge_response)
+                        evaluation["correct"] = correct
+                        evaluation["judge_response"] = judge_response
+                        evaluation["judge_model"] = "longmemeval"
+                        evaluation["score_type"] = "binary"
+                        entry["evaluation"] = evaluation
+                        judged += 1
+
+                f.write(json.dumps(entry) + "\n")
+
+    if temp_path:
+        temp_path.replace(default_path)
+        output_file = default_path
+
+    print(f"Judged {judged} LongMemEval entries (total logs: {total}).")
+    print(f"Output: {output_file}")
+    if backup_path:
+        print(f"Backup: {backup_path}")
 
 
 @app.command()

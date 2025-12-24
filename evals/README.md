@@ -350,6 +350,18 @@ poetry run python evals/scripts/compare_runs.py \
   --manifest evals/data/golden_sets/combined_golden_set_manifest.json
 ```
 
+Aggregate timing metrics across runs:
+
+```bash
+poetry run python -m evals.cli aggregate --runs run_a,run_b,run_c
+```
+
+Judge deferred LongMemEval runs:
+
+```bash
+poetry run python -m evals.cli judge run_20241221_143052
+```
+
 ---
 
 ## Architecture
