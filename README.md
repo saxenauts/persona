@@ -88,7 +88,7 @@ Explore the API at `http://localhost:8000/docs`.
 - **Real-time Context**: Streaming updates for low-latency personalization.
 - **Cross-User Intelligence**: (Planned) Privacy-preserving shared insights.
 
-*(See internal `TODO.md` for the complete backlog)*
+
 
 ## License
 

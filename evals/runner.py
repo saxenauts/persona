@@ -43,9 +43,9 @@ def get_adapter(name: str) -> MemorySystem:
     elif name == "mem0":
         from .adapters.mem0_adapter import Mem0Adapter
         return Mem0Adapter()
-    elif name == "zep":
-        from .adapters.zep_adapter import ZepAdapter
-        return ZepAdapter()
+    elif name in {"zep", "graphiti"}:
+        from .adapters.zep_adapter import GraphitiAdapter
+        return GraphitiAdapter()
     else:
         raise ValueError(f"Unknown adapter: {name}")
 
@@ -304,7 +304,15 @@ class EvaluationRunner:
                 self._print(f"    🔍 Retrieving context...", flush=True)
             start_query = time.time()
             query_text = question.question
-            if benchmark_name == "personamem":
+            if benchmark_name == "longmemeval":
+                include_date = os.getenv("LONGMEMEVAL_INCLUDE_DATE", "true").lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                }
+                if include_date and question.question_date:
+                    query_text = f"(date: {question.question_date}) {query_text}"
+            elif benchmark_name == "personamem":
                 query_text = self._format_personamem_query(question)
             generated_answer = adapter.query(user_id, query_text)
             query_time_ms = (time.time() - start_query) * 1000

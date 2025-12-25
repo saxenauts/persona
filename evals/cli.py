@@ -53,7 +53,7 @@ def run(
     adapters: Optional[List[str]] = typer.Option(
         None,
         "--adapter", "-a",
-        help="Adapter(s) to evaluate: persona, mem0, zep"
+        help="Adapter(s) to evaluate: persona, mem0, zep, graphiti"
     ),
     types: Optional[str] = typer.Option(
         None,
@@ -118,6 +118,8 @@ def run(
         print(f"✓ Loaded configuration from: {config}")
         if skip_judge:
             eval_config.skip_judge = True
+        if adapters:
+            eval_config.adapters = list(adapters)
     else:
         # Create config from CLI arguments
         from .config import BenchmarkConfig

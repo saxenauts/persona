@@ -160,9 +160,10 @@ poetry run python -m evals.cli create-configs
 ### Environment Variables
 
 ```bash
-# LLM Service (required for memory system)
-export LLM_SERVICE="foundry/gpt-5.2"
-export EMBEDDING_SERVICE="azure/text-embedding-3-small"
+# OpenAI (default)
+export OPENAI_API_KEY="your-openai-key"
+export LLM_SERVICE="openai/gpt-4o-mini"
+export EMBEDDING_SERVICE="openai/text-embedding-3-small"
 
 # Eval Judge Model (optional, default: gpt-5-mini)
 export EVAL_JUDGE_MODEL="gpt-5-mini"
@@ -170,9 +171,12 @@ export EVAL_JUDGE_MODEL="gpt-5-mini"
 # Parallel ingestion (optional, default: 5)
 export INGEST_SESSION_CONCURRENCY="5"
 
-# Azure OpenAI
+# Azure OpenAI (optional)
 export AZURE_API_KEY="your-key"
 export AZURE_API_BASE="https://your-endpoint.openai.azure.com/"
+export AZURE_CHAT_DEPLOYMENT="gpt-5.2"
+export AZURE_EMBEDDING_DEPLOYMENT="text-embedding-3-small"
+export GRAPHITI_PROVIDER="azure"
 
 # Neo4j (for Persona adapter)
 export NEO4J_URI="bolt://localhost:7687"
@@ -516,6 +520,23 @@ global:
   checkpoint_dir: evals/results
   deep_logging: true
 ```
+
+### Runtime Toggles
+
+- `LONGMEMEVAL_INCLUDE_DATE` (default: `true`) prefixes LongMemEval questions with `(date: ...)`.
+- `GRAPHITI_SEARCH_LIMIT` (default: `20`) sets top-k edges/nodes for Graphiti retrieval.
+- `GRAPHITI_QUERY_MAX_CHARS` (default: `255`) truncates the retrieval query to match the Zep pipeline.
+- `GRAPHITI_INGEST_CONCURRENCY` (default: `1`) controls parallel episode ingestion.
+- `GRAPHITI_INGEST_TIMEOUT_S` (default: `600`) caps each Graphiti ingestion call.
+- `GRAPHITI_RETRIEVAL_TIMEOUT_S` (default: `0`, disabled) caps Graphiti retrieval.
+- `GRAPHITI_PROVIDER` (default: `openai`) selects Graphiti LLM provider (`openai` or `azure`).
+- `GRAPHITI_LLM_MODEL`, `GRAPHITI_GENERATOR_MODEL`, `GRAPHITI_RERANKER_MODEL` override Graphiti models.
+- `GRAPHITI_RPS` (default: `0`) enables a simple rate limiter for Graphiti LLM calls.
+- `AZURE_RERANKER_DEPLOYMENT` / `AZURE_RERANKER_API_VERSION` control the Azure deployment for the Graphiti reranker. If unset, Graphiti defaults to `gpt-4.1-nano` and requires a matching Azure deployment.
+- `GRAPHITI_GENERATOR_MAX_TOKENS` (default: `256` on Azure, `0` on OpenAI) caps Graphiti answer length.
+- Graphiti detects PersonaMem prompts automatically and enforces letter-only outputs.
+- `GRAPHITI_RERANKER_MAX_TOKENS` (default: `32`) sets the reranker completion budget for Azure models.
+- `GRAPHITI_RERANKER_TIMEOUT_S` (default: `120`) caps each reranker call to avoid long hangs.
 
 ### Creating Custom Configs
 

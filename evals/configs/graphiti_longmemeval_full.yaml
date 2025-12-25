@@ -1,0 +1,12 @@
+longmemeval:
+  source: evals/data/longmemeval_oracle.json
+  full_dataset: true
+
+global:
+  random_seed: 42
+  adapters:
+  - graphiti
+  parallel_workers: 5
+  checkpoint_dir: evals/results
+  deep_logging: true
+  output_dir: evals/results
