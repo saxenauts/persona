@@ -1,0 +1,13 @@
+personamem:
+  source: evals/data/personamem
+  variant: 32k
+  full_dataset: true
+
+global:
+  random_seed: 42
+  adapters:
+  - graphiti
+  parallel_workers: 2
+  checkpoint_dir: evals/results
+  deep_logging: true
+  output_dir: evals/results

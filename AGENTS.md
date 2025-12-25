@@ -69,3 +69,23 @@ URI_NEO4J=bolt://neo4j:7687
 USER_NEO4J=neo4j
 PASSWORD_NEO4J=...
 ```
+
+## Observability Requirements
+
+This repo prioritizes **optimization work** - every layer must be transparent and measurable.
+
+**Core Principles:**
+1. **Always log metrics** - Rate monitors, timing, token counts must emit data even when throttling is disabled
+2. **Never silent failures** - Errors bubble up with context; no empty catches
+3. **Atomic state changes** - Checkpoints, configs use temp+rename pattern
+4. **Resource cleanup** - Failed operations must release connections, reset adapters
+
+**Eval Framework Observability:**
+- `CallRateMonitor`: Logs RPM/TPM every 30s (must record calls regardless of `GRAPHITI_RPS` setting)
+- `DeepLogger`: Per-question JSONL with ingestion/retrieval/generation timings
+- Stage logs: `evals/results/graphiti_stage_logs/{user_id}.jsonl` for debugging adapter internals
+
+**When adding new components:**
+- Include timing instrumentation (`time.time()` around operations)
+- Log to structured format (JSONL preferred)
+- Expose metrics via env var or stats dict

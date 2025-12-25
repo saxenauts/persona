@@ -10,9 +10,11 @@ from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
+
 def get_eval_model() -> str:
     """Get eval model from environment, supporting multiple providers."""
     return os.environ.get("EVAL_JUDGE_MODEL", "gpt-5-mini")
+
 
 EVAL_MODEL = get_eval_model()
 TEMPERATURE = 0
@@ -33,20 +35,19 @@ def parse_judge_response(response: str) -> bool:
         return False
 
 
-
 def get_anscheck_prompt(task, question, answer, response, abstention=False):
     """Generate evaluation prompt based on task type"""
     if not abstention:
-        if task in ['single-session-user', 'single-session-assistant', 'multi-session']:
+        if task in ["single-session-user", "single-session-assistant", "multi-session"]:
             template = "I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response is equivalent to the correct answer or contains all the intermediate steps to get the correct answer, you should also answer yes. If the response only contains a subset of the information required by the answer, answer no. \n\nQuestion: {}\n\nCorrect Answer: {}\n\nModel Response: {}\n\nIs the model response correct? Answer yes or no only."
             prompt = template.format(question, answer, response)
-        elif task == 'temporal-reasoning':
+        elif task == "temporal-reasoning":
             template = "I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response is equivalent to the correct answer or contains all the intermediate steps to get the correct answer, you should also answer yes. If the response only contains a subset of the information required by the answer, answer no. In addition, do not penalize off-by-one errors for the number of days. If the question asks for the number of days/weeks/months, etc., and the model makes off-by-one errors (e.g., predicting 19 days when the answer is 18), the model's response is still correct. \n\nQuestion: {}\n\nCorrect Answer: {}\n\nModel Response: {}\n\nIs the model response correct? Answer yes or no only."
             prompt = template.format(question, answer, response)
-        elif task == 'knowledge-update':
+        elif task == "knowledge-update":
             template = "I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response contains some previous information along with an updated answer, the response should be considered as correct as long as the updated answer is the required answer.\n\nQuestion: {}\n\nCorrect Answer: {}\n\nModel Response: {}\n\nIs the model response correct? Answer yes or no only."
             prompt = template.format(question, answer, response)
-        elif task == 'single-session-preference':
+        elif task == "single-session-preference":
             template = "I will give you a question, a rubric for desired personalized response, and a response from a model. Please answer yes if the response satisfies the desired response. Otherwise, answer no. The model does not need to reflect all the points in the rubric. The response is correct as long as it recalls and utilizes the user's personal information correctly.\n\nQuestion: {}\n\nRubric: {}\n\nModel Response: {}\n\nIs the model response correct? Answer yes or no only."
             prompt = template.format(question, answer, response)
         else:
@@ -56,29 +57,31 @@ def get_anscheck_prompt(task, question, answer, response, abstention=False):
         prompt = template.format(question, answer, response)
     return prompt
 
+
 def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
     """Query LLM with retry logic using the configured client factory"""
     import asyncio
     import sys
     from pathlib import Path
-    
+
     # Add project root to Python path to import persona modules
     project_root = Path(__file__).parent.parent.parent
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
-    
+
     # Load .env file when running outside Docker
     from dotenv import load_dotenv
+
     load_dotenv(project_root / ".env")
-    
+
     import openai
     from server.config import config
     from persona.llm.client_factory import get_chat_client, parse_llm_service
     from persona.llm.providers.base import ChatMessage
-    
+
     # Note: reset_clients() no longer needed - lazy client in AzureFoundryClient
     # now handles event loop binding automatically via _get_client()
-    
+
     def _build_async_client(provider: str):
         if provider == "foundry":
             api_base = (config.MACHINE_LEARNING.AZURE_API_BASE or "").rstrip("/")
@@ -87,8 +90,7 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
             else:
                 api_base = f"{api_base}/"
             return openai.AsyncOpenAI(
-                api_key=config.MACHINE_LEARNING.AZURE_API_KEY,
-                base_url=api_base
+                api_key=config.MACHINE_LEARNING.AZURE_API_KEY, base_url=api_base
             )
         if provider == "openai":
             return openai.AsyncOpenAI(api_key=config.MACHINE_LEARNING.OPENAI_API_KEY)
@@ -104,7 +106,10 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
             try:
                 for attempt in range(max_retries):
                     try:
-                        print(f"        [Judge attempt {attempt + 1}/{max_retries}]", flush=True)
+                        print(
+                            f"        [Judge attempt {attempt + 1}/{max_retries}]",
+                            flush=True,
+                        )
                         request_params = {
                             "model": model,
                             "messages": [{"role": "user", "content": prompt}],
@@ -114,13 +119,17 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
                             request_params["max_completion_tokens"] = 10
                         else:
                             request_params["max_tokens"] = 10
-                        response = await direct_client.chat.completions.create(
-                            **request_params
+                        response = await asyncio.wait_for(
+                            direct_client.chat.completions.create(**request_params),
+                            timeout=60.0,  # 60s timeout to prevent hangs
                         )
                         return response.choices[0].message.content.strip()
                     except Exception as e:
-                        print(f"        Attempt {attempt + 1} failed: {e}. Retrying...", flush=True)
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                        print(
+                            f"        Attempt {attempt + 1} failed: {e}. Retrying...",
+                            flush=True,
+                        )
+                        time.sleep(min(2**attempt, 30))  # Capped at 30s max
                         if attempt == max_retries - 1:
                             return ""
                 return ""
@@ -131,22 +140,29 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
         try:
             for attempt in range(max_retries):
                 try:
-                    print(f"        [Judge attempt {attempt + 1}/{max_retries}]", flush=True)
-                    response = await client.chat(
-                        messages=messages,
-                        temperature=TEMPERATURE,
-                        max_tokens=10
+                    print(
+                        f"        [Judge attempt {attempt + 1}/{max_retries}]",
+                        flush=True,
+                    )
+                    response = await asyncio.wait_for(
+                        client.chat(
+                            messages=messages, temperature=TEMPERATURE, max_tokens=10
+                        ),
+                        timeout=60.0,
                     )
                     return response.content.strip()
                 except Exception as e:
-                    print(f"        Attempt {attempt + 1} failed: {e}. Retrying...", flush=True)
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    print(
+                        f"        Attempt {attempt + 1} failed: {e}. Retrying...",
+                        flush=True,
+                    )
+                    time.sleep(min(2**attempt, 30))
                     if attempt == max_retries - 1:
                         return ""
             return ""
         finally:
             await client.close()
-    
+
     # Run the async function
     try:
         return asyncio.run(async_query())
@@ -154,162 +170,171 @@ def query_openai_with_retry(prompt: str, max_retries: int = 3) -> str:
         print(f"        Error in LLM query: {e}", flush=True)
         return ""
 
-def evaluate_qa(hypotheses_file: str, reference_file: str, 
-               metric_model: str = EVAL_MODEL, verbose: bool = False) -> Dict:
+
+def evaluate_qa(
+    hypotheses_file: str,
+    reference_file: str,
+    metric_model: str = EVAL_MODEL,
+    verbose: bool = False,
+) -> Dict:
     """
     Evaluate QA results using LongMemEval methodology
-    
+
     Args:
         hypotheses_file: Path to JSONL file with model hypotheses
         reference_file: Path to JSON file with reference data
         metric_model: Model to use for evaluation
         verbose: Whether to print detailed results
-    
+
     Returns:
         Dictionary with evaluation results
     """
-    
+
     # Load data
     try:
-        with open(hypotheses_file, 'r') as f:
+        with open(hypotheses_file, "r") as f:
             hypotheses = [json.loads(line) for line in f]
     except:
-        with open(hypotheses_file, 'r') as f:
+        with open(hypotheses_file, "r") as f:
             hypotheses = json.load(f)
-    
+
     try:
-        with open(reference_file, 'r') as f:
+        with open(reference_file, "r") as f:
             references = json.load(f)
     except:
-        with open(reference_file, 'r') as f:
+        with open(reference_file, "r") as f:
             references = [json.loads(line) for line in f]
-    
+
     # Create lookups
-    qid2qdata = {entry['question_id']: entry for entry in references}
-    qid2qtype = {entry['question_id']: entry['question_type'] for entry in references}
-    
+    qid2qdata = {entry["question_id"]: entry for entry in references}
+    qid2qtype = {entry["question_id"]: entry["question_type"] for entry in references}
+
     # Initialize results tracking
     qtypes = set(list(qid2qtype.values()))
     qtype2acc = {t: [] for t in qtypes}
-    
+
     # Process each hypothesis
     logs = []
     for entry in tqdm(hypotheses, desc="Evaluating"):
-        if entry['question_id'] not in qid2qtype:
-            print(f'Warning: skipping {entry["question_id"]} as it is not in reference data.')
+        if entry["question_id"] not in qid2qtype:
+            print(
+                f"Warning: skipping {entry['question_id']} as it is not in reference data."
+            )
             continue
-        
-        qtype = qid2qtype[entry['question_id']]
-        q = qid2qdata[entry['question_id']]['question']
-        ans = qid2qdata[entry['question_id']]['answer']
-        hyp = entry['hypothesis']
-        
+
+        qtype = qid2qtype[entry["question_id"]]
+        q = qid2qdata[entry["question_id"]]["question"]
+        ans = qid2qdata[entry["question_id"]]["answer"]
+        hyp = entry["hypothesis"]
+
         # Create evaluation prompt
-        prompt = get_anscheck_prompt(qtype, q, ans, hyp, abstention='_abs' in entry['question_id'])
-        
+        prompt = get_anscheck_prompt(
+            qtype, q, ans, hyp, abstention="_abs" in entry["question_id"]
+        )
+
         # Get LLM evaluation
         eval_response = query_openai_with_retry(prompt)
         try:
-            label = 'yes' in eval_response.lower()
+            label = "yes" in eval_response.lower()
         except Exception as e:
             print(f"Error evaluating {entry['question_id']}: {e}")
             label = False
-        
+
         # Store results
-        entry['autoeval_label'] = {
-            'model': metric_model,
-            'label': label,
-            'raw_response': eval_response
+        entry["autoeval_label"] = {
+            "model": metric_model,
+            "label": label,
+            "raw_response": eval_response,
         }
         logs.append(entry)
-        
+
         if verbose:
             print(f"Question: {q}")
             print(f"Gold: {ans}")
             print(f"Hypothesis: {hyp}")
             print(f"Label: {label}")
             print("-" * 50)
-        
+
         qtype2acc[qtype].append(1 if label else 0)
-    
+
     # Calculate metrics
     all_scores = []
     task_scores = []
-    
+
     results = {
-        'overall_accuracy': 0,
-        'task_accuracies': {},
-        'total_questions': len(logs),
-        'model_used': metric_model
+        "overall_accuracy": 0,
+        "task_accuracies": {},
+        "total_questions": len(logs),
+        "model_used": metric_model,
     }
-    
+
     for k, v in qtype2acc.items():
         if v:  # Only calculate if there are instances
             acc = sum(v) / len(v)
-            results['task_accuracies'][k] = {
-                'accuracy': acc,
-                'count': len(v)
-            }
+            results["task_accuracies"][k] = {"accuracy": acc, "count": len(v)}
             task_scores.append(acc)
             all_scores.extend(v)
-    
+
     if all_scores:
-        results['overall_accuracy'] = sum(all_scores) / len(all_scores)
-    
+        results["overall_accuracy"] = sum(all_scores) / len(all_scores)
+
     if task_scores:
-        results['task_averaged_accuracy'] = sum(task_scores) / len(task_scores)
-    
+        results["task_averaged_accuracy"] = sum(task_scores) / len(task_scores)
+
     return results, logs
+
 
 def print_results(results: Dict):
     """Print evaluation results in a formatted way"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("📊 LONGMEMEVAL EVALUATION RESULTS")
-    print("="*60)
-    
+    print("=" * 60)
+
     print(f"Overall Accuracy: {results['overall_accuracy']:.4f}")
     print(f"Task-Averaged Accuracy: {results.get('task_averaged_accuracy', 0):.4f}")
     print(f"Total Questions: {results['total_questions']}")
     print(f"Evaluation Model: {results['model_used']}")
-    
+
     print(f"\nTask-Specific Results:")
-    for task, metrics in results['task_accuracies'].items():
+    for task, metrics in results["task_accuracies"].items():
         print(f"  {task}: {metrics['accuracy']:.4f} ({metrics['count']} questions)")
-    
-    print("="*60)
+
+    print("=" * 60)
+
 
 def main():
     """CLI entry point"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Evaluate LongMemEval QA results")
     parser.add_argument("hypotheses_file", help="Path to hypotheses JSONL file")
     parser.add_argument("reference_file", help="Path to reference JSON file")
     parser.add_argument("--model", default=EVAL_MODEL, help="Evaluation model to use")
     parser.add_argument("--verbose", action="store_true", help="Print detailed results")
     parser.add_argument("--output", help="Output file for detailed results")
-    
+
     args = parser.parse_args()
-    
+
     # Run evaluation
-    results, logs = evaluate_qa(args.hypotheses_file, args.reference_file, 
-                               args.model, args.verbose)
-    
+    results, logs = evaluate_qa(
+        args.hypotheses_file, args.reference_file, args.model, args.verbose
+    )
+
     # Print results
     print_results(results)
-    
+
     # Save detailed results if requested
     if args.output:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            json.dump({
-                'evaluation_results': results,
-                'detailed_logs': logs
-            }, f, indent=2)
-        
+
+        with open(output_path, "w") as f:
+            json.dump(
+                {"evaluation_results": results, "detailed_logs": logs}, f, indent=2
+            )
+
         print(f"\nDetailed results saved to: {output_path}")
 
+
 if __name__ == "__main__":
-    main() 
+    main()

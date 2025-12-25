@@ -32,7 +32,12 @@ from graphiti_core.search.search_config import (
 )
 
 from .base import MemorySystem
-from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    AsyncRetrying,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 from collections import deque
 
 
@@ -42,14 +47,16 @@ from collections import deque
 # graphiti_core incorrectly detects gpt-5.x as reasoning models and sends
 # the 'reasoning.effort' parameter, which Azure OpenAI rejects with 400 error.
 # Only o1-* and o3-* models actually support this parameter.
-# 
+#
 # This patch applies immediately at import time to prevent any ingestion failures.
 # =============================================================================
+
 
 @staticmethod
 def _patched_supports_reasoning(model: str) -> bool:
     """Only enable reasoning.effort for actual reasoning models (o1, o3)."""
-    return model.startswith(('o1-', 'o3-'))
+    return model.startswith(("o1-", "o3-"))
+
 
 # Patch both OpenAI clients
 AzureOpenAILLMClient._supports_reasoning_features = _patched_supports_reasoning
@@ -60,8 +67,13 @@ print("[GraphitiAdapter] Applied reasoning.effort bugfix patch for gpt-5.x model
 
 class CallRateMonitor:
     """Monitor API call rates with rolling window and periodic logging."""
-    
-    def __init__(self, window_seconds: int = 60, log_interval: int = 30, estimated_tokens_per_call: int = 2000):
+
+    def __init__(
+        self,
+        window_seconds: int = 60,
+        log_interval: int = 30,
+        estimated_tokens_per_call: int = 2000,
+    ):
         self.window_seconds = window_seconds
         self.log_interval = log_interval
         self.estimated_tokens_per_call = estimated_tokens_per_call
@@ -70,42 +82,46 @@ class CallRateMonitor:
         self.last_log_time = time.time()
         self.total_calls = 0
         self.quota_tpm = 10_000_000  # gpt-5 quota
-        
+
     def record_call(self, call_type: str = "llm"):
         """Record an API call and optionally log stats."""
         now = time.time()
         with self.lock:
             self.calls.append((now, call_type))
             self.total_calls += 1
-            
+
             # Prune old calls outside window
             cutoff = now - self.window_seconds
             while self.calls and self.calls[0][0] < cutoff:
                 self.calls.popleft()
-            
+
             # Log every interval
             if now - self.last_log_time >= self.log_interval:
                 self._log_stats(now)
                 self.last_log_time = now
-    
+
     def _log_stats(self, now: float):
         """Log current call rate statistics."""
         calls_in_window = len(self.calls)
         rpm = calls_in_window * (60.0 / self.window_seconds)
         estimated_tpm = rpm * self.estimated_tokens_per_call
         utilization = (estimated_tpm / self.quota_tpm) * 100
-        
-        print(f"📊 [RateMonitor] Last {self.window_seconds}s: {calls_in_window} calls | "
-              f"RPM: {rpm:.1f} | Est. TPM: {estimated_tpm:,.0f}/{self.quota_tpm:,} ({utilization:.1f}%) | "
-              f"Total: {self.total_calls}")
+
+        print(
+            f"📊 [RateMonitor] Last {self.window_seconds}s: {calls_in_window} calls | "
+            f"RPM: {rpm:.1f} | Est. TPM: {estimated_tpm:,.0f}/{self.quota_tpm:,} ({utilization:.1f}%) | "
+            f"Total: {self.total_calls}"
+        )
 
 
 class ThreadSafeRateLimiter:
     """A thread-safe rate limiter using threading.Lock (works across event loops)."""
-    
+
     # Shared monitor across all instances
-    _monitor = CallRateMonitor(window_seconds=60, log_interval=30, estimated_tokens_per_call=2000)
-    
+    _monitor = CallRateMonitor(
+        window_seconds=60, log_interval=30, estimated_tokens_per_call=2000
+    )
+
     def __init__(self, requests_per_second: float):
         self.delay = 1.0 / requests_per_second if requests_per_second > 0 else 0.0
         self.lock = threading.Lock()
@@ -113,32 +129,34 @@ class ThreadSafeRateLimiter:
 
     def wait(self):
         """Synchronous wait - call this BEFORE entering async context."""
-        if self.delay <= 0:
-            return
         with self.lock:
+            ThreadSafeRateLimiter._monitor.record_call("llm")
+            if self.delay <= 0:
+                return
             now = time.monotonic()
             elapsed = now - self.last_request
             wait_time = max(0, self.delay - elapsed)
             if wait_time > 0:
                 time.sleep(wait_time)
             self.last_request = time.monotonic()
-            # Record this call for monitoring
-            ThreadSafeRateLimiter._monitor.record_call("llm")
+
 
 class CustomNeo4jDriver(Neo4jDriver):
     """Custom driver to increase connection pool size for high-throughput benchmarking."""
-    def __init__(self, uri, user, password, database='neo4j'):
+
+    def __init__(self, uri, user, password, database="neo4j"):
         # Re-implement init to set max_connection_pool_size
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
-            auth=(user or '', password or ''),
+            auth=(user or "", password or ""),
             max_connection_pool_size=500,  # Increased from default 100
-            connection_acquisition_timeout=120.0, # Wait longer for connection
+            connection_acquisition_timeout=120.0,  # Wait longer for connection
         )
         self._database = database
-        
+
         # Schedule indices (same as original)
         import asyncio
+
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(self.build_indices_and_constraints())
@@ -149,11 +167,11 @@ class CustomNeo4jDriver(Neo4jDriver):
 
 class GraphitiAdapter(MemorySystem):
     """Graphiti adapter aligned with Zep's LongMemEval pipeline."""
+
     # Thread-safe global rate limiter
     _rate_limiter = ThreadSafeRateLimiter(
         requests_per_second=float(os.getenv("GRAPHITI_RPS", "0") or 0)
     )
-
 
     def _run_async(self, coro):
         """Run a coroutine in a fresh event loop. Always creates new loop to avoid contamination."""
@@ -167,7 +185,7 @@ class GraphitiAdapter(MemorySystem):
         print(f"[GraphitiAdapter] Configured Neo4j at {self.neo4j_uri}...")
         self.neo4j_user = os.getenv("USER_NEO4J", "neo4j")
         self.neo4j_password = os.getenv("PASSWORD_NEO4J", "password")
-        
+
         provider = (os.getenv("GRAPHITI_PROVIDER") or "openai").strip().lower()
         if provider not in {"openai", "azure"}:
             provider = "openai"
@@ -187,16 +205,24 @@ class GraphitiAdapter(MemorySystem):
         azure_reranker = os.getenv("AZURE_RERANKER_DEPLOYMENT")
 
         default_llm_model = azure_model if self.use_azure else "gpt-4o-mini"
-        default_embed_model = azure_embed if self.use_azure else "text-embedding-3-small"
+        default_embed_model = (
+            azure_embed if self.use_azure else "text-embedding-3-small"
+        )
         default_reranker_model = (
-            azure_reranker if azure_reranker else "gpt-4.1-nano"
-        ) if self.use_azure else "gpt-4.1-nano"
+            (azure_reranker if azure_reranker else "gpt-4.1-nano")
+            if self.use_azure
+            else "gpt-4.1-nano"
+        )
 
         self.llm_model = os.getenv("GRAPHITI_LLM_MODEL", default_llm_model)
         self.embed_model = os.getenv("GRAPHITI_EMBEDDING_MODEL", default_embed_model)
-        self.reranker_model = os.getenv("GRAPHITI_RERANKER_MODEL", default_reranker_model)
+        self.reranker_model = os.getenv(
+            "GRAPHITI_RERANKER_MODEL", default_reranker_model
+        )
         self.generator_model = os.getenv("GRAPHITI_GENERATOR_MODEL", self.llm_model)
-        self.generator_temperature = float(os.getenv("GRAPHITI_GENERATOR_TEMPERATURE", "0") or 0)
+        self.generator_temperature = float(
+            os.getenv("GRAPHITI_GENERATOR_TEMPERATURE", "0") or 0
+        )
         default_generator_max = "256" if self.use_azure else "0"
         self.generator_max_tokens = int(
             os.getenv("GRAPHITI_GENERATOR_MAX_TOKENS", default_generator_max) or 0
@@ -204,45 +230,58 @@ class GraphitiAdapter(MemorySystem):
         self.search_limit = int(os.getenv("GRAPHITI_SEARCH_LIMIT", "20"))
         self.query_max_chars = int(os.getenv("GRAPHITI_QUERY_MAX_CHARS", "255"))
         self.reranker_max_tokens = int(os.getenv("GRAPHITI_RERANKER_MAX_TOKENS", "32"))
-        self.reranker_timeout_s = float(os.getenv("GRAPHITI_RERANKER_TIMEOUT_S", "120") or 120)
-        self.ingest_timeout_s = float(os.getenv("GRAPHITI_INGEST_TIMEOUT_S", "600") or 600)
-        self.retrieval_timeout_s = float(os.getenv("GRAPHITI_RETRIEVAL_TIMEOUT_S", "0") or 0)
+        self.reranker_timeout_s = float(
+            os.getenv("GRAPHITI_RERANKER_TIMEOUT_S", "120") or 120
+        )
+        self.ingest_timeout_s = float(
+            os.getenv("GRAPHITI_INGEST_TIMEOUT_S", "600") or 600
+        )
+        self.retrieval_timeout_s = float(
+            os.getenv("GRAPHITI_RETRIEVAL_TIMEOUT_S", "0") or 0
+        )
         self.reranker_api_version = os.getenv(
             "AZURE_RERANKER_API_VERSION",
             os.getenv("AZURE_API_VERSION", "2024-08-01-preview"),
         )
 
         self.search_config = self._build_search_config()
-        
+
         # Stage logging for diagnosis
         self.last_stage_logs = {}
         self._create_log_dir()
-    
+
     def _create_log_dir(self):
         """Create directory for detailed stage logs."""
         self.log_dir = "evals/results/graphiti_stage_logs"
         os.makedirs(self.log_dir, exist_ok=True)
-    
+
     def _log_stage(self, user_id: str, stage: str, data: dict):
         """Log stage data for later diagnosis."""
         self.last_stage_logs[f"{user_id}_{stage}"] = data
         # Also write to file for persistence
         log_file = f"{self.log_dir}/{user_id}.jsonl"
         with open(log_file, "a") as f:
-            f.write(json.dumps({"stage": stage, "timestamp": datetime.now().isoformat(), **data}) + "\n")
+            f.write(
+                json.dumps(
+                    {"stage": stage, "timestamp": datetime.now().isoformat(), **data}
+                )
+                + "\n"
+            )
 
     def _build_search_config(self) -> SearchConfig:
         """Match the Zep LongMemEval search recipe (edges cross-encoder, nodes RRF).
-        
+
         Edge reranker can be configured via GRAPHITI_EDGE_RERANKER:
         - "cross_encoder" (default): Most accurate, but slow (1 LLM call per edge)
         - "rrf": Fast reciprocal rank fusion (no LLM calls), less accurate
         - "mmr": Maximal marginal relevance (embedding-based)
-        
+
         For large graphs, consider using "rrf" to avoid timeouts.
         """
-        edge_reranker_name = os.getenv("GRAPHITI_EDGE_RERANKER", "cross_encoder").lower()
-        
+        edge_reranker_name = os.getenv(
+            "GRAPHITI_EDGE_RERANKER", "cross_encoder"
+        ).lower()
+
         if edge_reranker_name == "rrf":
             edge_reranker = EdgeReranker.rrf
             print(f"[GraphitiAdapter] Using EdgeReranker.rrf (fast mode)")
@@ -251,8 +290,10 @@ class GraphitiAdapter(MemorySystem):
             print(f"[GraphitiAdapter] Using EdgeReranker.mmr")
         else:
             edge_reranker = EdgeReranker.cross_encoder
-            print(f"[GraphitiAdapter] Using EdgeReranker.cross_encoder (accurate mode, limit={self.search_limit})")
-        
+            print(
+                f"[GraphitiAdapter] Using EdgeReranker.cross_encoder (accurate mode, limit={self.search_limit})"
+            )
+
         return SearchConfig(
             edge_config=EdgeSearchConfig(
                 search_methods=[
@@ -272,15 +313,12 @@ class GraphitiAdapter(MemorySystem):
             limit=self.search_limit,
         )
 
-        
-
-
     async def _get_graphiti(self, timeout: float = 60.0):
         """
         Initialize Graphiti client with loop-safe, fresh async clients.
-        
+
         Args:
-            timeout: Timeout in seconds for LLM clients. 
+            timeout: Timeout in seconds for LLM clients.
                      Ingestion needs ~300s, Retrieval needs ~60s.
         """
         if self.use_azure:
@@ -330,7 +368,9 @@ class GraphitiAdapter(MemorySystem):
                 async for attempt in AsyncRetrying(
                     wait=wait_exponential(multiplier=1, min=2, max=30),
                     stop=stop_after_attempt(3),
-                    retry=retry_if_exception_type((RateLimitError,)),  # Only retry rate limits, not timeouts
+                    retry=retry_if_exception_type(
+                        (RateLimitError,)
+                    ),  # Only retry rate limits, not timeouts
                 ):
                     with attempt:
                         call_kwargs = {
@@ -340,14 +380,16 @@ class GraphitiAdapter(MemorySystem):
                             "response_format": response_model,
                         }
                         if model.startswith(("gpt-5", "o1", "o3")):
-                             call_kwargs["max_completion_tokens"] = max_tokens
-                             if reasoning:
-                                 call_kwargs["reasoning_effort"] = reasoning
+                            call_kwargs["max_completion_tokens"] = max_tokens
+                            if reasoning:
+                                call_kwargs["reasoning_effort"] = reasoning
                         else:
-                             # For gpt-4o etc, use max_tokens
-                             call_kwargs["max_tokens"] = max_tokens
-                        
-                        response = await llm_self.client.beta.chat.completions.parse(**call_kwargs)
+                            # For gpt-4o etc, use max_tokens
+                            call_kwargs["max_tokens"] = max_tokens
+
+                        response = await llm_self.client.beta.chat.completions.parse(
+                            **call_kwargs
+                        )
                         return ResponseWrapper(response)
 
             async def _patched_create_completion(
@@ -362,7 +404,9 @@ class GraphitiAdapter(MemorySystem):
                 async for attempt in AsyncRetrying(
                     wait=wait_exponential(multiplier=1, min=2, max=30),
                     stop=stop_after_attempt(3),
-                    retry=retry_if_exception_type((RateLimitError,)),  # Only retry rate limits, not timeouts
+                    retry=retry_if_exception_type(
+                        (RateLimitError,)
+                    ),  # Only retry rate limits, not timeouts
                 ):
                     with attempt:
                         request_kwargs = {
@@ -376,10 +420,14 @@ class GraphitiAdapter(MemorySystem):
                             request_kwargs["max_tokens"] = max_tokens
                         if temperature is not None:
                             request_kwargs["temperature"] = temperature
-                            
-                        return await llm_self.client.chat.completions.create(**request_kwargs)
 
-            AzureOpenAILLMClient._create_structured_completion = _patched_create_structured_completion
+                        return await llm_self.client.chat.completions.create(
+                            **request_kwargs
+                        )
+
+            AzureOpenAILLMClient._create_structured_completion = (
+                _patched_create_structured_completion
+            )
             AzureOpenAILLMClient._create_completion = _patched_create_completion
 
             generator_client = AsyncAzureOpenAI(
@@ -390,20 +438,24 @@ class GraphitiAdapter(MemorySystem):
                 timeout=timeout,
                 max_retries=0,
             )
-            print("[GraphitiAdapter] Patched AzureOpenAILLMClient with Graphiti rate limiting.")
+            print(
+                "[GraphitiAdapter] Patched AzureOpenAILLMClient with Graphiti rate limiting."
+            )
 
             azure_chat_client = AsyncAzureOpenAI(
                 api_key=os.getenv("AZURE_API_KEY"),
                 api_version=os.getenv("AZURE_API_VERSION", "2024-08-01-preview"),
                 azure_endpoint=os.getenv("AZURE_API_BASE"),
                 azure_deployment=os.getenv("AZURE_CHAT_DEPLOYMENT"),
-                timeout=timeout,         # Dynamic timeout based on operation
-                max_retries=0,        # Disable SDK retries - we control retry at app level
+                timeout=timeout,  # Dynamic timeout based on operation
+                max_retries=0,  # Disable SDK retries - we control retry at app level
             )
             # DEBUG: Verify timeout is set correctly
-            actual_timeout = getattr(azure_chat_client, 'timeout', 'UNKNOWN')
-            print(f"[GraphitiAdapter] DEBUG: Azure chat client timeout = {actual_timeout}")
-            
+            actual_timeout = getattr(azure_chat_client, "timeout", "UNKNOWN")
+            print(
+                f"[GraphitiAdapter] DEBUG: Azure chat client timeout = {actual_timeout}"
+            )
+
             llm_config = LLMConfig(
                 api_key=os.getenv("AZURE_API_KEY"),
                 model=self.llm_model,
@@ -417,21 +469,28 @@ class GraphitiAdapter(MemorySystem):
             # FORCE PATCH INSTANCE METHODS
             # This ensures we override whatever the class defines
             import types
-            llm_client._create_structured_completion = types.MethodType(_patched_create_structured_completion, llm_client)
-            llm_client._create_completion = types.MethodType(_patched_create_completion, llm_client)
+
+            llm_client._create_structured_completion = types.MethodType(
+                _patched_create_structured_completion, llm_client
+            )
+            llm_client._create_completion = types.MethodType(
+                _patched_create_completion, llm_client
+            )
 
             azure_emb_client = AsyncAzureOpenAI(
                 api_key=os.getenv("AZURE_API_KEY"),
                 api_version=os.getenv("AZURE_EMBEDDING_API_VERSION", "2023-05-15"),
                 azure_endpoint=os.getenv("AZURE_API_BASE"),
                 azure_deployment=self.embed_model,
-                timeout=timeout,         # Dynamic timeout
-                max_retries=0,        # Disable SDK retries
+                timeout=timeout,  # Dynamic timeout
+                max_retries=0,  # Disable SDK retries
             )
             # DEBUG: Verify embedder timeout
-            emb_timeout = getattr(azure_emb_client, 'timeout', 'UNKNOWN')
-            print(f"[GraphitiAdapter] DEBUG: Azure embedder client timeout = {emb_timeout}")
-            
+            emb_timeout = getattr(azure_emb_client, "timeout", "UNKNOWN")
+            print(
+                f"[GraphitiAdapter] DEBUG: Azure embedder client timeout = {emb_timeout}"
+            )
+
             embedder = AzureOpenAIEmbedderClient(
                 azure_client=azure_emb_client,
                 model=self.embed_model,
@@ -465,8 +524,8 @@ class GraphitiAdapter(MemorySystem):
                 api_version=self.reranker_api_version,
                 azure_endpoint=os.getenv("AZURE_API_BASE"),
                 azure_deployment=self.reranker_model,
-                timeout=timeout,         # Dynamic timeout
-                max_retries=0,        # Disable SDK retries
+                timeout=timeout,  # Dynamic timeout
+                max_retries=0,  # Disable SDK retries
             )
             reranker_config = LLMConfig(
                 api_key=os.getenv("AZURE_API_KEY"),
@@ -491,15 +550,16 @@ class GraphitiAdapter(MemorySystem):
         if self.use_azure:
             reranker_max_tokens = self.reranker_max_tokens
             reranker_timeout_s = self.reranker_timeout_s
+
             async def _rank_azure(self, query: str, passages: list[str]):
                 openai_messages_list = [
                     [
                         Message(
-                            role='system',
-                            content='You are an expert tasked with determining whether the passage is relevant to the query',
+                            role="system",
+                            content="You are an expert tasked with determining whether the passage is relevant to the query",
                         ),
                         Message(
-                            role='user',
+                            role="user",
                             content=f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise.
                            <PASSAGE>
@@ -539,7 +599,10 @@ class GraphitiAdapter(MemorySystem):
                     return await self.client.chat.completions.create(**request)
 
                 responses = await semaphore_gather(
-                    *[_call(openai_messages) for openai_messages in openai_messages_list]
+                    *[
+                        _call(openai_messages)
+                        for openai_messages in openai_messages_list
+                    ]
                 )
 
                 scores = []
@@ -547,24 +610,32 @@ class GraphitiAdapter(MemorySystem):
                     if response is None:
                         scores.append(0.0)
                         continue
-                    content = (response.choices[0].message.content or "").strip().lower()
+                    content = (
+                        (response.choices[0].message.content or "").strip().lower()
+                    )
                     scores.append(1.0 if content.startswith("true") else 0.0)
 
-                results = [(passage, score) for passage, score in zip(passages, scores, strict=True)]
+                results = [
+                    (passage, score)
+                    for passage, score in zip(passages, scores, strict=True)
+                ]
                 results.sort(reverse=True, key=lambda x: x[1])
                 return results
 
-            reranker_client.rank = _rank_azure.__get__(reranker_client, OpenAIRerankerClient)
+            reranker_client.rank = _rank_azure.__get__(
+                reranker_client, OpenAIRerankerClient
+            )
         elif self.reranker_model.startswith(("gpt-5", "o1", "o3")):
+
             async def _rank_with_max_completion(self, query: str, passages: list[str]):
                 openai_messages_list = [
                     [
                         Message(
-                            role='system',
-                            content='You are an expert tasked with determining whether the passage is relevant to the query',
+                            role="system",
+                            content="You are an expert tasked with determining whether the passage is relevant to the query",
                         ),
                         Message(
-                            role='user',
+                            role="user",
                             content=f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise.
                            <PASSAGE>
@@ -586,7 +657,7 @@ class GraphitiAdapter(MemorySystem):
                             messages=openai_messages,
                             temperature=0,
                             max_completion_tokens=1,
-                            logit_bias={'6432': 1, '7983': 1},
+                            logit_bias={"6432": 1, "7983": 1},
                             logprobs=True,
                             top_logprobs=2,
                         )
@@ -601,17 +672,26 @@ class GraphitiAdapter(MemorySystem):
                         top_logprobs = logprobs.content[0].top_logprobs
                         if top_logprobs:
                             norm_logprobs = math.exp(top_logprobs[0].logprob)
-                            token = top_logprobs[0].token.strip().split(' ')[0].lower()
-                            scores.append(norm_logprobs if token == 'true' else 1 - norm_logprobs)
+                            token = top_logprobs[0].token.strip().split(" ")[0].lower()
+                            scores.append(
+                                norm_logprobs if token == "true" else 1 - norm_logprobs
+                            )
                             continue
-                    content = (response.choices[0].message.content or "").strip().lower()
+                    content = (
+                        (response.choices[0].message.content or "").strip().lower()
+                    )
                     scores.append(1.0 if content.startswith("true") else 0.0)
 
-                results = [(passage, score) for passage, score in zip(passages, scores, strict=True)]
+                results = [
+                    (passage, score)
+                    for passage, score in zip(passages, scores, strict=True)
+                ]
                 results.sort(reverse=True, key=lambda x: x[1])
                 return results
 
-            reranker_client.rank = _rank_with_max_completion.__get__(reranker_client, OpenAIRerankerClient)
+            reranker_client.rank = _rank_with_max_completion.__get__(
+                reranker_client, OpenAIRerankerClient
+            )
 
         # Use Custom Driver with large connection pool
         custom_driver = CustomNeo4jDriver(
@@ -626,45 +706,51 @@ class GraphitiAdapter(MemorySystem):
             embedder=embedder,
             cross_encoder=reranker_client,
         )
-        
+
         # Return all async clients for explicit cleanup
         async_clients = [generator_client]
         if self.use_azure:
-            async_clients.extend([azure_chat_client, azure_emb_client, reranker_async_client])
+            async_clients.extend(
+                [azure_chat_client, azure_emb_client, reranker_async_client]
+            )
         else:
-            # For OpenAI, we need to extract from wrapper clients if possible, 
+            # For OpenAI, we need to extract from wrapper clients if possible,
             # but usually they manage their own.
             pass
 
         return graphiti_client, generator_client, async_clients
 
-
     async def _close_all(self):
         """No-op - clients are created fresh per call and cleaned up by asyncio.run()."""
         pass
-
 
     def add_session(self, user_id: str, session_data: str, date: str):
         self.add_sessions(user_id, [{"content": session_data, "date": date}])
 
     def add_sessions(self, user_id: str, sessions: list):
         """Ingest sessions into Graphiti (sequential by default for correctness)."""
-        safe_user_id = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)
+        safe_user_id = re.sub(r"[^a-zA-Z0-9_-]", "_", user_id)
         ingest_stats: dict = {}
         start_time = time.time()
-        
+
         async def _ingest_all():
             nonlocal ingest_stats
             # HTTP client timeout should be >= per-episode timeout to avoid premature termination
             # Use separate env var to avoid confusion with per-episode timeout (GRAPHITI_INGEST_TIMEOUT_S)
-            ingest_client_timeout = float(os.getenv("GRAPHITI_HTTP_CLIENT_TIMEOUT_S", "900") or 900)
-            client, _, async_clients = await self._get_graphiti(timeout=ingest_client_timeout)
+            ingest_client_timeout = float(
+                os.getenv("GRAPHITI_HTTP_CLIENT_TIMEOUT_S", "900") or 900
+            )
+            client, _, async_clients = await self._get_graphiti(
+                timeout=ingest_client_timeout
+            )
             try:
                 max_concurrent = int(os.getenv("GRAPHITI_INGEST_CONCURRENCY", "1") or 1)
                 max_concurrent = max(1, max_concurrent)
 
                 # Log ingestion configuration for debugging
-                print(f"    [GraphitiAdapter] Ingestion config: per_episode={self.ingest_timeout_s}s, http_client={ingest_client_timeout}s, concurrency={max_concurrent}")
+                print(
+                    f"    [GraphitiAdapter] Ingestion config: per_episode={self.ingest_timeout_s}s, http_client={ingest_client_timeout}s, concurrency={max_concurrent}"
+                )
                 semaphore = asyncio.Semaphore(max_concurrent)
                 results = []
                 failed_sessions = []
@@ -673,35 +759,48 @@ class GraphitiAdapter(MemorySystem):
                     async with semaphore:
                         # Sync rate limit still applies globally across threads
                         self._rate_limiter.wait()
-                        
+
                         try:
-                            episode_date = datetime.strptime(s['date'], "%Y-%m-%d")
+                            episode_date = datetime.strptime(s["date"], "%Y-%m-%d")
                         except:
                             episode_date = datetime.utcnow()
-                        
+
                         try:
                             add_episode = client.add_episode(
                                 name=f"Session on {s['date']}",
-                                episode_body=s['content'],
+                                episode_body=s["content"],
                                 source=EpisodeType.text,
-                                source_description="chat history + " + s['date'],
+                                source_description="chat history + " + s["date"],
                                 reference_time=episode_date,
-                                group_id=safe_user_id
+                                group_id=safe_user_id,
                             )
                             if self.ingest_timeout_s > 0:
-                                result = await asyncio.wait_for(add_episode, timeout=self.ingest_timeout_s)
+                                result = await asyncio.wait_for(
+                                    add_episode, timeout=self.ingest_timeout_s
+                                )
                             else:
                                 result = await add_episode
                             results.append(result)
                         except asyncio.TimeoutError:
-                            print(f"    [GraphitiAdapter] ⏱️ TIMEOUT for session {idx}: exceeded {self.ingest_timeout_s}s per-episode limit")
-                            failed_sessions.append({"index": idx, "error": f"Timeout after {self.ingest_timeout_s}s"})
+                            print(
+                                f"    [GraphitiAdapter] ⏱️ TIMEOUT for session {idx}: exceeded {self.ingest_timeout_s}s per-episode limit"
+                            )
+                            failed_sessions.append(
+                                {
+                                    "index": idx,
+                                    "error": f"Timeout after {self.ingest_timeout_s}s",
+                                }
+                            )
                         except Exception as exc:
-                            print(f"    [GraphitiAdapter] ❌ Ingestion error for session {idx}: {exc}")
+                            print(
+                                f"    [GraphitiAdapter] ❌ Ingestion error for session {idx}: {exc}"
+                            )
                             failed_sessions.append({"index": idx, "error": str(exc)})
                         # Simple progress marker in logs
                         if (idx + 1) % 5 == 0 or (idx + 1) == len(sessions):
-                             print(f"    [GraphitiAdapter] Progress: {idx+1}/{len(sessions)} sessions for {safe_user_id}...")
+                            print(
+                                f"    [GraphitiAdapter] Progress: {idx + 1}/{len(sessions)} sessions for {safe_user_id}..."
+                            )
 
                 if max_concurrent == 1:
                     for i, s in enumerate(sessions):
@@ -711,11 +810,15 @@ class GraphitiAdapter(MemorySystem):
                     await asyncio.gather(*tasks)
             finally:
                 for ac in async_clients:
-                    try: await ac.close()
-                    except: pass
+                    try:
+                        await ac.close()
+                    except:
+                        pass
                 # Close Neo4j driver
-                try: client.graph_driver.close()
-                except: pass
+                try:
+                    client.graph_driver.close()
+                except:
+                    pass
 
             created_nodes = sum(len(r.nodes) for r in results)
             created_edges = sum(len(r.edges) for r in results)
@@ -732,7 +835,7 @@ class GraphitiAdapter(MemorySystem):
                     "total": (time.time() - start_time) * 1000,
                 },
             }
-            
+
             # Final summary
             success_count = len(results)
             failed_count = len(failed_sessions)
@@ -741,19 +844,23 @@ class GraphitiAdapter(MemorySystem):
                 f"    [GraphitiAdapter] {status_icon} Ingested {success_count}/{len(sessions)} sessions "
                 f"for {safe_user_id}"
             )
-            self._log_stage(safe_user_id, "stage1_ingestion_complete", {
-                "total_sessions": len(sessions),
-                "success_count": success_count,
-                "failed_count": failed_count
-            })
+            self._log_stage(
+                safe_user_id,
+                "stage1_ingestion_complete",
+                {
+                    "total_sessions": len(sessions),
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                },
+            )
 
         self._run_async(_ingest_all())
         self.last_ingest_stats = ingest_stats
 
     def _format_edge_date_range(self, edge) -> str:
         # Handle valid_at/invalid_at which might be None or datetime strings
-        valid = edge.valid_at if edge.valid_at else 'date unknown'
-        invalid = edge.invalid_at if edge.invalid_at else 'present'
+        valid = edge.valid_at if edge.valid_at else "date unknown"
+        invalid = edge.invalid_at if edge.invalid_at else "present"
         return f"{valid} - {invalid}"
 
     def _compose_search_context(self, edges: list, nodes: list) -> str:
@@ -772,9 +879,11 @@ FACTS and ENTITIES represent relevant context to the current conversation.
 {entities}
 </ENTITIES>
 """
-        facts = [f'  - {edge.fact} ({self._format_edge_date_range(edge)})' for edge in edges]
-        entities = [f'  - {node.name}: {node.summary}' for node in nodes]
-        return TEMPLATE.format(facts='\n'.join(facts), entities='\n'.join(entities))
+        facts = [
+            f"  - {edge.fact} ({self._format_edge_date_range(edge)})" for edge in edges
+        ]
+        entities = [f"  - {node.name}: {node.summary}" for node in nodes]
+        return TEMPLATE.format(facts="\n".join(facts), entities="\n".join(entities))
 
     def _is_personamem_query(self, query: str) -> bool:
         return "Answer with only the letter" in query and "Options:" in query
@@ -788,12 +897,16 @@ FACTS and ENTITIES represent relevant context to the current conversation.
         return text.strip()
 
     def query(self, user_id: str, query: str) -> str:
-        safe_user_id = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)
-        
+        safe_user_id = re.sub(r"[^a-zA-Z0-9_-]", "_", user_id)
+
         async def _run_rag():
             # Use shorter timeout for retrieval/generation
-            retrieval_client_timeout = float(os.getenv("GRAPHITI_RETRIEVAL_TIMEOUT_S", "60") or 60)
-            client, generator_client, async_clients = await self._get_graphiti(timeout=retrieval_client_timeout)
+            retrieval_client_timeout = float(
+                os.getenv("GRAPHITI_RETRIEVAL_TIMEOUT_S", "60") or 60
+            )
+            client, generator_client, async_clients = await self._get_graphiti(
+                timeout=retrieval_client_timeout
+            )
             try:
                 is_personamem = self._is_personamem_query(query)
                 search_query = query
@@ -877,7 +990,7 @@ Answer:
                         request["max_completion_tokens"] = self.generator_max_tokens
                     else:
                         request["max_tokens"] = self.generator_max_tokens
-                
+
                 response = await generator_client.chat.completions.create(**request)
                 generation_duration_ms = (time.time() - start_generation) * 1000
                 answer = response.choices[0].message.content or ""
@@ -905,7 +1018,9 @@ Answer:
                             "nodes_visited": len(nodes),
                             "relationships_traversed": len(edges),
                             "final_ranked_nodes": [
-                                getattr(node, "uuid", None) for node in nodes if getattr(node, "uuid", None)
+                                getattr(node, "uuid", None)
+                                for node in nodes
+                                if getattr(node, "uuid", None)
                             ],
                             "duration_ms": 0,
                         },
@@ -928,19 +1043,23 @@ Answer:
                 return answer
             except Exception as e:
                 print(f"[GraphitiAdapter] RAG error for {safe_user_id}: {e}")
-                self._log_stage(safe_user_id, "stage3_retrieval", {
-                    "query": query,
-                    "status": "failed",
-                    "error": str(e)
-                })
+                self._log_stage(
+                    safe_user_id,
+                    "stage3_retrieval",
+                    {"query": query, "status": "failed", "error": str(e)},
+                )
                 return f"Error: {e}"
             finally:
                 for ac in async_clients:
-                    try: await ac.close()
-                    except: pass
+                    try:
+                        await ac.close()
+                    except:
+                        pass
                 # Close Neo4j driver
-                try: client.graph_driver.close()
-                except: pass
+                try:
+                    client.graph_driver.close()
+                except:
+                    pass
 
         return self._run_async(_run_rag())
 
@@ -949,11 +1068,12 @@ Answer:
         try:
             # Use a fresh sync driver for reset
             driver = GraphDatabase.driver(
-                self.neo4j_uri, 
-                auth=(self.neo4j_user, self.neo4j_password)
+                self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password)
             )
             with driver.session() as session:
-                session.run("MATCH (n) WHERE n.group_id = $uid DETACH DELETE n", uid=user_id)
+                session.run(
+                    "MATCH (n) WHERE n.group_id = $uid DETACH DELETE n", uid=user_id
+                )
             driver.close()
         except Exception as e:
             print(f"[GraphitiAdapter] Reset error: {e}")

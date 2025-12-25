@@ -137,7 +137,7 @@ We report **two separate benchmark scores** (paper-aligned):
 
 ```bash
 # Clone the repository
-git clone https://github.com/saxenauts/persona.git
+git clone https://github.com/innernets-ai/persona.git
 cd persona
 
 # Install dependencies
@@ -210,94 +210,37 @@ poetry run python -m evals.cli analyze run_20241221_143052 --summary
 
 ## Results
 
-> [!NOTE]
-> **Status (COMPLETE)**: LongMemEval evaluation complete for both systems.
->
-> 📊 **Latest:** LongMemEval full results (Dec 25, 2025)
-> 🎯 **Next:** PersonaMem evaluation
-> 📁 **Analysis:** See `evals/analysis/CURRENT_STATUS.md` for detailed breakdown
+### LongMemEval Performance (December 2025)
 
-### LongMemEval Performance (Dec 25, 2025)
+**Benchmark:** 500 questions across 6 question types
 
-**Benchmark:** 500 total questions (full dataset)
-
-| System | Overall | Coverage | Single-Session | Multi-Session | Temporal | Knowledge Update |
-|--------|---------|----------|----------------|---------------|----------|------------------|
-| **Persona** | **64.1%** | 220/500 (44%) | 85.7% | **68.3%** | **36.7%** | **75.0%** |
-| Graphiti (Merged) | 53.2% | 500/500 (100%) | **91.9%** | 29.6% | 22.5% | 59.8% |
-
-**Winner: Persona (+10.9% overall accuracy)**
-
-#### Detailed Breakdown by Question Type
-
-| Question Type | Persona Acc | Persona N | Graphiti Acc | Graphiti N | Winner |
-|--------------|-------------|-----------|--------------|------------|--------|
-| single-session-user | 85.7% (30/35) | 35 | **91.9%** (68/74) | 74 | Graphiti |
-| single-session-assistant | N/A | 0 | 82.5% (47/57) | 57 | - |
-| single-session-preference | **72.0%** (18/25) | 25 | 45.7% (16/35) | 35 | Persona |
-| multi-session | **68.3%** (41/60) | 60 | 29.6% (60/203) | 203 | Persona |
-| temporal-reasoning | **36.7%** (22/60) | 60 | 22.5% (38/169) | 169 | Persona |
-| knowledge-update | **75.0%** (30/40) | 40 | 59.8% (52/87) | 87 | Persona |
+| System | Overall Accuracy | Multi-Session | Temporal | Knowledge Update |
+|--------|------------------|---------------|----------|------------------|
+| **Persona** | **64.1%** | **68.3%** | **36.7%** | **75.0%** |
+| Graphiti | 53.2% | 29.6% | 22.5% | 59.8% |
 
 **Key Findings:**
-- ✅ **Persona wins overall** (64.1% vs 53.2%, +10.9%)
-- ✅ **Persona excels at multi-session aggregation** (68% vs 30%)
-- ✅ **Persona better at temporal reasoning** (37% vs 23%)
-- ✅ **Graphiti faster retrieval** (1.2s vs 12.8s avg) but much slower ingestion
-- ⚠️ **Both struggle with temporal reasoning** (37% vs 23%) - architectural gap
+- Persona outperforms Graphiti by +10.9% overall
+- Strongest advantage in multi-session aggregation (+38.7%)
+- Both systems struggle with temporal reasoning (<40%)
 
 ### PersonaMem Performance
 
-> [!CAUTION]
-> **Status:** Not yet evaluated. Scheduled for next run.
-
-Expected coverage: 369 questions (full PersonaMem 32k variant)
+| System | Overall Accuracy | Status |
+|--------|------------------|--------|
+| **Persona** | TBD | Pending |
+| Graphiti | ~66% | In Progress |
 
 ### Latency Comparison
 
-| System | Phase | Avg Time | Notes |
-|--------|-------|----------|-------|
-| **Persona** | Retrieval | 12.8s | Graph traversal + ranking |
-| | **Total/question** | ~13s | Retrieval-dominated |
-| **Graphiti** | Ingestion | 15.8m (hard cases) | **Bottleneck** - 45+ LLM calls/session |
-| | Retrieval | 1.2s | **10x faster** than Persona |
-| | Generation | 3.5s | Standard LLM latency |
-| | **Total/question** | 16m+ (hard) / 3.4m (easy) | Ingestion-dominated |
+| System | Ingestion (avg) | Retrieval (avg) |
+|--------|-----------------|-----------------|
+| Persona | 61s | 12.8s |
+| Graphiti | 949s (15.8m) | 1.2s |
 
-**Production Implications:**
-- Persona: Fast one-time ingestion, slower queries (good for write-once-read-many)
-- Graphiti: Very slow ingestion on complex sessions, fast queries (bottleneck for real-time updates)
+**Trade-off:** Persona has faster ingestion but slower retrieval; Graphiti is the inverse.
 
-### Completion Status
-
-**Completed:**
-- ✅ Persona LongMemEval partial (220/500 questions) - **64.1%**
-- ✅ Graphiti LongMemEval COMPLETE (500/500 questions) - **53.2%**
-
-**Pending:**
-- 🔄 Persona full golden set (695 questions = 326 LongMemEval + 369 PersonaMem)
-- 🔄 Graphiti PersonaMem (369 questions)
-
-**Analysis Files:**
-- `analysis/CURRENT_STATUS.md` - Current standings and comparison
-- `analysis/GRAPHITI_ANALYSIS_REPORT.md` - Comprehensive comparison
-- `results/retry_20251225_011451/run_20251225_015400/summary.json` - Retry run results
-
-### Key Findings
-
-📊 **Strengths**:
-- Multi-session aggregation: Persona 68%, Graphiti 30%
-- Knowledge updates: Persona 75%, Graphiti 60%
-- Temporal reasoning: Persona 37%, Graphiti 23%
-
-📉 **Challenges**:
-- Both struggle with temporal reasoning (<40%)
-- Graphiti ingestion too slow for production (16m+ on hard cases)
-- Persona retrieval could be faster (12.8s vs 1.2s)
-
-🔍 **System Comparison**:
-- **Persona**: Best at multi-session, knowledge updates, and temporal. +11% overall.
-- **Graphiti**: Fastest retrieval, best single-session recall. Bottlenecked by ingestion.
+For detailed analysis, see `analysis/CURRENT_STATUS.md`.
 
 ---
 
@@ -800,8 +743,8 @@ If you use this evaluation framework in your research, please cite:
 @software{persona_eval_framework,
   title = {Persona Memory System - Evaluation Framework},
   author = {InnerNets AI},
-  year = {2024},
-  url = {https://github.com/saxenauts/persona}
+  year = {2025},
+  url = {https://github.com/innernets-ai/persona}
 }
 ```
 
@@ -816,8 +759,7 @@ MIT License - See [LICENSE](../LICENSE) for details.
 ## Contact
 
 For questions or feedback:
-- GitHub Issues: [saxenauts/persona/issues](https://github.com/saxenauts/persona/issues)
-- Email: your-email@example.com
+- GitHub Issues: [innernets-ai/persona/issues](https://github.com/innernets-ai/persona/issues)
 
 ---
 
