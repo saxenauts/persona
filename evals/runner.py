@@ -4,6 +4,29 @@ Evaluation Runner
 Core orchestrator for running benchmark evaluations against memory systems.
 """
 
+# =============================================================================
+# CRITICAL: Apply graphiti_core reasoning.effort bugfix BEFORE any imports
+# =============================================================================
+# graphiti_core 0.24.3 incorrectly treats gpt-5.x as reasoning models and sends
+# the 'reasoning.effort' parameter, which Azure OpenAI rejects with 400 error.
+# This patch MUST be applied before any graphiti_core imports.
+# =============================================================================
+try:
+    from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
+    from graphiti_core.llm_client import OpenAIClient
+
+    @staticmethod
+    def _patched_supports_reasoning(model: str) -> bool:
+        """Only enable reasoning.effort for actual reasoning models (o1, o3)."""
+        return model.startswith(('o1-', 'o3-'))
+
+    AzureOpenAILLMClient._supports_reasoning_features = _patched_supports_reasoning
+    OpenAIClient._supports_reasoning_features = _patched_supports_reasoning
+    print("[EvalRunner] Applied graphiti_core reasoning.effort bugfix for gpt-5.x models")
+except ImportError:
+    pass  # graphiti_core not installed, skip patch
+# =============================================================================
+
 import json
 import time
 import threading
@@ -86,13 +109,52 @@ class EvaluationRunner:
         self._log_lock = threading.Lock()
         self._print_lock = threading.Lock()
         
+        # Checkpointing support (prototype from supermemory research)
+        self.checkpoint_enabled = os.getenv("EVAL_CHECKPOINT_ENABLED", "false").lower() in {"1", "true", "yes"}
+        self._checkpoint_path = Path(self.logger.run_dir) / "checkpoint.json"
+        self._completed_questions: set = set()
+        if self.checkpoint_enabled:
+            self._load_checkpoint()
+        
         self._print(f"✓ Evaluation runner initialized")
         self._print(f"  Run ID: {self.logger.run_id}")
         self._print(f"  Output: {self.logger.run_dir}")
+        if self.checkpoint_enabled:
+            self._print(f"  Checkpointing: ENABLED ({len(self._completed_questions)} completed)")
 
     def _print(self, message: str, flush: bool = False) -> None:
         with self._print_lock:
             print(message, flush=flush)
+
+    def _load_checkpoint(self) -> None:
+        """Load checkpoint from disk if it exists."""
+        if self._checkpoint_path.exists():
+            try:
+                with open(self._checkpoint_path) as f:
+                    data = json.load(f)
+                self._completed_questions = set(data.get("completed_questions", []))
+                self._print(f"  📂 Loaded checkpoint: {len(self._completed_questions)} questions completed")
+            except Exception as e:
+                self._print(f"  ⚠️ Failed to load checkpoint: {e}")
+                self._completed_questions = set()
+
+    def _save_checkpoint(self, question_id: str) -> None:
+        """Save checkpoint after completing a question."""
+        if not self.checkpoint_enabled:
+            return
+        with self._log_lock:
+            self._completed_questions.add(question_id)
+            checkpoint_data = {
+                "run_id": self.logger.run_id,
+                "last_updated": datetime.now().isoformat(),
+                "completed_questions": list(self._completed_questions),
+                "total_completed": len(self._completed_questions)
+            }
+            try:
+                with open(self._checkpoint_path, "w") as f:
+                    json.dump(checkpoint_data, f, indent=2)
+            except Exception as e:
+                self._print(f"  ⚠️ Failed to save checkpoint: {e}")
 
     def run(self) -> Dict[str, Any]:
         """
@@ -208,6 +270,11 @@ class EvaluationRunner:
             else:
                 adapter = get_adapter(adapter_name)
                 for i, question in enumerate(questions):
+                    # Checkpoint: skip already completed questions
+                    if self.checkpoint_enabled and question.question_id in self._completed_questions:
+                        self._print(f"\n[{i+1}/{total_questions}] {question.question_type}: SKIPPED (checkpointed)")
+                        continue
+                    
                     self._print(
                         f"\n[{i+1}/{total_questions}] {question.question_type}: "
                         f"{question.question[:50]}..."
@@ -221,6 +288,9 @@ class EvaluationRunner:
                             verbose=True
                         )
                         all_results.append(result)
+                        
+                        # Save checkpoint after each successful evaluation
+                        self._save_checkpoint(question.question_id)
 
                         qtype = result.question_type
                         if qtype not in type_results:
@@ -480,6 +550,45 @@ class EvaluationRunner:
         correct = parse_judge_response(judge_response)
         
         return correct, judge_response
+
+    def _judge_retrieval_quality(
+        self, 
+        question: str, 
+        gold_answer: str, 
+        retrieved_context: str
+    ) -> dict:
+        """
+        Evaluate retrieval quality using LLM-as-Judge (Supermemory pattern).
+        
+        Returns:
+            dict with 'relevant' (bool), 'score' (0-1), and 'reasoning' (str)
+        """
+        if not retrieved_context or not retrieved_context.strip():
+            return {"relevant": False, "score": 0.0, "reasoning": "No context retrieved"}
+        
+        prompt = f"""I will give you a question, the correct answer, and retrieved context from a memory system.
+Your task is to determine if the retrieved context contains information that could help answer the question correctly.
+
+Question: {question}
+
+Correct Answer: {gold_answer}
+
+Retrieved Context:
+{retrieved_context[:2000]}  # Truncate for token efficiency
+
+Does the retrieved context contain information relevant to answering the question correctly?
+Answer with ONLY one of: YES or NO"""
+
+        try:
+            judge_response = query_openai_with_retry(prompt)
+            relevant = parse_judge_response(judge_response)
+            return {
+                "relevant": relevant,
+                "score": 1.0 if relevant else 0.0,
+                "reasoning": judge_response
+            }
+        except Exception as e:
+            return {"relevant": False, "score": 0.0, "reasoning": f"Error: {e}"}
 
     def _evaluate_personamem(
         self, question: PersonaMemQuestion, generated_answer: str

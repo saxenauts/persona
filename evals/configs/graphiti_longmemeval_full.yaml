@@ -6,7 +6,7 @@ global:
   random_seed: 42
   adapters:
   - graphiti
-  parallel_workers: 5
+  parallel_workers: 8  # Increased from 5 - 10M TPM quota allows more parallelism
   checkpoint_dir: evals/results
   deep_logging: true
   output_dir: evals/results

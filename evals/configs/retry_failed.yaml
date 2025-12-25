@@ -1,0 +1,15 @@
+# Retry config for failed questions
+# Generated: 2025-12-25T01:14:51.260918
+
+longmemeval:
+  source: evals/data/retry_failed_20251225_011451.json
+  full_dataset: true
+
+global:
+  random_seed: 42
+  adapters:
+  - graphiti
+  parallel_workers: 8  # Azure gpt-5.2 with 10M TPM quota - no OpenAI bottleneck
+  checkpoint_dir: evals/results/retry_20251225_011451
+  deep_logging: true
+  output_dir: evals/results/retry_20251225_011451

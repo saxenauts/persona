@@ -4,6 +4,25 @@ CLI Interface for Evaluation Framework
 Provides command-line interface for running evaluations.
 """
 
+# =============================================================================
+# CRITICAL: Apply graphiti_core reasoning.effort bugfix BEFORE any imports
+# =============================================================================
+try:
+    from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
+    from graphiti_core.llm_client import OpenAIClient
+
+    @staticmethod
+    def _patched_supports_reasoning(model: str) -> bool:
+        """Only enable reasoning.effort for actual reasoning models (o1, o3)."""
+        return model.startswith(('o1-', 'o3-'))
+
+    AzureOpenAILLMClient._supports_reasoning_features = _patched_supports_reasoning
+    OpenAIClient._supports_reasoning_features = _patched_supports_reasoning
+    print("[EvalCLI] Applied graphiti_core reasoning.effort bugfix for gpt-5.x models")
+except ImportError:
+    pass  # graphiti_core not installed, skip patch
+# =============================================================================
+
 import json
 from datetime import datetime
 from pathlib import Path

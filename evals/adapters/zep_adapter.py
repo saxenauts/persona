@@ -655,12 +655,16 @@ class GraphitiAdapter(MemorySystem):
         
         async def _ingest_all():
             nonlocal ingest_stats
-            # Use longer timeout for ingestion (extraction is slow)
-            ingest_client_timeout = float(os.getenv("GRAPHITI_INGEST_TIMEOUT_S", "300") or 300)
+            # HTTP client timeout should be >= per-episode timeout to avoid premature termination
+            # Use separate env var to avoid confusion with per-episode timeout (GRAPHITI_INGEST_TIMEOUT_S)
+            ingest_client_timeout = float(os.getenv("GRAPHITI_HTTP_CLIENT_TIMEOUT_S", "900") or 900)
             client, _, async_clients = await self._get_graphiti(timeout=ingest_client_timeout)
             try:
                 max_concurrent = int(os.getenv("GRAPHITI_INGEST_CONCURRENCY", "1") or 1)
                 max_concurrent = max(1, max_concurrent)
+
+                # Log ingestion configuration for debugging
+                print(f"    [GraphitiAdapter] Ingestion config: per_episode={self.ingest_timeout_s}s, http_client={ingest_client_timeout}s, concurrency={max_concurrent}")
                 semaphore = asyncio.Semaphore(max_concurrent)
                 results = []
                 failed_sessions = []
@@ -689,6 +693,9 @@ class GraphitiAdapter(MemorySystem):
                             else:
                                 result = await add_episode
                             results.append(result)
+                        except asyncio.TimeoutError:
+                            print(f"    [GraphitiAdapter] ⏱️ TIMEOUT for session {idx}: exceeded {self.ingest_timeout_s}s per-episode limit")
+                            failed_sessions.append({"index": idx, "error": f"Timeout after {self.ingest_timeout_s}s"})
                         except Exception as exc:
                             print(f"    [GraphitiAdapter] ❌ Ingestion error for session {idx}: {exc}")
                             failed_sessions.append({"index": idx, "error": str(exc)})
