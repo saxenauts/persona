@@ -23,4 +23,7 @@ evals/results/
 benchmark_*.log
 analysis/
 
-.claude/TODO.md
+# Internal Roadmap
+TODO.md
+mintlify-docs
+

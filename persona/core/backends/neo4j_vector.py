@@ -138,14 +138,39 @@ class Neo4jVectorStore(VectorStore):
         self, 
         embedding: List[float], 
         user_id: str, 
-        limit: int = 5
+        limit: int = 5,
+        filters: Dict[str, Any] = None
     ) -> List[Dict[str, Any]]:
-        """Search for similar vectors using User-Specific Index.
+        """Search for similar vectors using User-Specific Index with optional filtering.
         
         This provides perfect isolation. We query ONLY the index for this user.
         No global competition ("crowding out") is possible.
         """
         index_name = self._get_index_name(user_id)
+        
+        # Build WHERE clause if filters exist
+        where_clauses = []
+        params = {
+            "indexName": index_name,
+            "embedding": embedding,
+            "limit": limit
+        }
+
+        if filters:
+            if "date_range" in filters:
+                start, end = filters["date_range"]
+                where_clauses.append("node.created_at >= $start_date")
+                where_clauses.append("node.created_at <= $end_date")
+                params["start_date"] = start.isoformat() if hasattr(start, 'isoformat') else start
+                params["end_date"] = end.isoformat() if hasattr(end, 'isoformat') else end
+            
+            # Add other filters here as needed
+
+        where_clause = " AND ".join(where_clauses)
+        if where_clause:
+            where_clause = f"WHERE {where_clause}"
+        else:
+            where_clause = ""
         
         # Note: If the user has no index yet (no data), this might fail or return empty.
         # We handle this gracefully.
@@ -153,6 +178,7 @@ class Neo4jVectorStore(VectorStore):
         query = f"""
         CALL db.index.vector.queryNodes($indexName, $limit, $embedding)
         YIELD node, score
+        {where_clause}
         RETURN node.name AS node_name, score
         ORDER BY score DESC
         """
@@ -163,12 +189,7 @@ class Neo4jVectorStore(VectorStore):
             
             tx = await session.begin_transaction()
             try:
-                result = await tx.run(
-                    query, 
-                    indexName=index_name, 
-                    embedding=embedding, 
-                    limit=limit
-                )
+                result = await tx.run(query, **params)
                 async for record in result:
                     results.append({
                         'node_name': record['node_name'],

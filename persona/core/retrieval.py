@@ -191,12 +191,17 @@ class Retriever:
         Semantic similarity search.
         
         Embeds the query and finds top-K most similar memories.
+        Handles date parsing from query string (e.g., "(date: 2023-05-29) ...")
         """
+        # Extra date extraction
+        date_range = self._extract_date_filter(query)
+        
         try:
             results = await self.graph_ops.text_similarity_search(
                 query=query, 
                 user_id=self.user_id, 
-                limit=top_k
+                limit=top_k,
+                date_range=date_range
             )
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
@@ -222,6 +227,58 @@ class Retriever:
                 logger.debug(f"Could not retrieve memory {mid}: {e}")
         
         return memories, seed_nodes
+    
+    def _extract_date_filter(self, query: str) -> Optional[tuple]:
+        """
+        Extract date filter from query string.
+        
+        Supports format: "(date: YYYY-MM-DD) ..."
+        Returns: (start_date, end_date) tuple or None
+        """
+        import re
+        from datetime import datetime, timedelta
+        
+        # Match "(date: 2023-05-29)"
+        match = re.search(r"\(date:\s*(\d{4}-\d{2}-\d{2})\)", query)
+        if match:
+            date_str = match.group(1)
+            try:
+                # TODO: Implement smarter range logic (e.g. "last week").
+                # For now, if a specific date is mentioned, we search a wide window around it?
+                # Actually, if the user provides a reference date, they usually mean relative to that.
+                # But since the goal is "Date-Based Retrieval" for a specific reference point:
+                # Let's interpret the tag as setting the "current" context date,
+                # but NOT necessarily a strict filter unless the query asks for "last week".
+                
+                # However, for this specific task (fixing "last week" failure):
+                # We need to detect "last week" in the query content AND use the date tag as anchor.
+                
+                # Simple Heuristic V1:
+                # If query contains "last week" or "week ago", window = [date-7, date].
+                # If query contains "yesterday", window = [date-1, date-1].
+                
+                anchor_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                query_lower = query.lower()
+                
+                if "last week" in query_lower or "past week" in query_lower or "week ago" in query_lower:
+                     start = anchor_date - timedelta(days=7)
+                     return (start, anchor_date)
+                
+                if "yesterday" in query_lower:
+                    d = anchor_date - timedelta(days=1)
+                    return (d, d)
+                
+                # If no temporal keyword, do we filter efficiently? 
+                # Ideally no filter is safer than wrong filter. 
+                # BUT, if we want to boost precision for "What happened on X date",
+                # we might want a filter. 
+                # Let's start conservative: Only filter if specific relative terms are found.
+                return None
+                
+            except ValueError:
+                pass
+        
+        return None
     
     async def _expand_graph(
         self, 
