@@ -4,219 +4,266 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="/">Runs</a> / 
-    {% if run_id %}<a href="/run/{{ run_id }}">{{ run_id }}</a> / {% endif %}
-    {{ result.question_id }}
+    <a href="/">Runs</a> <span>/</span> 
+    {% if run_id %}<a href="/run/{{ run_id }}" class="text-mono">{{ run_id }}</a> <span>/</span> {% endif %}
+    <span class="current text-mono">{{ result.question_id }}</span>
 </div>
 
-<div class="card mb-4">
-    <div class="flex" style="align-items: flex-start;">
-        <div class="flex-1">
-            <h2>Question</h2>
-            <p style="font-size: 16px; margin-bottom: 16px;">{{ result.question_text }}</p>
+<!-- Header -->
+<div class="card">
+    <div class="card-body">
+        <div class="flex justify-between items-start">
+            <div class="flex-1" style="padding-right: 32px;">
+                <h3 class="card-title" style="font-size: 18px; margin-bottom: 16px;">{{ result.question_text }}</h3>
+                
+                <div class="grid grid-2">
+                    <div style="background: rgba(35, 134, 54, 0.1); padding: 12px; border-radius: var(--radius-md); border: 1px solid rgba(35, 134, 54, 0.2);">
+                        <div class="text-small text-success font-bold mb-2">EXPECTED</div>
+                        <div class="text-mono" style="word-break: break-all;">{{ result.gold_answer }}</div>
+                    </div>
+                    <div style="background: {% if result.correct %}rgba(35, 134, 54, 0.1){% else %}rgba(218, 54, 51, 0.1){% endif %}; padding: 12px; border-radius: var(--radius-md); border: 1px solid {% if result.correct %}rgba(35, 134, 54, 0.2){% else %}rgba(218, 54, 51, 0.2){% endif %};">
+                        <div class="text-small font-bold mb-2 {% if result.correct %}text-success{% else %}text-danger{% endif %}">GENERATED</div>
+                        <div class="text-mono" style="word-break: break-all;">{{ result.generated_answer or 'None' }}</div>
+                    </div>
+                </div>
+            </div>
             
-            <div class="grid grid-2" style="gap: 12px;">
-                <div>
-                    <span class="text-muted text-sm">Expected Answer:</span>
-                    <code class="text-success" style="font-size: 18px;">{{ result.gold_answer }}</code>
+            <div class="flex flex-col items-end gap-2" style="min-width: 140px;">
+                {% if result.correct %}
+                <span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">PASSED</span>
+                {% else %}
+                <span class="badge badge-danger" style="font-size: 14px; padding: 6px 12px;">FAILED</span>
+                {% endif %}
+                
+                <span class="badge badge-neutral text-mono">{{ result.question_type }}</span>
+                
+                {% if result.failure_category %}
+                <span class="badge badge-warning">{{ result.failure_category }}</span>
+                {% endif %}
+                
+                <div class="text-small text-muted mt-2">
+                    Total: {{ "%.2f"|format(result.duration_s) if result.duration_s else 0 }}s
                 </div>
-                <div>
-                    <span class="text-muted text-sm">Generated Answer:</span>
-                    <code class="{% if result.correct %}text-success{% else %}text-error{% endif %}" style="font-size: 18px;">
-                        {{ result.generated_answer[:50] if result.generated_answer else 'None' }}
-                    </code>
-                </div>
-            </div>
-        </div>
-        <div style="text-align: right; min-width: 150px;">
-            <div class="badge {% if result.correct %}badge-success{% else %}badge-error{% endif %}" style="font-size: 14px; padding: 6px 12px;">
-                {% if result.correct %}CORRECT{% else %}FAILED{% endif %}
-            </div>
-            {% if result.failure_category %}
-            <div class="badge badge-warning" style="margin-top: 8px; display: block;">
-                {{ result.failure_category }}
-            </div>
-            {% endif %}
-            <div class="text-muted text-sm" style="margin-top: 12px;">
-                Type: {{ result.question_type }}
             </div>
         </div>
     </div>
 </div>
 
-<div class="tabs">
-    <button class="tab active" data-tab="tab-sessions">Sessions ({{ sessions|length if sessions else 0 }})</button>
-    <button class="tab" data-tab="tab-ingestion">Ingestion</button>
-    <button class="tab" data-tab="tab-retrieval">Retrieval ({{ retrieved_nodes|length }})</button>
-    <button class="tab" data-tab="tab-context">Generated Context</button>
-    {% if deep_log %}<button class="tab" data-tab="tab-raw">Raw Log</button>{% endif %}
-</div>
-
-<div id="tab-sessions" class="tab-content active">
-    <div class="card">
-        {% if sessions %}
-            <div class="sessions-legend mb-4">
-                <span class="legend-item"><span class="legend-dot gold-dot"></span> Contains gold answer</span>
-                <span class="legend-item"><span class="legend-dot"></span> No gold answer found</span>
+<!-- Pipeline Timeline -->
+{% if pipeline %}
+    {% set ing_ms = pipeline.ingestion.duration_ms or 0 %}
+    {% set ret_ms = pipeline.retrieval.duration_ms or 0 %}
+    {% set gen_ms = pipeline.generation.duration_ms or 0 %}
+    {% set total_ms = ing_ms + ret_ms + gen_ms %}
+    {% if total_ms == 0 %}{% set total_ms = 1 %}{% endif %}
+    
+    <div class="card" style="padding: 16px;">
+        <div class="text-small text-muted font-bold mb-2 uppercase" style="letter-spacing: 0.5px;">Execution Pipeline</div>
+        <div class="pipeline-wrapper">
+            <div class="pipeline-segment" style="flex: {{ ing_ms }}; background: var(--color-primary); opacity: 0.6;" title="Ingestion: {{ ing_ms }}ms">
+                Ingestion
             </div>
-            {% for session in sessions %}
-            <div class="session-container {% if session.contains_gold %}session-gold{% endif %}">
-                <div class="session-header" onclick="toggleSession({{ session.id }})">
-                    <span class="session-toggle" id="toggle-{{ session.id }}">▶</span>
-                    <span class="session-title">
-                        Session {{ session.id + 1 }}
-                        <span class="text-muted text-sm">({{ session.turns|length }} turns)</span>
-                    </span>
-                    {% if session.contains_gold %}
-                    <span class="badge badge-success" style="margin-left: 8px;">Contains Gold</span>
-                    {% endif %}
-                </div>
-                <div class="session-content" id="session-{{ session.id }}" style="display: none;">
-                    {% for turn in session.turns[:100] %}
-                    <div class="message message-{{ turn.role|lower }}">
-                        <div class="message-role-badge {{ turn.role|lower }}">{{ turn.role }}</div>
-                        <div class="message-content">{{ turn.content[:1000] }}{% if turn.content|length > 1000 %}...{% endif %}</div>
-                    </div>
-                    {% endfor %}
-                    {% if session.turns|length > 100 %}
-                    <div class="text-muted text-sm" style="padding: 12px;">
-                        ... and {{ session.turns|length - 100 }} more turns
-                    </div>
-                    {% endif %}
-                </div>
+            <div class="pipeline-segment" style="flex: {{ ret_ms }}; background: var(--color-warning); opacity: 0.6;" title="Retrieval: {{ ret_ms }}ms">
+                Retrieval
             </div>
-            {% endfor %}
-        {% else %}
-            <p class="text-muted">No session data available for this question.</p>
-        {% endif %}
-    </div>
-</div>
-
-<div id="tab-ingestion" class="tab-content">
-    <div class="card">
-        <h2>Ingestion Summary</h2>
-        {% if deep_log and deep_log.ingestion %}
-        <div class="grid grid-4 mb-4">
-            <div class="stat">
-                <div class="stat-value">{{ deep_log.ingestion.sessions_count or 0 }}</div>
-                <div class="stat-label">Sessions</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value">{{ deep_log.ingestion.nodes_created or 0 }}</div>
-                <div class="stat-label">Nodes Created</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value">{{ deep_log.ingestion.relationships_created or 0 }}</div>
-                <div class="stat-label">Relationships</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value">{{ "%.1f"|format((deep_log.ingestion.duration_ms or 0) / 1000) }}s</div>
-                <div class="stat-label">Duration</div>
+            <div class="pipeline-segment" style="flex: {{ gen_ms }}; background: var(--color-success); opacity: 0.6;" title="Generation: {{ gen_ms }}ms">
+                Gen
             </div>
         </div>
-        {% if deep_log.ingestion.memories_created %}
-        <h3 style="margin-top: 16px;">Memories Created</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for type, count in deep_log.ingestion.memories_created.items() %}
-                <tr>
-                    <td>{{ type }}</td>
-                    <td>{{ count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% endif %}
-        {% if deep_log.ingestion.errors %}
-        <h3 style="margin-top: 16px; color: var(--error);">Errors</h3>
-        <pre><code>{{ deep_log.ingestion.errors | tojson(indent=2) }}</code></pre>
-        {% endif %}
-        {% else %}
-        <p class="text-muted">No ingestion data available.</p>
-        {% endif %}
+        <div class="flex justify-between text-small text-mono text-muted">
+            <div style="width: 33%">Ingestion: {{ ing_ms }}ms</div>
+            <div style="width: 33%; text-align: center;">Retrieval: {{ ret_ms }}ms</div>
+            <div style="width: 33%; text-align: right;">Generation: {{ gen_ms }}ms</div>
+        </div>
     </div>
-</div>
-
-<div id="tab-retrieval" class="tab-content">
-    <div class="card">
-        <h2>Retrieved Nodes ({{ retrieved_nodes|length }})</h2>
-        {% if retrieved_nodes %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>Node ID</th>
-                    <th>Type</th>
-                    <th>Score</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for node in retrieved_nodes %}
-                <tr>
-                    <td>{{ node.retrieval_rank }}</td>
-                    <td><code class="text-sm">{{ node.node_id[:12] }}...</code></td>
-                    <td>{{ node.node_type or '-' }}</td>
-                    <td>{{ "%.3f"|format(node.similarity_score) if node.similarity_score else '-' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-muted">No retrieval data in database. Check deep_log tab for full context.</p>
-        {% endif %}
-    </div>
-</div>
-
-<div id="tab-context" class="tab-content">
-    <div class="card">
-        <h2>Context Given to LLM</h2>
-        {% if deep_log and deep_log.retrieval %}
-        <pre><code>{{ deep_log.retrieval.retrieved_context }}</code></pre>
-        {% else %}
-        <p class="text-muted">No context data available.</p>
-        {% endif %}
-    </div>
-</div>
-
-{% if deep_log %}
-<div id="tab-raw" class="tab-content">
-    <div class="card">
-        <h2>Raw Deep Log</h2>
-        <pre><code>{{ deep_log | tojson(indent=2) }}</code></pre>
-    </div>
-</div>
 {% endif %}
 
-{% endblock %}
+<!-- Tabs Area -->
+<div class="tab-container">
+    <div class="tabs">
+        <button class="tab-btn active" data-target="tab-sessions">Sessions ({{ sessions|length if sessions else 0 }})</button>
+        <button class="tab-btn" data-target="tab-ingestion">Ingestion</button>
+        <button class="tab-btn" data-target="tab-retrieval">Retrieval ({{ retrieved_nodes|length }})</button>
+        <button class="tab-btn" data-target="tab-gen">Generation</button>
+        <button class="tab-btn" data-target="tab-raw">Raw Log</button>
+    </div>
 
-{% block scripts %}
-<script>
-function toggleSession(id) {
-    const content = document.getElementById('session-' + id);
-    const toggle = document.getElementById('toggle-' + id);
-    if (content.style.display === 'none') {
-        content.style.display = 'block';
-        toggle.textContent = '▼';
-    } else {
-        content.style.display = 'none';
-        toggle.textContent = '▶';
-    }
-}
+    <!-- Sessions Tab -->
+    <div id="tab-sessions" class="tab-content active">
+        {% if sessions %}
+        <div class="flex justify-between mb-4">
+            <div class="flex gap-4 items-center">
+                <div class="flex items-center gap-2 text-small text-muted">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-success);"></div>
+                    Contains Gold Answer
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button class="btn btn-sm" onclick="document.querySelectorAll('details').forEach(d => d.open = true)">Expand All</button>
+                <button class="btn btn-sm" onclick="document.querySelectorAll('details').forEach(d => d.open = false)">Collapse All</button>
+            </div>
+        </div>
+        
+        <div class="flex flex-col gap-2">
+            {% for session in sessions %}
+            <details class="card" style="margin-bottom: 0; padding: 0; overflow: hidden; border-color: {% if session.contains_gold %}var(--color-success-fg){% else %}var(--border-default){% endif %};">
+                <summary style="padding: 12px 16px; background: var(--bg-card-hover); cursor: pointer; font-weight: 500; display: flex; align-items: center; justify-content: space-between;">
+                    <div class="flex items-center gap-2">
+                        <span>Session {{ loop.index }}</span>
+                        <span class="text-muted text-small text-mono">({{ session.turns|length }} turns)</span>
+                    </div>
+                    {% if session.contains_gold %}
+                    <span class="badge badge-success text-small">Found Answer</span>
+                    {% endif %}
+                </summary>
+                <div class="card-body bg-body" style="background: var(--bg-body);">
+                    <div class="chat-stream">
+                        {% for turn in session.turns %}
+                        <div class="chat-bubble chat-{{ turn.role|lower }}">
+                            <span class="chat-meta">{{ turn.role }}</span>
+                            <div style="white-space: pre-wrap;">{{ turn.content }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center text-muted">No session data available.</div>
+        </div>
+        {% endif %}
+    </div>
 
-function expandAll() {
-    document.querySelectorAll('.session-content').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('.session-toggle').forEach(el => el.textContent = '▼');
-}
+    <!-- Ingestion Tab -->
+    <div id="tab-ingestion" class="tab-content">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Ingestion Metrics</h3>
+            </div>
+            <div class="card-body">
+                {% if deep_log and deep_log.ingestion %}
+                <div class="grid grid-4 mb-4">
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Nodes Created</div>
+                        <div class="stat-value">{{ deep_log.ingestion.nodes_created or 0 }}</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Edges Created</div>
+                        <div class="stat-value">{{ deep_log.ingestion.relationships_created or 0 }}</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Sessions</div>
+                        <div class="stat-value">{{ deep_log.ingestion.sessions_count or 0 }}</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Duration</div>
+                        <div class="stat-value">{{ "%.2f"|format((deep_log.ingestion.duration_ms or 0) / 1000) }}s</div>
+                    </div>
+                </div>
+                
+                {% if deep_log.ingestion.memories_created %}
+                <h4>Memories Created</h4>
+                <div class="table-wrapper mt-2">
+                    <table>
+                        <thead>
+                            <tr><th>Type</th><th>Count</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for type, count in deep_log.ingestion.memories_created.items() %}
+                            <tr><td>{{ type }}</td><td>{{ count }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="text-muted">No ingestion data recorded.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 
-function collapseAll() {
-    document.querySelectorAll('.session-content').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.session-toggle').forEach(el => el.textContent = '▶');
-}
-</script>
+    <!-- Retrieval Tab -->
+    <div id="tab-retrieval" class="tab-content">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Retrieved Context</h3>
+            </div>
+            <div class="card-body">
+                {% if retrieved_nodes %}
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">Rank</th>
+                                <th>Score</th>
+                                <th>Node ID</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for node in retrieved_nodes %}
+                            <tr>
+                                <td class="text-center font-bold">#{{ node.retrieval_rank }}</td>
+                                <td class="text-mono">{{ "%.4f"|format(node.similarity_score) }}</td>
+                                <td class="text-mono text-small">{{ node.node_id }}</td>
+                                <td><span class="badge badge-outline">{{ node.node_type }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted">No nodes retrieved.</div>
+                {% endif %}
+                
+                <h4 class="mt-4 mb-2">Raw Context</h4>
+                {% if deep_log and deep_log.retrieval and deep_log.retrieval.retrieved_context %}
+                <div class="code-block" style="max-height: 400px; overflow-y: auto;">
+                    <pre>{{ deep_log.retrieval.retrieved_context }}</pre>
+                </div>
+                {% else %}
+                <div class="text-muted text-small font-italic">No context string available.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Generation Tab -->
+    <div id="tab-gen" class="tab-content">
+        <div class="card">
+             <div class="card-header">
+                <h3 class="card-title">Generation Details</h3>
+            </div>
+            <div class="card-body">
+                <div class="flex gap-4 mb-4">
+                    <div>
+                        <span class="text-small text-muted block">Model</span>
+                        <span class="font-bold">Unknown</span> <!-- Model name not passed in vars explicitly? -->
+                    </div>
+                    <div>
+                        <span class="text-small text-muted block">Duration</span>
+                        <span class="font-bold">{{ pipeline.generation.duration_ms }}ms</span>
+                    </div>
+                </div>
+                
+                <h4>Full Answer</h4>
+                <div class="code-block" style="white-space: pre-wrap; font-family: var(--font-stack); font-size: 14px;">{{ result.generated_answer }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Raw Tab -->
+    <div id="tab-raw" class="tab-content">
+        <div class="card">
+            <div class="card-body">
+                <div class="code-block">
+                    <pre>{{ deep_log | tojson(indent=2) }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

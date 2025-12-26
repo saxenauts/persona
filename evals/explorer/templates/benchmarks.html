@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Benchmarks - Eval Explorer{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2>Available Benchmarks</h2>
+    <p class="text-muted">Download and install benchmarks to run evaluations against your memory systems.</p>
+</div>
+
+<div class="grid grid-2">
+    {% for bench in benchmarks %}
+    <div class="card" style="display: flex; flex-direction: column; height: 100%;">
+        <div class="card-body flex-1">
+            <div class="flex justify-between items-start mb-2">
+                <h3 class="card-title" style="font-size: 18px;">{{ bench.name }}</h3>
+                {% if bench.installed %}
+                <span class="badge badge-success">INSTALLED</span>
+                {% else %}
+                <span class="badge badge-neutral">NOT INSTALLED</span>
+                {% endif %}
+            </div>
+            
+            <p class="text-muted mb-4" style="line-height: 1.6;">{{ bench.description }}</p>
+            
+            <div class="mb-4">
+                <div class="text-small text-muted font-bold mb-2">VARIANTS</div>
+                <div class="flex flex-wrap gap-2">
+                    {% for v in bench.variants %}
+                    <span class="badge badge-outline text-mono">{{ v }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <div class="text-small text-muted font-bold mb-2">QUESTION TYPES</div>
+                <div class="flex flex-wrap gap-2">
+                    {% for qt in bench.question_types %}
+                    <span class="badge badge-neutral">{{ qt }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="card-footer">
+            <div class="flex justify-between items-center">
+                <div class="flex gap-2">
+                    {% if bench.paper_url %}
+                    <a href="{{ bench.paper_url }}" target="_blank" class="text-small">Read Paper ↗</a>
+                    {% endif %}
+                </div>
+                
+                {% if bench.installed %}
+                <button class="btn btn-sm" disabled style="opacity: 0.6; cursor: default;">Ready to Run</button>
+                {% else %}
+                <a href="{{ bench.download_url }}" target="_blank" class="btn btn-primary btn-sm">Download Data</a>
+                {% endif %}
+            </div>
+            {% if not bench.installed %}
+            <div class="mt-2 text-small text-muted">
+                Unzip to <code>persona/evals/data/{{ bench.id }}</code> to install
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not benchmarks %}
+<div class="card">
+    <div class="card-body text-center" style="padding: 40px;">
+        <h3 class="text-muted">No benchmark definitions found.</h3>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

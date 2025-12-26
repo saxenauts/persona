@@ -4,63 +4,90 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="/">Runs</a> / {{ run_id }}
+    <a href="/">Runs</a> <span>/</span> <span class="current text-mono">{{ run_id }}</span>
 </div>
 
-<div class="card mb-4 run-notes-card">
-    <div class="flex" style="align-items: flex-start; gap: 12px;">
-        <div class="flex-1">
-            <h2 style="margin-bottom: 8px;">Run Notes</h2>
-            <textarea id="run-notes" class="run-notes-input" placeholder="What was the idea behind this run? What were you testing?">{{ run_meta.notes if run_meta else '' }}</textarea>
+<!-- Header / Notes -->
+<div class="card">
+    <div class="card-body">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h1 style="margin-bottom: 4px;">Run Details</h1>
+                <div class="text-muted text-small text-mono">{{ run_id }}</div>
+            </div>
+            <div class="flex gap-2">
+                 <!-- Actions if any -->
+            </div>
         </div>
-        <button id="save-notes-btn" class="btn btn-primary" onclick="saveNotes()">Save</button>
+        
+        <div class="flex flex-col gap-2">
+            <label class="text-small text-muted font-bold">NOTES</label>
+            <div class="flex gap-2">
+                <textarea id="run-notes" class="form-control" rows="2" placeholder="Add notes about this run (e.g. 'Testing new embedding model')...">{{ run_meta.notes if run_meta else '' }}</textarea>
+                <button id="save-notes-btn" class="btn btn-primary" onclick="saveNotes()" style="height: fit-content;">Save</button>
+            </div>
+        </div>
     </div>
 </div>
 
+<!-- Stats -->
 <div class="grid grid-4 mb-4">
-    <div class="card stat">
-        <div class="stat-value">{{ overview.total }}</div>
+    <div class="card stat-card">
         <div class="stat-label">Total Questions</div>
+        <div class="stat-value">{{ overview.total }}</div>
+        <div class="stat-meta text-muted">100% completed</div>
     </div>
-    <div class="card stat">
-        <div class="stat-value text-success">{{ overview.correct }}</div>
+    <div class="card stat-card">
         <div class="stat-label">Correct</div>
+        <div class="stat-value text-success">{{ overview.correct }}</div>
+        <div class="stat-meta text-muted">{{ "%.1f"|format(overview.correct / overview.total * 100) if overview.total else 0 }}% rate</div>
     </div>
-    <div class="card stat">
-        <div class="stat-value text-error">{{ overview.total - overview.correct }}</div>
+    <div class="card stat-card">
         <div class="stat-label">Failed</div>
+        <div class="stat-value text-danger">{{ overview.total - overview.correct }}</div>
+        <div class="stat-meta text-muted">Action required</div>
     </div>
-    <div class="card stat">
-        <div class="stat-value" style="color: {% if overview.accuracy >= 70 %}var(--success){% elif overview.accuracy >= 50 %}var(--warning){% else %}var(--error){% endif %}">
+    <div class="card stat-card">
+        <div class="stat-label">Accuracy</div>
+        <div class="stat-value" style="color: {% if overview.accuracy >= 70 %}var(--color-success-fg){% elif overview.accuracy >= 50 %}var(--color-warning-fg){% else %}var(--color-danger-fg){% endif %}">
             {{ overview.accuracy }}%
         </div>
-        <div class="stat-label">Accuracy</div>
+        <div class="stat-meta text-muted">
+            Avg Duration: {{ "%.2f"|format(overview.avg_duration) if overview.avg_duration else 0 }}s
+        </div>
     </div>
 </div>
 
-<div class="flex">
-    <div class="flex-1">
-        <div class="card">
-            <h2>By Question Type</h2>
+<!-- Charts / Categorization -->
+<div class="grid grid-2 mb-4">
+    <!-- By Question Type -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">By Question Type</h3>
+        </div>
+        <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
                         <th>Type</th>
-                        <th>Total</th>
-                        <th>Correct</th>
-                        <th>Accuracy</th>
+                        <th class="text-right">Count</th>
+                        <th class="text-right">Acc</th>
+                        <th style="width: 100px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in by_type %}
                     <tr>
-                        <td>{{ row.question_type }}</td>
-                        <td>{{ row.total }}</td>
-                        <td>{{ row.correct }}</td>
+                        <td class="text-small font-mono">{{ row.question_type }}</td>
+                        <td class="text-right">{{ row.total }}</td>
+                        <td class="text-right font-bold {% if row.accuracy >= 70 %}text-success{% elif row.accuracy >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ row.accuracy }}%
+                        </td>
                         <td>
-                            <span style="color: {% if row.accuracy >= 70 %}var(--success){% elif row.accuracy >= 50 %}var(--warning){% else %}var(--error){% endif %}">
-                                {{ row.accuracy }}%
-                            </span>
+                            <!-- Mini bar chart -->
+                            <div style="background: var(--bg-input); height: 6px; border-radius: 3px; width: 100%; overflow: hidden;">
+                                <div style="width: {{ row.accuracy }}%; background: {% if row.accuracy >= 70 %}var(--color-success-fg){% elif row.accuracy >= 50 %}var(--color-warning-fg){% else %}var(--color-danger-fg){% endif %}; height: 100%;"></div>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -68,25 +95,31 @@
             </table>
         </div>
     </div>
-    <div class="flex-1">
-        <div class="card">
-            <h2>Failure Categories</h2>
+
+    <!-- Failure Categories -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Failure Categories</h3>
+        </div>
+        <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
                         <th>Category</th>
-                        <th>Count</th>
+                        <th class="text-right">Count</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in by_category %}
                     <tr>
-                        <td><span class="badge badge-error">{{ row.failure_category }}</span></td>
-                        <td>{{ row.count }}</td>
+                        <td>
+                            <span class="badge badge-danger">{{ row.failure_category }}</span>
+                        </td>
+                        <td class="text-right font-bold">{{ row.count }}</td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="2" class="text-muted">No failures classified yet</td>
+                        <td colspan="2" class="text-muted text-center" style="padding: 20px;">No failures categorized</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -95,48 +128,94 @@
     </div>
 </div>
 
-<div class="card mt-4">
-    <h2>Failed Questions</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Question</th>
-                <th>Type</th>
-                <th>Expected</th>
-                <th>Got</th>
-                <th>Category</th>
-                <th>Retrieved</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for f in failures %}
-            <tr>
-                <td class="truncate">
-                    <a href="/question/{{ f.question_id }}?run_id={{ run_id }}">{{ f.question_text[:80] }}...</a>
-                </td>
-                <td class="text-sm text-muted">{{ f.question_type[:20] }}</td>
-                <td><code class="text-success">{{ f.gold_answer }}</code></td>
-                <td><code class="text-error">{{ f.generated_answer[:20] if f.generated_answer else 'None' }}</code></td>
-                <td>
-                    {% if f.failure_category %}
-                    <span class="badge badge-warning">{{ f.failure_category }}</span>
-                    {% else %}
-                    <span class="text-muted">-</span>
-                    {% endif %}
-                </td>
-                <td class="text-sm">{{ f.retrieved_node_count or 0 }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endblock %}
+<!-- Filters & List -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Questions</h3>
+    </div>
+    
+    <!-- Filter Bar -->
+    <div class="filter-bar" style="border-left: 0; border-right: 0; border-radius: 0; margin-bottom: 0;">
+        <form action="" method="GET" class="flex gap-4 items-center w-full">
+            <div class="flex items-center gap-2">
+                <span class="text-small text-muted font-bold">FILTER:</span>
+                <select name="type" class="form-control" onchange="this.form.submit()" style="width: auto; min-width: 150px;">
+                    <option value="">All Types</option>
+                    {% for qt in question_types %}
+                    <option value="{{ qt }}" {% if filter_type == qt %}selected{% endif %}>{{ qt }}</option>
+                    {% endfor %}
+                </select>
+                
+                <select name="status" class="form-control" onchange="this.form.submit()" style="width: auto;">
+                    <option value="">All Status</option>
+                    <option value="passed" {% if filter_status == 'passed' %}selected{% endif %}>Passed</option>
+                    <option value="failed" {% if filter_status == 'failed' %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+            
+            <div class="flex-1"></div>
+            
+            <div class="text-small text-muted">
+                Showing {{ questions|length }} questions
+            </div>
+        </form>
+    </div>
 
-{% block scripts %}
+    <div class="table-wrapper" style="border: none; border-radius: 0;">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 40%;">Question</th>
+                    <th>Type</th>
+                    <th>Expected</th>
+                    <th>Got</th>
+                    <th>Status</th>
+                    <th class="text-right">Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in questions %}
+                <tr onclick="window.location.href='/question/{{ q.question_id }}?run_id={{ run_id }}'" style="cursor: pointer;">
+                    <td>
+                        <div class="truncate" style="font-weight: 500;">{{ q.question_text }}</div>
+                        <div class="text-small text-mono text-muted mt-2">{{ q.question_id[:8] }}...</div>
+                    </td>
+                    <td><span class="badge badge-outline">{{ q.question_type }}</span></td>
+                    <td>
+                        <div class="truncate code-text text-success" style="max-width: 150px;">{{ q.gold_answer }}</div>
+                    </td>
+                    <td>
+                        <div class="truncate code-text {% if q.correct %}text-success{% else %}text-danger{% endif %}" style="max-width: 150px;">
+                            {{ q.generated_answer or '-' }}
+                        </div>
+                    </td>
+                    <td>
+                        {% if q.correct %}
+                        <span class="badge badge-success">PASS</span>
+                        {% else %}
+                        <span class="badge badge-danger">FAIL</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right text-mono text-small">
+                        {{ "%.2f"|format(q.duration_s) if q.duration_s else '-' }}s
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted" style="padding: 40px;">No questions match filters</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <script>
 async function saveNotes() {
     const notes = document.getElementById('run-notes').value;
     const btn = document.getElementById('save-notes-btn');
+    const originalText = btn.textContent;
+    
     btn.textContent = 'Saving...';
     btn.disabled = true;
     
@@ -146,13 +225,25 @@ async function saveNotes() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({notes: notes})
         });
+        
         if (resp.ok) {
             btn.textContent = 'Saved!';
-            setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1500);
+            btn.classList.add('btn-primary'); // Ensure primary color
+            setTimeout(() => { 
+                btn.textContent = originalText; 
+                btn.disabled = false; 
+            }, 2000);
+        } else {
+            throw new Error('Failed');
         }
     } catch(e) {
         btn.textContent = 'Error';
-        setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1500);
+        btn.style.borderColor = 'var(--color-danger)';
+        setTimeout(() => { 
+            btn.textContent = originalText; 
+            btn.disabled = false; 
+            btn.style.borderColor = '';
+        }, 2000);
     }
 }
 </script>

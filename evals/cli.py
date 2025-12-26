@@ -14,7 +14,7 @@ try:
     @staticmethod
     def _patched_supports_reasoning(model: str) -> bool:
         """Only enable reasoning.effort for actual reasoning models (o1, o3)."""
-        return model.startswith(('o1-', 'o3-'))
+        return model.startswith(("o1-", "o3-"))
 
     AzureOpenAILLMClient._supports_reasoning_features = _patched_supports_reasoning
     OpenAIClient._supports_reasoning_features = _patched_supports_reasoning
@@ -32,10 +32,7 @@ import typer
 
 from .config import EvalConfig
 
-app = typer.Typer(
-    name="evals",
-    help="Persona Memory System Evaluation Framework"
-)
+app = typer.Typer(name="evals", help="Persona Memory System Evaluation Framework")
 
 
 def _normalize_run_id(run_id: str) -> str:
@@ -60,54 +57,39 @@ def _load_logs(run_id: str) -> List[Dict[str, Any]]:
 @app.command()
 def run(
     config: Optional[str] = typer.Option(
-        None,
-        "--config", "-c",
-        help="Path to configuration YAML file"
+        None, "--config", "-c", help="Path to configuration YAML file"
     ),
     benchmark: Optional[List[str]] = typer.Option(
-        None,
-        "--benchmark", "-b",
-        help="Benchmark(s) to run: longmemeval, personamem"
+        None, "--benchmark", "-b", help="Benchmark(s) to run: longmemeval, personamem"
     ),
     adapters: Optional[List[str]] = typer.Option(
         None,
-        "--adapter", "-a",
-        help="Adapter(s) to evaluate: persona, mem0, zep, graphiti"
+        "--adapter",
+        "-a",
+        help="Adapter(s) to evaluate: persona, mem0, zep, graphiti",
     ),
     types: Optional[str] = typer.Option(
-        None,
-        "--types", "-t",
-        help="Comma-separated question types to evaluate"
+        None, "--types", "-t", help="Comma-separated question types to evaluate"
     ),
     samples: Optional[int] = typer.Option(
-        None,
-        "--samples", "-n",
-        help="Number of samples per type"
+        None, "--samples", "-n", help="Number of samples per type"
     ),
     seed: int = typer.Option(
-        42,
-        "--seed", "-s",
-        help="Random seed for reproducibility"
+        42, "--seed", "-s", help="Random seed for reproducibility"
     ),
     workers: int = typer.Option(
-        5,
-        "--workers", "-w",
-        help="Number of parallel workers"
+        5, "--workers", "-w", help="Number of parallel workers"
     ),
     output_dir: str = typer.Option(
-        "evals/results",
-        "--output", "-o",
-        help="Output directory for results"
+        "evals/results", "--output", "-o", help="Output directory for results"
     ),
     use_golden_set: bool = typer.Option(
-        False,
-        "--golden-set",
-        help="Use pre-generated golden sets instead of sampling"
+        False, "--golden-set", help="Use pre-generated golden sets instead of sampling"
     ),
     skip_judge: bool = typer.Option(
         False,
         "--skip-judge",
-        help="Skip LongMemEval LLM judge (log responses for later evaluation)"
+        help="Skip LongMemEval LLM judge (log responses for later evaluation)",
     ),
 ):
     """
@@ -148,7 +130,7 @@ def run(
         # Parse question types if provided
         question_types = None
         if types:
-            question_types = [t.strip() for t in types.split(',')]
+            question_types = [t.strip() for t in types.split(",")]
 
         # Set up benchmarks
         if benchmark:
@@ -161,13 +143,13 @@ def run(
                     else:
                         # Default sample sizes
                         sample_sizes = {
-                            'single-session-user': samples or 10,
-                            'multi-session': samples or 10,
+                            "single-session-user": samples or 10,
+                            "multi-session": samples or 10,
                         }
 
                     eval_config.longmemeval = BenchmarkConfig(
-                        source='evals/data/longmemeval_oracle.json',
-                        sample_sizes=sample_sizes
+                        source="evals/data/longmemeval_oracle.json",
+                        sample_sizes=sample_sizes,
                     )
 
                 elif bm == "personamem":
@@ -176,13 +158,13 @@ def run(
                     else:
                         # Default sample sizes
                         sample_sizes = {
-                            'recall_user_shared_facts': samples or 10,
+                            "recall_user_shared_facts": samples or 10,
                         }
 
                     eval_config.personamem = BenchmarkConfig(
-                        source='evals/data/personamem',
-                        variant='32k',
-                        sample_sizes=sample_sizes
+                        source="evals/data/personamem",
+                        variant="32k",
+                        sample_sizes=sample_sizes,
                     )
 
         # Set adapters
@@ -200,9 +182,9 @@ def run(
     results = runner.run()
 
     # Print summary
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("EVALUATION COMPLETE")
-    print("="*80)
+    print("=" * 80)
 
     for benchmark_name, result in results.items():
         print(f"\n{benchmark_name.upper()}:")
@@ -213,21 +195,28 @@ def run(
         if "skipped_questions" in result:
             print(f"  Skipped Questions: {result['skipped_questions']}")
         print("\n  By Question Type:")
-        for qtype, stats in result.get('type_accuracies', {}).items():
-            print(f"    {qtype:40s}: {stats['accuracy']:.2%} ({stats['correct']}/{stats['count']})")
+        for qtype, stats in result.get("type_accuracies", {}).items():
+            print(
+                f"    {qtype:40s}: {stats['accuracy']:.2%} ({stats['correct']}/{stats['count']})"
+            )
 
     # Print rate limiter stats
     try:
         from persona.llm.rate_limiter import get_rate_limiter_registry
+
         registry = get_rate_limiter_registry()
         stats = registry.get_all_stats()
         if stats:
-            print("\n" + "-"*40)
+            print("\n" + "-" * 40)
             print("RATE LIMITER METRICS:")
             for s in stats:
                 print(f"  {s['name']}:")
-                print(f"    Requests: {s['total_requests']}, Tokens: {s['total_tokens']:,}")
-                print(f"    Wait time: {s['wait_time_ms']:.0f}ms, 429s: {s['retries_429']}")
+                print(
+                    f"    Requests: {s['total_requests']}, Tokens: {s['total_tokens']:,}"
+                )
+                print(
+                    f"    Wait time: {s['wait_time_ms']:.0f}ms, 429s: {s['retries_429']}"
+                )
     except Exception as e:
         pass  # Rate limiter not used
 
@@ -240,7 +229,9 @@ def analyze(
     summary: bool = typer.Option(False, "--summary", help="Show summary report"),
     qtype: Optional[str] = typer.Option(None, "--type", help="Filter by question type"),
     failures: bool = typer.Option(False, "--failures", help="Show only failures"),
-    retrieval: bool = typer.Option(False, "--retrieval", help="Analyze retrieval quality"),
+    retrieval: bool = typer.Option(
+        False, "--retrieval", help="Analyze retrieval quality"
+    ),
 ):
     """
     Analyze evaluation results
@@ -262,7 +253,7 @@ def analyze(
     # Strip run_ prefix if user passed it (DeepLogger adds it)
     if run_id.startswith("run_"):
         run_id = run_id[4:]
-    
+
     logger = DeepLogger(run_id=run_id)
 
     if summary:
@@ -278,17 +269,17 @@ def analyze(
 
     # Filter by question type if specified
     if qtype:
-        logs = [log for log in logs if log['question_type'] == qtype]
+        logs = [log for log in logs if log["question_type"] == qtype]
         print(f"\nFiltered to {len(logs)} questions of type '{qtype}'")
 
     # Filter failures if specified
     if failures:
-        logs = [log for log in logs if not log['evaluation']['correct']]
+        logs = [log for log in logs if not log["evaluation"]["correct"]]
         print(f"\nShowing {len(logs)} failed questions")
 
     # Print log details
     for log in logs:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print(f"Question ID: {log['question_id']}")
         print(f"Type: {log['question_type']}")
         print(f"Question: {log['question']}")
@@ -301,7 +292,7 @@ def analyze(
             print(f"  Duration: {log['retrieval']['duration_ms']:.1f} ms")
             print(f"  Context tokens: {log['retrieval']['context_size_tokens']}")
             print(f"  Top seeds:")
-            for seed in log['retrieval']['vector_search']['seeds'][:3]:
+            for seed in log["retrieval"]["vector_search"]["seeds"][:3]:
                 print(f"    - {seed['node_id']} (score: {seed['score']:.3f})")
 
 
@@ -322,20 +313,22 @@ def compare(
     """
     from .logging.deep_logger import DeepLogger
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("COMPARING EVALUATION RUNS")
-    print("="*80)
+    print("=" * 80)
 
     summaries = []
     for run_id in run_ids:
         clean_id = _normalize_run_id(run_id)
         logger = DeepLogger(run_id=clean_id)
         summary = logger.get_summary()
-        summary['run_id'] = clean_id
+        summary["run_id"] = clean_id
         summaries.append(summary)
 
     # Print comparison table
-    print(f"\n{'Run ID':<20s} {'Total':<8s} {'Accuracy':<10s} {'Avg Retrieval (ms)':<20s}")
+    print(
+        f"\n{'Run ID':<20s} {'Total':<8s} {'Accuracy':<10s} {'Avg Retrieval (ms)':<20s}"
+    )
     print("-" * 80)
 
     for summary in summaries:
@@ -349,26 +342,28 @@ def compare(
     # Compare by question type
     all_types = set()
     for summary in summaries:
-        all_types.update(summary.get('type_breakdown', {}).keys())
+        all_types.update(summary.get("type_breakdown", {}).keys())
 
     if all_types:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("Accuracy by Question Type:")
-        print("="*80)
+        print("=" * 80)
 
         for qtype in sorted(all_types):
             print(f"\n{qtype}:")
             for summary in summaries:
-                type_stats = summary.get('type_breakdown', {}).get(qtype, {})
+                type_stats = summary.get("type_breakdown", {}).get(qtype, {})
                 if type_stats:
-                    acc = type_stats.get('accuracy', 0)
+                    acc = type_stats.get("accuracy", 0)
                     print(f"  {summary['run_id']:<20s}: {acc:>6.1%}")
 
 
 @app.command()
 def aggregate(
     runs: str = typer.Option(..., "--runs", help="Comma-separated run IDs"),
-    output_json: Optional[str] = typer.Option(None, "--output-json", help="Optional JSON output path"),
+    output_json: Optional[str] = typer.Option(
+        None, "--output-json", help="Optional JSON output path"
+    ),
 ):
     """
     Aggregate timing metrics across multiple runs.
@@ -401,12 +396,36 @@ def aggregate(
         ingest_times = [log["ingestion"]["duration_ms"] for log in logs]
         retrieval_times = [log["retrieval"]["duration_ms"] for log in logs]
         generation_times = [log["generation"]["duration_ms"] for log in logs]
-        prompt_tokens = [log["generation"]["prompt_tokens"] for log in logs if log["generation"]["prompt_tokens"]]
-        completion_tokens = [log["generation"]["completion_tokens"] for log in logs if log["generation"]["completion_tokens"]]
-        extract_times = [log["ingestion"].get("extract_ms") for log in logs if log["ingestion"].get("extract_ms") is not None]
-        embed_times = [log["ingestion"].get("embed_ms") for log in logs if log["ingestion"].get("embed_ms") is not None]
-        persist_times = [log["ingestion"].get("persist_ms") for log in logs if log["ingestion"].get("persist_ms") is not None]
-        total_ingest_times = [log["ingestion"].get("total_ms") for log in logs if log["ingestion"].get("total_ms") is not None]
+        prompt_tokens = [
+            log["generation"]["prompt_tokens"]
+            for log in logs
+            if log["generation"]["prompt_tokens"]
+        ]
+        completion_tokens = [
+            log["generation"]["completion_tokens"]
+            for log in logs
+            if log["generation"]["completion_tokens"]
+        ]
+        extract_times = [
+            log["ingestion"].get("extract_ms")
+            for log in logs
+            if log["ingestion"].get("extract_ms") is not None
+        ]
+        embed_times = [
+            log["ingestion"].get("embed_ms")
+            for log in logs
+            if log["ingestion"].get("embed_ms") is not None
+        ]
+        persist_times = [
+            log["ingestion"].get("persist_ms")
+            for log in logs
+            if log["ingestion"].get("persist_ms") is not None
+        ]
+        total_ingest_times = [
+            log["ingestion"].get("total_ms")
+            for log in logs
+            if log["ingestion"].get("total_ms") is not None
+        ]
 
         summary = {
             "run_id": _normalize_run_id(run_id),
@@ -435,6 +454,7 @@ def aggregate(
         )
 
     if summaries:
+
         def mean_key(key: str) -> float:
             return mean([s[key] for s in summaries])
 
@@ -462,15 +482,21 @@ def aggregate(
 
         if output_json:
             with open(output_json, "w") as f:
-                json.dump({"runs": summaries, "aggregate": aggregate_summary}, f, indent=2)
+                json.dump(
+                    {"runs": summaries, "aggregate": aggregate_summary}, f, indent=2
+                )
             print(f"Saved aggregate stats to: {output_json}")
 
 
 @app.command()
 def judge(
     run_id: str = typer.Argument(..., help="Run ID to judge"),
-    input_path: Optional[str] = typer.Option(None, "--input", help="Optional input log path"),
-    output_path: Optional[str] = typer.Option(None, "--output", help="Optional output log path"),
+    input_path: Optional[str] = typer.Option(
+        None, "--input", help="Optional input log path"
+    ),
+    output_path: Optional[str] = typer.Option(
+        None, "--output", help="Optional output log path"
+    ),
 ):
     """
     Judge LongMemEval questions for an existing eval run.
@@ -525,7 +551,7 @@ def judge(
                             question=question,
                             answer=gold_answer,
                             response=response,
-                            abstention=abstention
+                            abstention=abstention,
                         )
                         judge_response = query_openai_with_retry(prompt)
                         correct = parse_judge_response(judge_response)
@@ -552,7 +578,166 @@ def judge(
 def create_configs():
     """Create default configuration files"""
     from .config import create_default_configs
+
     create_default_configs()
+
+
+@app.command()
+def benchmarks():
+    """List available benchmarks and their download status."""
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="Available Benchmarks")
+
+    table.add_column("Benchmark", style="cyan")
+    table.add_column("Status", style="green")
+    table.add_column("Paper")
+    table.add_column("Download URL")
+
+    data_dir = Path("evals/data")
+
+    benchmark_info = [
+        {
+            "id": "personamem",
+            "name": "PersonaMem",
+            "paper": "https://arxiv.org/abs/2410.12139",
+            "download": "https://github.com/InnerNets/PersonaMem",
+            "path": data_dir / "personamem",
+        },
+        {
+            "id": "longmemeval",
+            "name": "LongMemEval",
+            "paper": "https://arxiv.org/abs/2410.10813",
+            "download": "https://github.com/xiaowu0162/LongMemEval",
+            "path": data_dir / "longmemeval",
+        },
+    ]
+
+    for b in benchmark_info:
+        status = "Installed" if b["path"].exists() else "Not installed"
+        table.add_row(b["name"], status, b["paper"], b["download"])
+
+    console.print(table)
+    console.print(
+        "\nUse [bold]evals download <benchmark>[/bold] to download a benchmark."
+    )
+
+
+@app.command()
+def download(
+    benchmark: str = typer.Argument(
+        ..., help="Benchmark to download: personamem, longmemeval"
+    ),
+    variant: str = typer.Option(
+        "32k", "--variant", "-v", help="Variant for PersonaMem: 32k, 128k"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force re-download even if exists"
+    ),
+):
+    """Download benchmark dataset from official sources."""
+    import subprocess
+    import shutil
+
+    data_dir = Path("evals/data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    benchmarks_config = {
+        "personamem": {
+            "name": "PersonaMem",
+            "repo": "https://github.com/InnerNets/PersonaMem.git",
+            "paper": "https://arxiv.org/abs/2410.12139",
+            "path": data_dir / "personamem",
+            "files": {
+                "32k": ["shared_contexts_32k.jsonl", "questions_32k_32k.json"],
+                "128k": ["shared_contexts_128k.jsonl", "questions_128k_128k.json"],
+            },
+        },
+        "longmemeval": {
+            "name": "LongMemEval",
+            "repo": "https://github.com/xiaowu0162/LongMemEval.git",
+            "paper": "https://arxiv.org/abs/2410.10813",
+            "path": data_dir / "longmemeval",
+            "files": {},
+        },
+    }
+
+    if benchmark not in benchmarks_config:
+        print(f"Unknown benchmark: {benchmark}")
+        print(f"Available: {', '.join(benchmarks_config.keys())}")
+        raise typer.Exit(code=1)
+
+    config = benchmarks_config[benchmark]
+    target_path = config["path"]
+
+    if target_path.exists() and not force:
+        print(f"{config['name']} already installed at {target_path}")
+        print("Use --force to re-download")
+        return
+
+    print(f"Downloading {config['name']}...")
+    print(f"Paper: {config['paper']}")
+    print()
+
+    temp_dir = data_dir / f".{benchmark}_temp"
+
+    try:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", config["repo"], str(temp_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            print(f"Git clone failed: {result.stderr}")
+            raise typer.Exit(code=1)
+
+        if target_path.exists():
+            shutil.rmtree(target_path)
+
+        if benchmark == "personamem":
+            target_path.mkdir(parents=True, exist_ok=True)
+            source_data = temp_dir / "data"
+            if source_data.exists():
+                for f in source_data.iterdir():
+                    shutil.copy2(f, target_path / f.name)
+            else:
+                for f in temp_dir.iterdir():
+                    if f.suffix in [".json", ".jsonl"]:
+                        shutil.copy2(f, target_path / f.name)
+        else:
+            shutil.move(str(temp_dir), str(target_path))
+
+        print(f"Successfully installed {config['name']} to {target_path}")
+
+        if config.get("files") and variant in config["files"]:
+            print(f"\nVariant '{variant}' files:")
+            for f in config["files"][variant]:
+                file_path = target_path / f
+                status = "OK" if file_path.exists() else "MISSING"
+                print(f"  {f}: {status}")
+
+    finally:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+
+@app.command()
+def explore():
+    """Launch the Eval Explorer web UI."""
+    import subprocess
+    import sys
+
+    print("Starting Eval Explorer...")
+    print("Open http://localhost:5001 in your browser")
+    print()
+
+    subprocess.run([sys.executable, "-m", "evals.explorer.app"])
 
 
 if __name__ == "__main__":

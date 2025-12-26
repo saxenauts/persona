@@ -3,48 +3,72 @@
 {% block title %}Eval Runs - Eval Explorer{% endblock %}
 
 {% block content %}
-<h2>Evaluation Runs</h2>
+<div class="flex justify-between items-center mb-4">
+    <h2>Evaluation Runs</h2>
+</div>
 
 <div class="card">
-    <table>
-        <thead>
-            <tr>
-                <th>Run ID</th>
-                <th>System</th>
-                <th>Notes</th>
-                <th>Questions</th>
-                <th>Correct</th>
-                <th>Accuracy</th>
-                <th>Started</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for run in runs %}
-            <tr>
-                <td><a href="/run/{{ run.run_id }}">{{ run.run_id }}</a></td>
-                <td><span class="badge badge-info">{{ run.system_name }}</span></td>
-                <td class="text-sm text-muted" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    {{ run.notes[:80] if run.notes else '-' }}{% if run.notes and run.notes|length > 80 %}...{% endif %}
-                </td>
-                <td>{{ run.total }}</td>
-                <td>{{ run.correct }}</td>
-                <td>
-                    {% if run.accuracy >= 70 %}
-                    <span class="text-success">{{ run.accuracy }}%</span>
-                    {% elif run.accuracy >= 50 %}
-                    <span style="color: var(--warning)">{{ run.accuracy }}%</span>
-                    {% else %}
-                    <span class="text-error">{{ run.accuracy }}%</span>
-                    {% endif %}
-                </td>
-                <td class="text-muted text-sm">{{ run.started_at }}</td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="7" class="text-muted">No runs found. Import results using the analyzer first.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 120px;">Run ID</th>
+                    <th>System</th>
+                    <th>Notes</th>
+                    <th class="text-right">Questions</th>
+                    <th class="text-right">Correct</th>
+                    <th class="text-right">Failed</th>
+                    <th class="text-right">Accuracy</th>
+                    <th>Duration</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr style="cursor: pointer;" onclick="window.location.href='/run/{{ run.run_id }}'">
+                    <td>
+                        <a href="/run/{{ run.run_id }}" class="text-mono" style="font-weight: 600;">{{ run.run_id[:8] }}</a>
+                    </td>
+                    <td>
+                        <span class="badge badge-neutral">{{ run.system_name }}</span>
+                    </td>
+                    <td class="text-muted">
+                        <div class="truncate" style="max-width: 300px;">
+                            {{ run.notes or '-' }}
+                        </div>
+                    </td>
+                    <td class="text-right">{{ run.total }}</td>
+                    <td class="text-right text-success">{{ run.correct }}</td>
+                    <td class="text-right text-danger">{{ run.total - run.correct }}</td>
+                    <td class="text-right">
+                        {% if run.accuracy >= 70 %}
+                            <span class="badge badge-success">{{ run.accuracy }}%</span>
+                        {% elif run.accuracy >= 50 %}
+                            <span class="badge badge-warning">{{ run.accuracy }}%</span>
+                        {% else %}
+                            <span class="badge badge-danger">{{ run.accuracy }}%</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if run.duration_s %}
+                        {{ "%.1f"|format(run.duration_s) }}s
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="text-muted text-small">
+                        {{ run.started_at }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-muted" style="text-align: center; padding: 40px;">
+                        No runs found. Import results using the analyzer first.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
