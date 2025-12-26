@@ -1,0 +1,16 @@
+# Persona PersonaMem run - matched to Graphiti completed questions
+# 519 questions that Graphiti successfully processed (apples-to-apples comparison)
+
+personamem:
+  source: evals/data/personamem
+  variant: 32k
+  question_ids_file: evals/data/golden_sets/personamem_matched_set.json
+
+global:
+  random_seed: 42
+  adapters:
+  - persona
+  parallel_workers: 4  # Persona is faster, can handle more parallelism
+  checkpoint_dir: evals/results
+  deep_logging: true
+  output_dir: evals/results
