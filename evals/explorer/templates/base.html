@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Eval Explorer{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --error: #f85149;
+            --warning: #d29922;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 20px;
+            margin-bottom: 20px;
+        }
+        header h1 { font-size: 20px; font-weight: 600; }
+        header a { color: var(--accent); text-decoration: none; }
+        h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { font-weight: 600; color: var(--text-muted); font-size: 12px; text-transform: uppercase; }
+        tr:hover { background: rgba(88, 166, 255, 0.1); }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .badge-success { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+        .badge-error { background: rgba(248, 81, 73, 0.2); color: var(--error); }
+        .badge-warning { background: rgba(210, 153, 34, 0.2); color: var(--warning); }
+        .badge-info { background: rgba(88, 166, 255, 0.2); color: var(--accent); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .stat { text-align: center; padding: 12px; }
+        .stat-value { font-size: 32px; font-weight: 700; }
+        .stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; }
+        .grid { display: grid; gap: 16px; }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .message { padding: 12px 16px; border-radius: 6px; margin-bottom: 8px; }
+        .message-user { background: rgba(88, 166, 255, 0.1); border-left: 3px solid var(--accent); }
+        .message-assistant { background: var(--surface); border-left: 3px solid var(--text-muted); }
+        .message-system { background: rgba(210, 153, 34, 0.1); border-left: 3px solid var(--warning); font-size: 12px; }
+        .message-role { font-weight: 600; font-size: 12px; text-transform: uppercase; margin-bottom: 4px; }
+        .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; }
+        pre { background: var(--bg); padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+        code { font-family: 'SF Mono', Consolas, monospace; }
+        .breadcrumb { margin-bottom: 16px; font-size: 14px; color: var(--text-muted); }
+        .breadcrumb a { color: var(--text-muted); }
+        .flex { display: flex; gap: 16px; }
+        .flex-1 { flex: 1; }
+        .mt-4 { margin-top: 16px; }
+        .mb-4 { margin-bottom: 16px; }
+        .text-success { color: var(--success); }
+        .text-error { color: var(--error); }
+        .text-muted { color: var(--text-muted); }
+        .text-sm { font-size: 13px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><a href="/">Eval Explorer</a></h1>
+    </header>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    <script>
+        function initTabs() {
+            document.querySelectorAll('.tabs').forEach(tabContainer => {
+                const tabs = tabContainer.querySelectorAll('.tab');
+                tabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        const target = tab.dataset.tab;
+                        tabs.forEach(t => t.classList.remove('active'));
+                        tab.classList.add('active');
+                        document.querySelectorAll('.tab-content').forEach(c => {
+                            c.classList.toggle('active', c.id === target);
+                        });
+                    });
+                });
+            });
+        }
+        document.addEventListener('DOMContentLoaded', initTabs);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

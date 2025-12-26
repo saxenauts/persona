@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Eval Runs - Eval Explorer{% endblock %}
+
+{% block content %}
+<h2>Evaluation Runs</h2>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Run ID</th>
+                <th>System</th>
+                <th>Questions</th>
+                <th>Correct</th>
+                <th>Accuracy</th>
+                <th>Started</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for run in runs %}
+            <tr>
+                <td><a href="/run/{{ run.run_id }}">{{ run.run_id }}</a></td>
+                <td><span class="badge badge-info">{{ run.system_name }}</span></td>
+                <td>{{ run.total }}</td>
+                <td>{{ run.correct }}</td>
+                <td>
+                    {% if run.accuracy >= 70 %}
+                    <span class="text-success">{{ run.accuracy }}%</span>
+                    {% elif run.accuracy >= 50 %}
+                    <span style="color: var(--warning)">{{ run.accuracy }}%</span>
+                    {% else %}
+                    <span class="text-error">{{ run.accuracy }}%</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted text-sm">{{ run.started_at }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="text-muted">No runs found. Import results using the analyzer first.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

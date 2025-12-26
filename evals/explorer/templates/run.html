@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{{ run_id }} - Eval Explorer{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Runs</a> / {{ run_id }}
+</div>
+
+<div class="grid grid-4 mb-4">
+    <div class="card stat">
+        <div class="stat-value">{{ overview.total }}</div>
+        <div class="stat-label">Total Questions</div>
+    </div>
+    <div class="card stat">
+        <div class="stat-value text-success">{{ overview.correct }}</div>
+        <div class="stat-label">Correct</div>
+    </div>
+    <div class="card stat">
+        <div class="stat-value text-error">{{ overview.total - overview.correct }}</div>
+        <div class="stat-label">Failed</div>
+    </div>
+    <div class="card stat">
+        <div class="stat-value" style="color: {% if overview.accuracy >= 70 %}var(--success){% elif overview.accuracy >= 50 %}var(--warning){% else %}var(--error){% endif %}">
+            {{ overview.accuracy }}%
+        </div>
+        <div class="stat-label">Accuracy</div>
+    </div>
+</div>
+
+<div class="flex">
+    <div class="flex-1">
+        <div class="card">
+            <h2>By Question Type</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Total</th>
+                        <th>Correct</th>
+                        <th>Accuracy</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in by_type %}
+                    <tr>
+                        <td>{{ row.question_type }}</td>
+                        <td>{{ row.total }}</td>
+                        <td>{{ row.correct }}</td>
+                        <td>
+                            <span style="color: {% if row.accuracy >= 70 %}var(--success){% elif row.accuracy >= 50 %}var(--warning){% else %}var(--error){% endif %}">
+                                {{ row.accuracy }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="flex-1">
+        <div class="card">
+            <h2>Failure Categories</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in by_category %}
+                    <tr>
+                        <td><span class="badge badge-error">{{ row.failure_category }}</span></td>
+                        <td>{{ row.count }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="2" class="text-muted">No failures classified yet</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <h2>Failed Questions</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Question</th>
+                <th>Type</th>
+                <th>Expected</th>
+                <th>Got</th>
+                <th>Category</th>
+                <th>Retrieved</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in failures %}
+            <tr>
+                <td class="truncate">
+                    <a href="/question/{{ f.question_id }}?run_id={{ run_id }}">{{ f.question_text[:80] }}...</a>
+                </td>
+                <td class="text-sm text-muted">{{ f.question_type[:20] }}</td>
+                <td><code class="text-success">{{ f.gold_answer }}</code></td>
+                <td><code class="text-error">{{ f.generated_answer[:20] if f.generated_answer else 'None' }}</code></td>
+                <td>
+                    {% if f.failure_category %}
+                    <span class="badge badge-warning">{{ f.failure_category }}</span>
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td class="text-sm">{{ f.retrieved_node_count or 0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
