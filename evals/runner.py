@@ -34,11 +34,17 @@ import time
 import threading
 import re
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import signal
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    TimeoutError as FuturesTimeoutError,
+)
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
+from functools import wraps
 
 from .config import EvalConfig
 from .loaders.unified_loader import UnifiedBenchmarkLoader
@@ -86,6 +92,39 @@ def get_adapter(name: str) -> MemorySystem:
         return GraphitiAdapter()
     else:
         raise ValueError(f"Unknown adapter: {name}")
+
+
+QUESTION_TIMEOUT_SECONDS = int(os.getenv("EVAL_QUESTION_TIMEOUT", "300"))
+RATE_LIMIT_MAX_RETRIES = int(os.getenv("EVAL_RATE_LIMIT_RETRIES", "5"))
+RATE_LIMIT_BASE_DELAY = float(os.getenv("EVAL_RATE_LIMIT_BASE_DELAY", "10.0"))
+
+
+def with_rate_limit_retry(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        last_error: Optional[Exception] = None
+        for attempt in range(RATE_LIMIT_MAX_RETRIES):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = any(
+                    x in error_str
+                    for x in ["429", "rate limit", "ratelimit", "too many requests"]
+                )
+                if not is_rate_limit:
+                    raise
+                last_error = e
+                delay = RATE_LIMIT_BASE_DELAY * (2**attempt)
+                print(
+                    f"    ⏳ Rate limited, waiting {delay:.0f}s (attempt {attempt + 1}/{RATE_LIMIT_MAX_RETRIES})..."
+                )
+                time.sleep(delay)
+        if last_error:
+            raise last_error
+        raise RuntimeError("Rate limit retries exhausted")
+
+    return wrapper
 
 
 @dataclass
@@ -405,9 +444,20 @@ class EvaluationRunner:
                     flush=True,
                 )
 
-            # Ingest sessions
             start_ingest = time.time()
-            adapter.add_sessions(user_id, sessions)
+
+            def do_ingestion():
+                adapter.add_sessions(user_id, sessions)
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(do_ingestion)
+                try:
+                    future.result(timeout=QUESTION_TIMEOUT_SECONDS)
+                except FuturesTimeoutError:
+                    raise TimeoutError(
+                        f"Ingestion timed out after {QUESTION_TIMEOUT_SECONDS}s"
+                    )
+
             ingest_time_ms = (time.time() - start_ingest) * 1000
             if verbose:
                 self._print(

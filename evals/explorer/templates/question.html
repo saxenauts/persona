@@ -46,6 +46,7 @@
 
 <div class="tabs">
     <button class="tab active" data-tab="tab-sessions">Sessions ({{ sessions|length if sessions else 0 }})</button>
+    <button class="tab" data-tab="tab-ingestion">Ingestion</button>
     <button class="tab" data-tab="tab-retrieval">Retrieval ({{ retrieved_nodes|length }})</button>
     <button class="tab" data-tab="tab-context">Generated Context</button>
     {% if deep_log %}<button class="tab" data-tab="tab-raw">Raw Log</button>{% endif %}
@@ -54,26 +55,90 @@
 <div id="tab-sessions" class="tab-content active">
     <div class="card">
         {% if sessions %}
+            <div class="sessions-legend mb-4">
+                <span class="legend-item"><span class="legend-dot gold-dot"></span> Contains gold answer</span>
+                <span class="legend-item"><span class="legend-dot"></span> No gold answer found</span>
+            </div>
             {% for session in sessions %}
-            <div style="margin-bottom: 24px;">
-                <h3 style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">
-                    Conversation ({{ session|length }} turns)
-                </h3>
-                {% for turn in session[:50] %}
-                <div class="message message-{{ turn.role|lower }}">
-                    <div class="message-role">{{ turn.role }}</div>
-                    <div>{{ turn.content[:500] }}{% if turn.content|length > 500 %}...{% endif %}</div>
+            <div class="session-container {% if session.contains_gold %}session-gold{% endif %}">
+                <div class="session-header" onclick="toggleSession({{ session.id }})">
+                    <span class="session-toggle" id="toggle-{{ session.id }}">▶</span>
+                    <span class="session-title">
+                        Session {{ session.id + 1 }}
+                        <span class="text-muted text-sm">({{ session.turns|length }} turns)</span>
+                    </span>
+                    {% if session.contains_gold %}
+                    <span class="badge badge-success" style="margin-left: 8px;">Contains Gold</span>
+                    {% endif %}
                 </div>
-                {% endfor %}
-                {% if session|length > 50 %}
-                <div class="text-muted text-sm" style="padding: 12px;">
-                    ... and {{ session|length - 50 }} more turns
+                <div class="session-content" id="session-{{ session.id }}" style="display: none;">
+                    {% for turn in session.turns[:100] %}
+                    <div class="message message-{{ turn.role|lower }}">
+                        <div class="message-role-badge {{ turn.role|lower }}">{{ turn.role }}</div>
+                        <div class="message-content">{{ turn.content[:1000] }}{% if turn.content|length > 1000 %}...{% endif %}</div>
+                    </div>
+                    {% endfor %}
+                    {% if session.turns|length > 100 %}
+                    <div class="text-muted text-sm" style="padding: 12px;">
+                        ... and {{ session.turns|length - 100 }} more turns
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
             {% endfor %}
         {% else %}
             <p class="text-muted">No session data available for this question.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div id="tab-ingestion" class="tab-content">
+    <div class="card">
+        <h2>Ingestion Summary</h2>
+        {% if deep_log and deep_log.ingestion %}
+        <div class="grid grid-4 mb-4">
+            <div class="stat">
+                <div class="stat-value">{{ deep_log.ingestion.sessions_count or 0 }}</div>
+                <div class="stat-label">Sessions</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{{ deep_log.ingestion.nodes_created or 0 }}</div>
+                <div class="stat-label">Nodes Created</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{{ deep_log.ingestion.relationships_created or 0 }}</div>
+                <div class="stat-label">Relationships</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{{ "%.1f"|format((deep_log.ingestion.duration_ms or 0) / 1000) }}s</div>
+                <div class="stat-label">Duration</div>
+            </div>
+        </div>
+        {% if deep_log.ingestion.memories_created %}
+        <h3 style="margin-top: 16px;">Memories Created</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for type, count in deep_log.ingestion.memories_created.items() %}
+                <tr>
+                    <td>{{ type }}</td>
+                    <td>{{ count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% if deep_log.ingestion.errors %}
+        <h3 style="margin-top: 16px; color: var(--error);">Errors</h3>
+        <pre><code>{{ deep_log.ingestion.errors | tojson(indent=2) }}</code></pre>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">No ingestion data available.</p>
         {% endif %}
     </div>
 </div>
@@ -128,4 +193,30 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSession(id) {
+    const content = document.getElementById('session-' + id);
+    const toggle = document.getElementById('toggle-' + id);
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '▼';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '▶';
+    }
+}
+
+function expandAll() {
+    document.querySelectorAll('.session-content').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('.session-toggle').forEach(el => el.textContent = '▼');
+}
+
+function collapseAll() {
+    document.querySelectorAll('.session-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.session-toggle').forEach(el => el.textContent = '▶');
+}
+</script>
 {% endblock %}

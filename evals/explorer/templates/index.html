@@ -11,6 +11,7 @@
             <tr>
                 <th>Run ID</th>
                 <th>System</th>
+                <th>Notes</th>
                 <th>Questions</th>
                 <th>Correct</th>
                 <th>Accuracy</th>
@@ -22,6 +23,9 @@
             <tr>
                 <td><a href="/run/{{ run.run_id }}">{{ run.run_id }}</a></td>
                 <td><span class="badge badge-info">{{ run.system_name }}</span></td>
+                <td class="text-sm text-muted" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ run.notes[:80] if run.notes else '-' }}{% if run.notes and run.notes|length > 80 %}...{% endif %}
+                </td>
                 <td>{{ run.total }}</td>
                 <td>{{ run.correct }}</td>
                 <td>
@@ -37,7 +41,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="6" class="text-muted">No runs found. Import results using the analyzer first.</td>
+                <td colspan="7" class="text-muted">No runs found. Import results using the analyzer first.</td>
             </tr>
             {% endfor %}
         </tbody>

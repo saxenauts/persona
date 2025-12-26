@@ -55,6 +55,15 @@ class EvalDatabase:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     
+    CREATE TABLE IF NOT EXISTS runs (
+        run_id TEXT PRIMARY KEY,
+        system_name TEXT NOT NULL,
+        notes TEXT,  -- User annotation: "the idea behind this run"
+        config TEXT,  -- JSON blob of run configuration
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
     CREATE TABLE IF NOT EXISTS results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         question_id TEXT NOT NULL,
@@ -112,6 +121,7 @@ class EvalDatabase:
     CREATE INDEX IF NOT EXISTS idx_results_correct ON results(correct);
     CREATE INDEX IF NOT EXISTS idx_results_system ON results(system_name);
     CREATE INDEX IF NOT EXISTS idx_results_failure ON results(failure_category);
+    CREATE INDEX IF NOT EXISTS idx_results_run ON results(run_id);
     CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(question_type);
     CREATE INDEX IF NOT EXISTS idx_questions_benchmark ON questions(benchmark);
     """
@@ -155,10 +165,22 @@ class EvalDatabase:
             conn.commit()
 
     def import_from_jsonl(self, jsonl_path: str, run_id: str, system_name: str) -> int:
-        """Import results from a deep_logs.jsonl file."""
         imported = 0
+        skipped = 0
 
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO runs (run_id, system_name) VALUES (?, ?)",
+                (run_id, system_name),
+            )
+
+            existing = set(
+                row[0]
+                for row in conn.execute(
+                    "SELECT question_id FROM results WHERE run_id = ?", (run_id,)
+                ).fetchall()
+            )
+
             with open(jsonl_path, "r") as f:
                 for line in f:
                     if not line.strip():
@@ -166,8 +188,12 @@ class EvalDatabase:
 
                     try:
                         log = json.loads(line)
+                        question_id = log["question_id"]
 
-                        # Insert question
+                        if question_id in existing:
+                            skipped += 1
+                            continue
+
                         conn.execute(
                             """INSERT OR IGNORE INTO questions 
                                (question_id, benchmark, question_type, question_text, gold_answer)
@@ -238,6 +264,8 @@ class EvalDatabase:
 
             conn.commit()
 
+        if skipped > 0:
+            print(f"  Skipped {skipped} already imported questions")
         return imported
 
     def get_failure_summary(self, system_name: Optional[str] = None) -> Dict[str, Any]:
@@ -375,6 +403,38 @@ class EvalDatabase:
                    ORDER BY count DESC"""
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        """Get run metadata."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def update_run_notes(self, run_id: str, notes: str) -> None:
+        """Update notes for a run."""
+        with sqlite3.connect(self.db_path) as conn:
+            # Upsert: insert if not exists, update if exists
+            conn.execute(
+                """INSERT INTO runs (run_id, system_name, notes, updated_at)
+                   VALUES (?, '', ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(run_id) DO UPDATE SET 
+                   notes = excluded.notes, updated_at = CURRENT_TIMESTAMP""",
+                (run_id, notes),
+            )
+            conn.commit()
+
+    def ensure_run_exists(self, run_id: str, system_name: str) -> None:
+        """Ensure a run record exists."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO runs (run_id, system_name)
+                   VALUES (?, ?)""",
+                (run_id, system_name),
+            )
+            conn.commit()
 
     def get_unannotated_failures(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Get failures that haven't been annotated yet."""

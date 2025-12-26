@@ -6,6 +6,7 @@ Run with: python -m evals.explorer.app
 
 import json
 import sqlite3
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from flask import Flask, render_template, request, jsonify
@@ -41,6 +42,38 @@ def load_shared_contexts(benchmark: str, variant: str = "32k") -> Dict[str, List
     return {}
 
 
+def split_into_sessions(turns: List[Dict]) -> List[Dict]:
+    """Split flat turns into separate sessions based on system messages or gaps."""
+    if not turns:
+        return []
+
+    sessions = []
+    current_session = {"turns": [], "id": 0}
+
+    for i, turn in enumerate(turns):
+        if turn.get("role") == "system" and current_session["turns"]:
+            sessions.append(current_session)
+            current_session = {"turns": [], "id": len(sessions)}
+        current_session["turns"].append(turn)
+
+    if current_session["turns"]:
+        sessions.append(current_session)
+
+    return sessions
+
+
+def check_gold_in_session(session_turns: List[Dict], gold_answer: str) -> bool:
+    """Check if gold answer appears in any session turn."""
+    if not gold_answer:
+        return False
+    gold_lower = gold_answer.lower().strip()
+    for turn in session_turns:
+        content = turn.get("content", "").lower()
+        if gold_lower in content:
+            return True
+    return False
+
+
 def load_questions_metadata(benchmark: str, variant: str = "32k") -> Dict[str, Dict]:
     if benchmark == "personamem":
         path = DATA_DIR / "personamem" / f"questions_{variant}_{variant}.json"
@@ -58,14 +91,16 @@ def index():
 
     runs = db.execute("""
         SELECT 
-            run_id,
-            system_name,
-            COUNT(*) as total,
-            SUM(correct) as correct,
-            ROUND(AVG(correct) * 100, 1) as accuracy,
-            MIN(created_at) as started_at
-        FROM results
-        GROUP BY run_id, system_name
+            res.run_id,
+            res.system_name,
+            COUNT(res.id) as total,
+            SUM(res.correct) as correct,
+            ROUND(AVG(res.correct) * 100, 1) as accuracy,
+            MIN(res.created_at) as started_at,
+            COALESCE(r.notes, '') as notes
+        FROM results res
+        LEFT JOIN runs r ON res.run_id = r.run_id
+        GROUP BY res.run_id, res.system_name
         ORDER BY started_at DESC
     """).fetchall()
 
@@ -75,6 +110,8 @@ def index():
 @app.route("/run/<run_id>")
 def run_overview(run_id: str):
     db = get_db()
+
+    run_meta = db.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
 
     overview = db.execute(
         """
@@ -143,6 +180,7 @@ def run_overview(run_id: str):
     return render_template(
         "run.html",
         run_id=run_id,
+        run_meta=run_meta,
         overview=overview,
         by_type=by_type,
         by_category=by_category,
@@ -190,15 +228,15 @@ def question_detail(question_id: str):
 
     question_meta = questions_meta.get(question_id, {})
     shared_context_id = question_meta.get("shared_context_id", "")
+    gold_answer = result["gold_answer"]
 
     sessions = []
     if shared_context_id and shared_context_id in contexts:
         turns = contexts[shared_context_id]
-        current_session: List[Dict] = []
-        for turn in turns:
-            current_session.append(turn)
-        if current_session:
-            sessions.append(current_session)
+        raw_sessions = split_into_sessions(turns)
+        for sess in raw_sessions:
+            sess["contains_gold"] = check_gold_in_session(sess["turns"], gold_answer)
+        sessions = raw_sessions
 
     deep_log = None
     if run_id:
@@ -242,6 +280,24 @@ def annotate():
         WHERE id = ?
     """,
         (category, notes, result_id),
+    )
+    db.commit()
+
+    return jsonify({"success": True})
+
+
+@app.route("/api/run/<run_id>/notes", methods=["POST"])
+def update_run_notes(run_id: str):
+    data = request.json
+    notes = data.get("notes", "")
+
+    db = get_db()
+    db.execute(
+        """INSERT INTO runs (run_id, system_name, notes, updated_at)
+           VALUES (?, '', ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(run_id) DO UPDATE SET 
+           notes = excluded.notes, updated_at = CURRENT_TIMESTAMP""",
+        (run_id, notes),
     )
     db.commit()
 

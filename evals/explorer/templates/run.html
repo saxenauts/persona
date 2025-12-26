@@ -7,6 +7,16 @@
     <a href="/">Runs</a> / {{ run_id }}
 </div>
 
+<div class="card mb-4 run-notes-card">
+    <div class="flex" style="align-items: flex-start; gap: 12px;">
+        <div class="flex-1">
+            <h2 style="margin-bottom: 8px;">Run Notes</h2>
+            <textarea id="run-notes" class="run-notes-input" placeholder="What was the idea behind this run? What were you testing?">{{ run_meta.notes if run_meta else '' }}</textarea>
+        </div>
+        <button id="save-notes-btn" class="btn btn-primary" onclick="saveNotes()">Save</button>
+    </div>
+</div>
+
 <div class="grid grid-4 mb-4">
     <div class="card stat">
         <div class="stat-value">{{ overview.total }}</div>
@@ -120,4 +130,30 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function saveNotes() {
+    const notes = document.getElementById('run-notes').value;
+    const btn = document.getElementById('save-notes-btn');
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+    
+    try {
+        const resp = await fetch('/api/run/{{ run_id }}/notes', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({notes: notes})
+        });
+        if (resp.ok) {
+            btn.textContent = 'Saved!';
+            setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1500);
+        }
+    } catch(e) {
+        btn.textContent = 'Error';
+        setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1500);
+    }
+}
+</script>
 {% endblock %}
