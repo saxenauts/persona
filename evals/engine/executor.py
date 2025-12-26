@@ -1,13 +1,4 @@
-"""
-Async executor with rate limiting for high-throughput evaluation.
-
-Design Principles (from research):
-- Semaphore-based concurrency control (asyncio.Semaphore)
-- Token bucket rate limiting per provider
-- Exponential backoff with jitter for 429s
-- Structured concurrency with TaskGroup (Python 3.11+)
-- Progress tracking via events, not callbacks
-"""
+"""Async executor with rate limiting for high-throughput evaluation."""
 
 from __future__ import annotations
 
@@ -16,13 +7,10 @@ import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Mapping, Optional, Sequence, TypeVar
+from typing import Any, Callable, Mapping, Optional, Sequence
 
-from ..core.models import Session, TestCase, QueryResult, EvalResult, MetricResult
+from ..core.models import TestCase, QueryResult, EvalResult, MetricResult
 from ..core.interfaces import MemorySystemAdapter, Metric, AdapterCapabilities
-
-
-T = TypeVar("T")
 
 
 @dataclass

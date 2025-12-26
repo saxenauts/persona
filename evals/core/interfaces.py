@@ -1,16 +1,8 @@
-"""
-Protocol definitions for the evaluation framework.
-
-Design Principles:
-- Use Protocol for structural subtyping (duck typing with type hints)
-- Adapters return structured QueryResult, not raw strings
-- Metrics are async by default (LLM-as-judge needs async)
-- Benchmarks are pure data loaders (no execution logic)
-"""
+"""Protocol definitions for the evaluation framework."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping, Optional, Protocol, Sequence, runtime_checkable
 

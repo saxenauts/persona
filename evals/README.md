@@ -1,184 +1,68 @@
 # Persona Memory System - Evaluation Framework
 
-A comprehensive evaluation framework for testing long-term memory systems against academic benchmarks, featuring deep observability, reproducible sampling, and multi-system comparison.
+A modular evaluation framework for testing long-term memory systems against academic benchmarks, featuring deep observability, reproducible sampling, and multi-system comparison.
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Unified Benchmark Architecture](#unified-benchmark-architecture)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Results (Placeholders)](#results)
-- [Usage Guide](#usage-guide)
-- [Architecture](#architecture)
-- [Configuration](#configuration)
-- [Extending the Framework](#extending-the-framework)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
 
 ---
 
 ## Overview
 
 This evaluation framework tests memory systems on their ability to:
-- **Recall user-stated facts** across conversations
-- **Track temporal information** (dates, durations, ordering)
-- **Aggregate multi-session data** (counting, comparison)
-- **Update knowledge** when information changes
-- **Personalize responses** based on preferences
-- **Know when to abstain** (say "I don't know")
 
-The framework supports multiple benchmarks (LongMemEval, PersonaMem) and memory systems (Persona, Mem0, Zep/Graphiti), with deep logging for debugging and analysis.
+| Capability | Description | Benchmark |
+|------------|-------------|-----------|
+| **Recall** | User-stated facts across conversations | PersonaMem |
+| **Temporal** | Date ordering, durations | LongMemEval |
+| **Aggregation** | Multi-session data (counting, comparison) | LongMemEval |
+| **Updates** | Knowledge changes over time | LongMemEval |
+| **Personalization** | Preference-based suggestions | PersonaMem |
+| **Abstention** | Knowing when to say "I don't know" | LongMemEval |
 
 ---
 
 ## Features
 
-✅ **Dual Benchmark Support**
-- [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (ICLR 2025) - 500 questions, 7 question types
-- [PersonaMem](https://github.com/bowen-upenn/PersonaMem) (COLM 2025) - 589+ questions, 7 personalization skills
+**Dual Benchmark Support**: [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (ICLR 2025, 500 questions) and [PersonaMem](https://github.com/bowen-upenn/PersonaMem) (COLM 2025, 589 questions)
 
-✅ **Stratified Sampling**
-- Reproducible golden sets (695 curated questions)
-- Balanced coverage across question types
-- Fixed random seeds for reproducibility
+**Modular Architecture**: Protocol-based adapters, composable metrics, async-first execution engine
 
-✅ **Deep Observability**
-- Structured JSONL logging (ingestion → retrieval → generation → evaluation)
-- Retrieval quality metrics (vector search, graph traversal)
-- Timing breakdowns per pipeline stage
-- Failure pattern detection
+**Deep Observability**: Structured JSONL logging with retrieval quality metrics, timing breakdowns, failure pattern detection
 
-✅ **Multi-System Comparison**
-- Pluggable adapter architecture
-- Parallel evaluation support
-- Side-by-side performance analysis
-
-✅ **Production-Ready CLI**
-- Single-command evaluation runs
-- Interactive result analysis
-- Automated report generation
+**Multi-System Comparison**: Pluggable adapter architecture with parallel evaluation support
 
 ---
 
-## Unified Benchmark Architecture
-
-We combine two benchmarks to test both **reasoning** and **recall**:
-
-| Benchmark | What it Tests | Reference |
-|-----------|---------------|----------|
-| [LongMemEval](https://github.com/xiaowu0162/LongMemEval) | Temporal logic, multi-session aggregation | ICLR 2025 |
-| [PersonaMem](https://github.com/bowen-upenn/PersonaMem) | Factual precision, personalization | COLM 2025 |
-
-### Evaluation Approach
-
-We report **two separate benchmark scores** (paper-aligned):
-- **LongMemEval** macro-by-qtype accuracy
-- **PersonaMem** macro-by-qtype accuracy
-
-**Scoring methodology:**
-- LongMemEval: LLM judge (configurable via `EVAL_JUDGE_MODEL`, default `gpt-5-mini`)
-- PersonaMem: Exact match on multiple choice
-- Macro-by-type: Each question type weighted equally (skill fairness)
-
-**Test set options:**
-| Set | Purpose | Size |
-|-----|---------|------|
-| `--samples 2` | Smoke test | ~12 questions |
-| `--samples 10` | Quick test | ~60 questions |
-| `--golden-set` | Full eval | ~695 questions |
-
-**Unified golden set config:**
-- `evals/configs/golden_set.yaml` defines the combined sampling plan across LongMemEval + PersonaMem.
-- `evals/scripts/generate_golden_sets.py` writes per-benchmark golden sets plus `combined_golden_set_manifest.json` for cross-system comparisons.
-
-**Full dataset config (paper-complete):**
-- `evals/configs/full_dataset.yaml` runs all questions (~1089 total).
-
-
-### Capability Coverage
-
-**Currently Tested:**
-
-| Category | Capability | Source |
-|----------|------------|--------|
-| Recall | Static facts (names, events) | PersonaMem |
-| Temporal | Date ordering, durations | LongMemEval |
-| Logic | Aggregation across sessions | LongMemEval |
-| Updates | Correcting outdated info | LongMemEval |
-| Abstention | Knowing when to say "I don't know" | LongMemEval |
-| Alignment | Preference-based suggestions | PersonaMem |
-
-**Persona-Specific (Future Tests):**
-
-| Category | Capability | Why Persona Excels |
-|----------|------------|-------------------|
-| Goal Tracking | "What are my current tasks?" | Explicit `Goal` nodes |
-| Inventory | Tracking items (food, ingredients) | Goal nodes with state |
-| Proactivity | "Remind me about X" | Temporal + Goal linking |
-| Multi-Hop | "Did I like X before Y changed?" | Graph traversal |
-| Narrative | Understanding life "stories" | Episode temporal chaining |
-
----
-
-## Installation
-
-### Prerequisites
-
-- Python 3.12+
-- Poetry (package manager)
-- Docker (for Neo4j graph database)
-
-### Setup
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/innernets-ai/persona.git
-cd persona
-
 # Install dependencies
 poetry install
 
 # Download benchmark datasets
 poetry run python evals/scripts/download_personamem.py
 
-# Verify LongMemEval dataset
-poetry run python evals/scripts/verify_longmemeval_oracle.py
+# Run a quick evaluation
+poetry run python -m evals.cli run \
+  --benchmark longmemeval \
+  --samples 5 \
+  --seed 42
 
-# Generate golden sets (695 stratified questions)
-# Uses evals/configs/golden_set.yaml and writes combined_golden_set_manifest.json
-poetry run python evals/scripts/generate_golden_sets.py
-
-# Create default config files
-poetry run python -m evals.cli create-configs
+# Explore results in browser
+poetry run python -m evals.cli explore
 ```
 
 ### Environment Variables
 
 ```bash
-# OpenAI (default)
+# Required
 export OPENAI_API_KEY="your-openai-key"
+
+# Optional
 export LLM_SERVICE="openai/gpt-4o-mini"
 export EMBEDDING_SERVICE="openai/text-embedding-3-small"
-
-# Eval Judge Model (optional, default: gpt-5-mini)
-export EVAL_JUDGE_MODEL="gpt-5-mini"
-
-# Parallel ingestion (optional, default: 5)
-export INGEST_SESSION_CONCURRENCY="5"
-
-# Azure OpenAI (optional)
-export AZURE_API_KEY="your-key"
-export AZURE_API_BASE="https://your-endpoint.openai.azure.com/"
-export AZURE_CHAT_DEPLOYMENT="gpt-5.2"
-export AZURE_EMBEDDING_DEPLOYMENT="text-embedding-3-small"
-export GRAPHITI_PROVIDER="azure"
-
-# Neo4j (for Persona adapter)
+export EVAL_JUDGE_MODEL="gpt-4o"
 export NEO4J_URI="bolt://localhost:7687"
 export NEO4J_USERNAME="neo4j"
 export NEO4J_PASSWORD="your-password"
@@ -186,88 +70,88 @@ export NEO4J_PASSWORD="your-password"
 
 ---
 
-## Quick Start
+## Architecture
 
-### Run Your First Evaluation
-
-```bash
-# Quick test (sample 5 per type, LongMemEval subset)
-poetry run python -m evals.cli run \
-  --benchmark longmemeval \
-  --samples 5 \
-  --seed 42
-
-# Use pre-generated golden set (~695 questions)
-poetry run python -m evals.cli run \
-  --config evals/configs/full_eval.yaml \
-  --golden-set
-
-# Analyze results
-poetry run python -m evals.cli analyze run_20241221_143052 --summary
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Engine                               │
+│  - Loads benchmarks, registers metrics                      │
+│  - Orchestrates: reset → ingest → query → evaluate → report │
+│  - Emits events to EventStore                               │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  v
+┌─────────────────────────────────────────────────────────────┐
+│                     AsyncExecutor                           │
+│  - Semaphore concurrency control                            │
+│  - TokenBucket rate limiting                                │
+│  - Retry with exponential backoff                           │
+│  - TaskGroup structured concurrency                         │
+└─────────────────────────────────────────────────────────────┘
+                  │
+        ┌─────────┴─────────┐
+        v                   v
+┌───────────────┐   ┌───────────────┐
+│   Adapters    │   │    Metrics    │
+│ (Protocol)    │   │  (8 built-in) │
+└───────────────┘   └───────────────┘
 ```
 
----
+### Key Design Decisions
 
-## Results
+**Protocol-based Interfaces**: Structural subtyping via Python `Protocol`. Any class implementing `ingest` and `retrieve` works as an adapter without inheriting from a base class.
 
-### LongMemEval Performance (December 2025)
+**Structured QueryResult**: Every query returns a rich object with answer, retrieved nodes, usage stats, and timing data.
 
-**Benchmark:** 500 questions across 6 question types
+**Binary Pass/Fail**: No noisy 1-5 scales. Metrics return binary results, easier to calibrate and more consistent.
 
-| System | Overall Accuracy | Multi-Session | Temporal | Knowledge Update |
-|--------|------------------|---------------|----------|------------------|
-| **Persona** | **64.1%** | **68.3%** | **36.7%** | **75.0%** |
-| Graphiti | 53.2% | 29.6% | 22.5% | 59.8% |
+**Async-First Engine**: Built for high-concurrency runs with built-in retries and rate limiting per adapter.
 
-**Key Findings:**
-- Persona outperforms Graphiti by +10.9% overall
-- Strongest advantage in multi-session aggregation (+38.7%)
-- Both systems struggle with temporal reasoning (<40%)
-
-### PersonaMem Performance
-
-| System | Overall Accuracy | Status |
-|--------|------------------|--------|
-| **Persona** | TBD | Pending |
-| Graphiti | ~66% | In Progress |
-
-### Latency Comparison
-
-| System | Ingestion (avg) | Retrieval (avg) |
-|--------|-----------------|-----------------|
-| Persona | 61s | 12.8s |
-| Graphiti | 949s (15.8m) | 1.2s |
-
-**Trade-off:** Persona has faster ingestion but slower retrieval; Graphiti is the inverse.
-
-For detailed analysis, see `analysis/CURRENT_STATUS.md`.
+**Composable Metrics**: Single-purpose metrics (`ContainsAnswer`, `OptionExtractor`) composed via `AllOf`/`AnyOf` wrappers.
 
 ---
 
-## Usage Guide
+## Benchmarks
+
+| Benchmark | Questions | What it Tests | Scoring |
+|-----------|-----------|---------------|---------|
+| [LongMemEval](https://github.com/xiaowu0162/LongMemEval) | 500 | Temporal logic, multi-session aggregation | LLM judge |
+| [PersonaMem](https://github.com/bowen-upenn/PersonaMem) | 589 | Factual precision, personalization | Exact match (a/b/c/d) |
+
+**Test set options:**
+
+| Set | Purpose | Size |
+|-----|---------|------|
+| `--samples 2` | Smoke test | ~12 questions |
+| `--samples 10` | Quick test | ~60 questions |
+| `--golden-set` | Full eval | ~695 questions |
+
+---
+
+## Metrics
+
+| Metric | Type | Purpose |
+|--------|------|---------|
+| `llm_binary_judge` | Binary | Reference-based LLM judgment |
+| `abstention_accuracy` | Binary | Correctly refuses when info absent |
+| `semantic_similarity` | Continuous | Vector cosine similarity |
+| `context_precision` | Continuous | Relevant chunks in retrieved context |
+| `context_recall` | Continuous | Ground-truth info found in context |
+| `binary_exact_match` | Binary | Strict string comparison |
+| `option_extractor` | Binary | Multiple choice extraction (a/b/c/d) |
+| `contains_answer` | Binary | Substring match |
+
+---
+
+## CLI Usage
 
 ### Running Evaluations
 
-#### Option 1: Using Config Files (Recommended)
-
 ```bash
-# Full evaluation (both benchmarks, ~695 questions)
+# Using config files (recommended)
 poetry run python -m evals.cli run --config evals/configs/full_eval.yaml
 
-# Full dataset run (paper-complete, ~1089 questions)
-poetry run python -m evals.cli run --config evals/configs/full_dataset.yaml
-
-# Quick test (small sample)
-poetry run python -m evals.cli run --config evals/configs/quick_test.yaml
-
-# LongMemEval only
-poetry run python -m evals.cli run --config evals/configs/longmemeval_only.yaml
-```
-
-#### Option 2: Command-Line Arguments
-
-```bash
-# Custom sampling
+# Command-line arguments
 poetry run python -m evals.cli run \
   --benchmark longmemeval \
   --types multi-session,temporal-reasoning \
@@ -275,27 +159,12 @@ poetry run python -m evals.cli run \
   --seed 42 \
   --workers 5
 
-# Multiple benchmarks
-poetry run python -m evals.cli run \
-  --benchmark longmemeval \
-  --benchmark personamem \
-  --samples 10
-
 # Compare multiple adapters
 poetry run python -m evals.cli run \
   --benchmark longmemeval \
   --adapter persona \
-  --adapter mem0 \
+  --adapter graphiti \
   --samples 15
-```
-
-#### Option 3: Use Pre-Generated Golden Sets
-
-```bash
-# Use golden sets instead of random sampling
-poetry run python -m evals.cli run \
-  --config evals/configs/full_eval.yaml \
-  --golden-set
 ```
 
 ### Analyzing Results
@@ -305,395 +174,126 @@ poetry run python -m evals.cli run \
 poetry run python -m evals.cli analyze run_20241221_143052 --summary
 
 # Filter by question type
-poetry run python -m evals.cli analyze run_20241221_143052 \
-  --type multi-session
+poetry run python -m evals.cli analyze run_20241221_143052 --type multi-session
 
 # Show only failures
-poetry run python -m evals.cli analyze run_20241221_143052 \
-  --type multi-session \
-  --failures
+poetry run python -m evals.cli analyze run_20241221_143052 --failures
 
-# Retrieval quality analysis
-poetry run python -m evals.cli analyze run_20241221_143052 --retrieval
-```
-
-### Comparing Runs
-
-```bash
-# Compare two runs
-poetry run python -m evals.cli compare run_a run_b
-
-# Compare three systems
-poetry run python -m evals.cli compare \
-  persona_20241221 \
-  mem0_20241221 \
-  zep_20241221
-```
-
-For per-type latency/token comparisons using the unified golden set:
-
-```bash
-poetry run python evals/scripts/compare_runs.py \
-  --runs run_a,run_b \
-  --manifest evals/data/golden_sets/combined_golden_set_manifest.json
-```
-
-Aggregate timing metrics across runs:
-
-```bash
-poetry run python -m evals.cli aggregate --runs run_a,run_b,run_c
-```
-
-Judge deferred LongMemEval runs:
-
-```bash
-poetry run python -m evals.cli judge run_20241221_143052
-```
-
----
-
-## Architecture
-
-### Pipeline Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Data Loading                         │
-│  - LongMemEval Oracle (500 questions)                   │
-│  - PersonaMem 32k (589 questions)                       │
-│  - Stratified sampling → Golden sets (695 questions)    │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                 Memory System Adapter                   │
-│  - Ingest conversation history                          │
-│  - Query with test question                             │
-│  - Log retrieval stats (vector + graph)                 │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│              Answer Generation (LLM)                    │
-│  - Context + question → generated answer                │
-│  - Track tokens, latency, model used                    │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Evaluation (Judge)                     │
-│  - LongMemEval: Binary (gpt-5.2 judge)                   │
-│  - PersonaMem: Exact match (a/b/c/d)                    │
-│  - Task-specific prompts                                │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│             Deep Logging & Analysis                     │
-│  - JSONL logs (queryable)                               │
-│  - Failure pattern detection                            │
-│  - Retrieval quality metrics                            │
-│  - Comparative reports                                  │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Data Flow Diagram
-
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Loaders    │───▶│    Runner    │───▶│   Adapters   │
-│ PersonaMem   │    │ Orchestrates │    │ Graphiti     │
-│ LongMemEval  │    │ eval flow    │    │ Persona      │
-└──────────────┘    └──────────────┘    │ Mem0         │
-                           │            └──────────────┘
-                           │                   │
-                           ▼                   ▼
-         ┌─────────────────────────────────────────────┐
-         │              LOGGING LAYER                   │
-         │                                              │
-         │  ┌────────────┐  ┌────────────┐  ┌────────┐ │
-         │  │deep_logs.  │  │stage_logs/ │  │eval_   │ │
-         │  │jsonl       │  │*.jsonl     │  │analysis│ │
-         │  │            │  │            │  │.db     │ │
-         │  │Full details│  │Per-adapter │  │SQLite  │ │
-         │  │per question│  │timing      │  │queries │ │
-         │  └────────────┘  └────────────┘  └────────┘ │
-         └─────────────────────────────────────────────┘
-                           │
-                           ▼
-         ┌─────────────────────────────────────────────┐
-         │            EXPLORER UI (Flask)               │
-         │                                              │
-         │  /              Run list + accuracy          │
-         │  /run/<id>      Details, by-type breakdown   │
-         │  /question/<id> Pipeline, retrieval, sessions│
-         │  /benchmarks    Available benchmarks         │
-         └─────────────────────────────────────────────┘
-```
-
-### Explorer UI
-
-Launch with `python -m evals.cli explore` (port 5001).
-
-| Route | Purpose |
-|-------|---------|
-| `/` | Run list with accuracy metrics |
-| `/run/<run_id>` | Run details, breakdown by question type |
-| `/question/<id>` | Pipeline timing, retrieval context, sessions |
-| `/benchmarks` | Available benchmarks with paper links |
-
-Features:
-- **LLM Context Display** - See the exact context string passed to the LLM (critical for debugging)
-- Pipeline timing table (ingestion → retrieval → generation)
-- Session viewer with gold answer highlighting
-- Retrieved node display with content (when `log_node_content=True`)
-- Benchmark browser with:
-  - Relevance ranking (Essential, Recommended, Legacy)
-  - Download links (GitHub, HuggingFace, Paper)
-  - Supported systems section
-  - Adapter interface documentation
-
-### Adapter Interface
-
-All memory systems implement the `MemorySystem` base class:
-
-```python
-from evals.adapters.base import MemorySystem
-
-class YourAdapter(MemorySystem):
-    log_node_content: bool = False  # Set True to log full node content for debugging
-    
-    def add_session(self, user_id: str, session_data: str, date: str) -> None:
-        """Ingest a single session into the memory system."""
-        pass
-    
-    def add_sessions(self, user_id: str, sessions: List[Dict]) -> None:
-        """Bulk ingest sessions. Each dict has 'content' and 'date' keys."""
-        pass
-
-    def query(self, user_id: str, question: str) -> str:
-        """Query memory and generate answer."""
-        pass
-
-    def reset(self, user_id: str) -> None:
-        """Clear memory for a user."""
-        pass
-```
-
-**Supported Systems:**
-- **Persona** - Full support
-- **Graphiti** (Zep) - Full support
-- **Honcho** - Coming soon
-- **Mem0** - Experimental
-
-### Deep Logging Schema
-
-Each question evaluation produces a structured log:
-
-```json
-{
-  "question_id": "gpt4_abc123",
-  "timestamp": "2024-12-21T14:30:52Z",
-  "user_id": "user_123",
-  "benchmark": "longmemeval",
-  "question_type": "multi-session",
-  "question": "How many times did I visit the gym?",
-
-  "ingestion": {
-    "duration_ms": 15420,
-    "sessions_count": 47,
-    "memories_created": {"episodes": 52, "psyche": 18, "goals": 7},
-    "nodes_created": 77,
-    "relationships_created": 134,
-    "embeddings_generated": 77
-  },
-
-  "retrieval": {
-    "query": "How many times did I visit the gym?",
-    "duration_ms": 1847,
-    "retrieved_context": "...",  // CRITICAL: Exact string passed to LLM
-    "vector_search": {
-      "top_k": 5,
-      "seeds": [
-        {"node_id": "episode_42", "score": 0.94, "type": "episode", "content": "..."}
-      ]
-    },
-    "graph_traversal": {
-      "max_hops": 2,
-      "nodes_visited": 23,
-      "final_ranked_nodes": ["episode_42", "episode_38"],
-      "node_details": {"episode_42": {"type": "episode", "content": "..."}}
-    },
-    "context_size_tokens": 3452
-  },
-
-  "generation": {
-    "duration_ms": 2310,
-    "model": "gpt-4o-mini",
-    "answer": "You visited the gym 3 times."
-  },
-
-  "evaluation": {
-    "gold_answer": "3",
-    "correct": true,
-    "judge_model": "gpt-4o"
-  }
-}
-```
-
----
-
-## Configuration
-
-### Config File Format (`configs/full_eval.yaml`)
-
-```yaml
-longmemeval:
-  source: evals/data/longmemeval_oracle.json
-  sample_sizes:
-    single-session-user: 35
-    multi-session: 60
-    temporal-reasoning: 60
-    knowledge-update: 40
-    single-session-preference: 25
-
-personamem:
-  source: evals/data/personamem
-  variant: 32k
-  sample_sizes:
-    recall_user_shared_facts: 30
-    track_full_preference_evolution: 30
-    generalizing_to_new_scenarios: 20
-    provide_preference_aligned_recommendations: 20
-    recalling_the_reasons_behind_previous_updates: 20
-
-global:
-  random_seed: 42
-  adapters: [persona]
-  parallel_workers: 5
-  checkpoint_dir: evals/results
-  deep_logging: true
-```
-
-### Runtime Toggles
-
-- `LONGMEMEVAL_INCLUDE_DATE` (default: `true`) prefixes LongMemEval questions with `(date: ...)`.
-- `GRAPHITI_SEARCH_LIMIT` (default: `20`) sets top-k edges/nodes for Graphiti retrieval.
-- `GRAPHITI_QUERY_MAX_CHARS` (default: `255`) truncates the retrieval query to match the Zep pipeline.
-- `GRAPHITI_INGEST_CONCURRENCY` (default: `1`) controls parallel episode ingestion.
-- `GRAPHITI_INGEST_TIMEOUT_S` (default: `600`) caps each Graphiti ingestion call.
-- `GRAPHITI_RETRIEVAL_TIMEOUT_S` (default: `0`, disabled) caps Graphiti retrieval.
-- `GRAPHITI_PROVIDER` (default: `openai`) selects Graphiti LLM provider (`openai` or `azure`).
-- `GRAPHITI_LLM_MODEL`, `GRAPHITI_GENERATOR_MODEL`, `GRAPHITI_RERANKER_MODEL` override Graphiti models.
-- `GRAPHITI_RPS` (default: `0`) enables a simple rate limiter for Graphiti LLM calls.
-- `AZURE_RERANKER_DEPLOYMENT` / `AZURE_RERANKER_API_VERSION` control the Azure deployment for the Graphiti reranker. If unset, Graphiti defaults to `gpt-4.1-nano` and requires a matching Azure deployment.
-- `GRAPHITI_GENERATOR_MAX_TOKENS` (default: `256` on Azure, `0` on OpenAI) caps Graphiti answer length.
-- Graphiti detects PersonaMem prompts automatically and enforces letter-only outputs.
-- `GRAPHITI_RERANKER_MAX_TOKENS` (default: `32`) sets the reranker completion budget for Azure models.
-- `GRAPHITI_RERANKER_TIMEOUT_S` (default: `120`) caps each reranker call to avoid long hangs.
-
-### Creating Custom Configs
-
-```python
-from evals.config import EvalConfig, BenchmarkConfig
-
-config = EvalConfig(
-    longmemeval=BenchmarkConfig(
-        source="evals/data/longmemeval_oracle.json",
-        sample_sizes={"multi-session": 20, "temporal-reasoning": 20}
-    ),
-    random_seed=42,
-    adapters=["persona", "mem0"],
-    parallel_workers=3
-)
-
-config.save("evals/configs/my_custom_config.yaml")
+# Launch explorer UI
+poetry run python -m evals.cli explore
 ```
 
 ---
 
 ## Extending the Framework
 
-### Adding a New Memory System
+### Adding a Memory System
 
-1. **Create adapter** in `evals/adapters/`:
+Implement the `MemorySystemAdapter` protocol:
 
 ```python
-from evals.adapters.base import MemorySystem
+from evals.core.models import Session, QueryResult
+from evals.core.interfaces import AdapterCapabilities
 
-class MySystemAdapter(MemorySystem):
-    def __init__(self):
-        # Initialize your memory system
-        pass
-
-    def add_session(self, user_id: str, session_data: str, date: str) -> None:
-        """Ingest a single session into the memory system."""
+class MySystemAdapter:
+    """Implements MemorySystemAdapter protocol."""
+    
+    @property
+    def name(self) -> str:
+        return "mysystem"
+    
+    @property
+    def capabilities(self) -> AdapterCapabilities:
+        return AdapterCapabilities(supports_async=False, supports_retrieval_items=True)
+    
+    def reset(self, user_id: str) -> None:
+        """Clear memory for test isolation."""
         pass
     
-    def add_sessions(self, user_id: str, sessions: List[Dict]) -> None:
-        """Bulk ingest sessions. Each dict has 'content' and 'date' keys."""
+    def add_sessions(self, user_id: str, sessions: list[Session]) -> None:
+        """Ingest conversation sessions into memory."""
         for session in sessions:
-            self.add_session(user_id, session['content'], session['date'])
+            self._ingest(user_id, session.content, session.date)
+    
+    def query(self, user_id: str, query: str, *, trace: bool = True) -> QueryResult:
+        """Retrieve context and generate answer."""
+        context = self._search(user_id, query)
+        answer = self._generate(query, context)
+        return QueryResult(answer=answer)
+```
 
-    def query(self, user_id: str, question: str) -> str:
-        """Retrieve relevant context and generate answer."""
-        context = self.retrieve(user_id, question)
-        return self.llm.generate(context, question)
+### Adding a Benchmark
 
-    def reset(self, user_id: str) -> None:
-        """Clear all memory for a specific user to ensure test isolation."""
+Implement the `Benchmark` protocol:
+
+```python
+from evals.core.models import TestCase, Session
+
+class MyBenchmark:
+    """Implements Benchmark protocol."""
+    
+    @property
+    def name(self) -> str:
+        return "mybenchmark"
+    
+    @property
+    def version(self) -> str:
+        return "1.0"
+    
+    def load(self, *, variant: str | None = None) -> list[TestCase]:
+        return [
+            TestCase(
+                id="q1",
+                benchmark="mybenchmark",
+                user_id="user_1",
+                query="What is my name?",
+                reference_answer="Alice",
+                sessions=[Session(content="My name is Alice", date="2024-01-01")],
+                question_type="recall",
+            )
+        ]
+    
+    def default_metrics(self) -> list[str]:
+        return ["contains_answer"]
+    
+    def sample(self, sizes: dict[str, int], *, seed: int | None = None, variant: str | None = None) -> list[TestCase]:
+        # Implement stratified sampling
         pass
 ```
 
-2. **Register in CLI** (`evals/cli.py`):
+### Adding a Metric
+
+Extend `BaseMetric`:
 
 ```python
-from evals.adapters.mysystem_adapter import MySystemAdapter
+from evals.metrics.base import BaseMetric
+from evals.core.models import TestCase, QueryResult, MetricResult
 
-ADAPTERS = {
-    "persona": PersonaAdapter,
-    "mem0": Mem0Adapter,
-    "mysystem": MySystemAdapter,  # Add here
-}
-```
-
-3. **Run evaluation**:
-
-```bash
-poetry run python -m evals.cli run \
-  --benchmark longmemeval \
-  --adapter mysystem \
-  --samples 20
-```
-
-### Adding a New Benchmark
-
-1. **Create loader** in `evals/loaders/`:
-
-```python
-from evals.loaders.unified_loader import UnifiedBenchmarkLoader
-
-class MyBenchmarkLoader:
-    def load(self) -> List[Question]:
-        # Load your benchmark dataset
-        pass
-
-    def stratified_sample(self, sample_sizes: Dict[str, int]) -> List[Question]:
-        # Implement sampling logic
-        pass
-```
-
-2. **Integrate with unified loader**:
-
-```python
-# In unified_loader.py
-if benchmark == "mybenchmark":
-    self.loader = MyBenchmarkLoader(...)
-```
-
-3. **Add scoring logic**:
-
-```python
-# In runner.py
-def evaluate_mybenchmark(question, answer):
-    # Your evaluation logic
-    pass
+class MyMetric(BaseMetric):
+    @property
+    def name(self) -> str:
+        return "my_metric"
+    
+    @property
+    def kind(self) -> str:
+        return "end_to_end"
+    
+    @property
+    def score_type(self) -> str:
+        return "binary"
+    
+    async def evaluate(
+        self, test_case: TestCase, result: QueryResult, *, resources: dict
+    ) -> MetricResult:
+        passed = test_case.reference_answer.lower() in result.answer.lower()
+        return MetricResult(
+            metric=self.name,
+            kind=self.kind,
+            score_type=self.score_type,
+            score=1.0 if passed else 0.0,
+            passed=passed,
+            reason="Answer contains reference" if passed else "Answer missing reference",
+        )
 ```
 
 ---
@@ -702,117 +302,102 @@ def evaluate_mybenchmark(question, answer):
 
 ```
 evals/
-├── adapters/              # Memory system adapters
-│   ├── base.py           # Abstract base class
-│   ├── persona_adapter.py # Persona system
-│   ├── mem0_adapter.py   # Mem0 system
-│   └── zep_adapter.py    # Zep/Graphiti system
+├── core/                 # Foundation types and interfaces
+│   ├── models.py        # TestCase, QueryResult, MetricResult
+│   ├── interfaces.py    # Protocol definitions
+│   └── compat.py        # Legacy adapter wrapper
 │
-├── loaders/              # Data loaders
-│   ├── longmemeval_loader.py
-│   ├── personamem_loader.py
-│   └── unified_loader.py
+├── engine/              # Orchestration and execution
+│   ├── engine.py        # Main Engine class
+│   └── executor.py      # AsyncExecutor with rate limiting
 │
-├── logging/              # Deep logging infrastructure
-│   ├── log_schema.py     # Pydantic models
-│   └── deep_logger.py    # Logger utility
+├── metrics/             # Evaluation metrics
+│   ├── base.py          # BaseMetric, AllOf, AnyOf
+│   ├── exact_match.py   # String matching metrics
+│   ├── retrieval.py     # Context precision/recall
+│   └── llm_judge.py     # LLM-based evaluation
 │
-├── longmemeval/          # LongMemEval evaluation
-│   └── evaluate_qa.py    # Binary judge (GPT-4o)
+├── benchmarks/          # Benchmark loaders
+│   ├── registry.py      # Benchmark registry
+│   ├── personamem.py    # PersonaMem benchmark
+│   └── longmemeval.py   # LongMemEval benchmark
 │
-├── configs/              # YAML configurations
-│   ├── full_eval.yaml
-│   ├── quick_test.yaml
-│   └── longmemeval_only.yaml
+├── adapters/            # Memory system adapters
+│   ├── base.py          # Legacy base class
+│   ├── persona_adapter.py
+│   └── zep_adapter.py
 │
-├── data/
-│   ├── longmemeval/
-│   │   └── longmemeval_oracle.json    # 500 questions
-│   ├── personamem/
-│   │   ├── questions_32k_32k.json     # 589 questions
-│   │   ├── questions_128k_32k.json    # 2,727 questions
-│   │   └── questions_1M_32k.json      # 2,674 questions
-│   └── golden_sets/
-│       ├── longmemeval_golden_set.json      # 220 questions
-│       └── personamem_golden_set.json       # 120 questions
+├── explorer/            # Web UI for results
+│   ├── app.py
+│   └── templates/
 │
-├── scripts/              # Utility scripts
-│   ├── download_personamem.py
-│   ├── generate_golden_sets.py
-│   └── verify_longmemeval_oracle.py
-│
-├── results/              # Evaluation results
-│   └── run_YYYYMMDD_HHMMSS/
-│       ├── deep_logs.jsonl
-│       ├── summary.json
-│       └── run_metadata.json
-│
-├── analysis/             # Historical analysis (gitignored)
+├── tests/               # Test suite (80+ tests)
+├── configs/             # YAML configurations
+├── data/                # Benchmark datasets (gitignored)
+├── results/             # Run outputs (gitignored)
 ├── cli.py               # CLI interface
-├── config.py            # Config parser
-├── runner.py            # Evaluation orchestrator
 └── README.md            # This file
 ```
 
 ---
 
+## Results (December 2025)
+
+### LongMemEval Performance
+
+| System | Overall | Multi-Session | Temporal | Knowledge Update |
+|--------|---------|---------------|----------|------------------|
+| **Persona** | **64.1%** | **68.3%** | **36.7%** | **75.0%** |
+| Graphiti | 53.2% | 29.6% | 22.5% | 59.8% |
+
+**Key Findings:**
+- Persona outperforms Graphiti by +10.9% overall
+- Strongest advantage in multi-session aggregation (+38.7%)
+- Both systems struggle with temporal reasoning (<40%)
+
+### Latency Comparison
+
+| System | Ingestion (avg) | Retrieval (avg) |
+|--------|-----------------|-----------------|
+| Persona | 61s | 12.8s |
+| Graphiti | 949s (15.8m) | 1.2s |
+
+---
+
 ## Contributing
 
-### Running Tests
-
 ```bash
-# Test data loaders
-poetry run python evals/loaders/personamem_loader.py
-poetry run python evals/loaders/longmemeval_loader.py
+# Run tests
+poetry run pytest evals/tests/ -v
 
-# Test deep logger
-poetry run python evals/logging/deep_logger.py
+# Type check
+poetry run mypy evals/
 
-# Test config parser
-poetry run python evals/config.py
-
-# Verify datasets
-poetry run python evals/scripts/verify_longmemeval_oracle.py
+# Format
+poetry run ruff format evals/
+poetry run ruff check evals/ --fix
 ```
-
-### Code Style
-
-- Follow PEP 8
-- Use type hints
-- Document public methods
-- Keep functions focused and testable
 
 ### Submitting Changes
 
 1. Create a feature branch
 2. Add tests for new functionality
 3. Update documentation
-4. Run full evaluation to verify no regressions
+4. Run full test suite
 5. Submit pull request
 
 ---
 
 ## Acknowledgments
 
-This framework is built on top of:
-
+Built on top of:
 - [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (ICLR 2025) - Wu et al.
 - [PersonaMem](https://github.com/bowen-upenn/PersonaMem) (COLM 2025) - Shi et al.
-- [Mem0](https://github.com/mem0ai/mem0) - Open-source memory layer
-- [Zep](https://github.com/getzep/zep) - Long-term memory for LLM apps
 
-### Citation
-
-If you use this evaluation framework in your research, please cite:
-
-```bibtex
-@software{persona_eval_framework,
-  title = {Persona Memory System - Evaluation Framework},
-  author = {InnerNets AI},
-  year = {2025},
-  url = {https://github.com/innernets-ai/persona}
-}
-```
+Research informed by:
+- [Hamel Husain](https://hamel.dev/blog/posts/eval-tools/) - Eval best practices
+- [Eugene Yan](https://eugeneyan.com/writing/qa-evals/) - Long-context Q&A evaluation
+- [Groq OpenBench](https://github.com/groq/openbench) - Benchmark framework patterns
 
 ---
 
@@ -822,11 +407,4 @@ MIT License - See [LICENSE](../LICENSE) for details.
 
 ---
 
-## Contact
-
-For questions or feedback:
-- GitHub Issues: [innernets-ai/persona/issues](https://github.com/innernets-ai/persona/issues)
-
----
-
-**Last Updated**: December 25, 2025
+**Last Updated**: December 26, 2025

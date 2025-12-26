@@ -1,18 +1,10 @@
-"""
-Core data models for the evaluation framework.
-
-Design Principles (from research):
-- Immutable dataclasses for thread safety and debugging
-- Clear separation: TestCase (input) -> QueryResult (output) -> MetricResult (score)
-- Favor composition over inheritance
-- Binary pass/fail over uncalibrated 1-5 scales (Hamel Husain)
-"""
+"""Core data models for the evaluation framework."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Optional, Sequence, Literal, Union
+from typing import Any, Mapping, Optional, Sequence, Literal
 
 # Type aliases for clarity
 ScoreType = Literal["binary", "continuous"]

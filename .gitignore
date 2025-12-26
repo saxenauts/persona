@@ -12,12 +12,19 @@ tests/assets/
 # Evals directories
 evals/data/
 evals/analysis/
-
+evals/INTERNAL.md
 
 evals/results/__pycache__/
 evals/results/
 !evals/results/*.json
 !evals/results/*.jsonl
+
+# Internal research docs (not for OSS)
+docs/BENCHMARK_RESEARCH.md
+docs/EVAL_FRAMEWORK_RESEARCH.md
+docs/EVAL_SYSTEM_PLAN.md
+docs/INTERNAL_LEARNINGS.md
+docs/MEMORY_EVAL_MASTER.md
 
 # Benchmark Logs
 benchmark_*.log

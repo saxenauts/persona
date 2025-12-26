@@ -1,27 +1,4 @@
-"""
-CLI Interface for Evaluation Framework
-
-Provides command-line interface for running evaluations.
-"""
-
-# =============================================================================
-# CRITICAL: Apply graphiti_core reasoning.effort bugfix BEFORE any imports
-# =============================================================================
-try:
-    from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
-    from graphiti_core.llm_client import OpenAIClient
-
-    @staticmethod
-    def _patched_supports_reasoning(model: str) -> bool:
-        """Only enable reasoning.effort for actual reasoning models (o1, o3)."""
-        return model.startswith(("o1-", "o3-"))
-
-    AzureOpenAILLMClient._supports_reasoning_features = _patched_supports_reasoning
-    OpenAIClient._supports_reasoning_features = _patched_supports_reasoning
-    print("[EvalCLI] Applied graphiti_core reasoning.effort bugfix for gpt-5.x models")
-except ImportError:
-    pass  # graphiti_core not installed, skip patch
-# =============================================================================
+"""CLI Interface for Evaluation Framework."""
 
 import json
 from datetime import datetime
@@ -790,6 +767,123 @@ def explore():
     print()
 
     subprocess.run([sys.executable, "-m", "evals.explorer.app"])
+
+
+@app.command()
+def run2(
+    benchmark: str = typer.Option(
+        ..., "--benchmark", "-b", help="Benchmark to run: longmemeval, personamem"
+    ),
+    adapter_name: str = typer.Option(
+        "persona", "--adapter", "-a", help="Adapter: persona, graphiti"
+    ),
+    samples: Optional[int] = typer.Option(
+        None, "--samples", "-n", help="Samples per question type (default: all)"
+    ),
+    seed: int = typer.Option(42, "--seed", "-s", help="Random seed"),
+    concurrency: int = typer.Option(5, "--concurrency", "-c", help="Parallel workers"),
+    variant: Optional[str] = typer.Option(
+        None, "--variant", "-v", help="Benchmark variant (e.g., 32k, 128k)"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", help="Verbose output"),
+):
+    """
+    Run evaluation using the new modular Engine (v2).
+
+    Examples:
+
+        # Quick test
+        python -m evals.cli run2 --benchmark longmemeval --samples 5
+
+        # Full PersonaMem evaluation
+        python -m evals.cli run2 --benchmark personamem --variant 32k
+    """
+    import asyncio
+    from pathlib import Path
+
+    from .engine import create_default_engine, EngineConfig
+    from .benchmarks import get_registry
+    from .core import wrap_legacy_adapter
+    from .storage import SQLiteEventStore
+
+    db_path = Path("evals/results/eval_v2.db")
+    store = SQLiteEventStore(db_path)
+
+    registry = get_registry()
+    bench = registry.get(benchmark)
+    if bench is None:
+        available = registry.list_benchmarks()
+        print(f"Unknown benchmark: {benchmark}")
+        print(f"Available: {available}")
+        raise typer.Exit(code=1)
+
+    if adapter_name == "persona":
+        from .adapters.persona_adapter import PersonaAdapter
+
+        legacy_adapter = PersonaAdapter()
+    elif adapter_name == "graphiti":
+        from .adapters.zep_adapter import GraphitiAdapter
+
+        legacy_adapter = GraphitiAdapter()
+    else:
+        print(f"Unknown adapter: {adapter_name}")
+        print("Available: persona, graphiti")
+        raise typer.Exit(code=1)
+
+    adapter = wrap_legacy_adapter(legacy_adapter, name=adapter_name)
+
+    sample_sizes = None
+    if samples:
+        all_cases = bench.load(variant=variant)
+        qtypes = set(tc.question_type for tc in all_cases if tc.question_type)
+        sample_sizes = {qtype: samples for qtype in qtypes}
+
+    config = EngineConfig(
+        concurrency=concurrency,
+        sample_sizes=sample_sizes,
+        sample_seed=seed,
+        verbose=verbose,
+    )
+
+    engine = create_default_engine(concurrency=concurrency, verbose=verbose)
+    engine.config = config
+    engine.event_store = store
+
+    metric_names = bench.default_metrics()
+
+    def progress(done: int, total: int, result) -> None:
+        status = "PASS" if result.passed else "FAIL"
+        print(f"[{done}/{total}] {result.test_case_id}: {status}")
+        store.record_eval_result(result)
+
+    engine.config.progress_callback = progress
+
+    print(f"\nStarting evaluation:")
+    print(f"  Benchmark: {benchmark}")
+    print(f"  Adapter: {adapter_name}")
+    print(f"  Metrics: {metric_names}")
+    print(f"  Concurrency: {concurrency}")
+    if samples:
+        print(f"  Samples per type: {samples}")
+    print()
+
+    async def main():
+        result = await engine.run(
+            benchmark=bench,
+            adapter=adapter,
+            metric_names=metric_names,
+            variant=variant,
+        )
+        return result
+
+    result = asyncio.run(main())
+
+    store.materialize_views(run_id=result.run_id)
+
+    print("\n" + "=" * 60)
+    print(result.summary())
+    print("=" * 60)
+    print(f"\nResults saved to: {db_path}")
 
 
 if __name__ == "__main__":
