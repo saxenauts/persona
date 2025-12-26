@@ -100,7 +100,7 @@ class EvalDatabase:
         result_id INTEGER NOT NULL,
         node_id TEXT NOT NULL,
         node_type TEXT,
-        node_content TEXT,
+        node_content TEXT,  -- IMPORTANT: Adapters should log actual node content for debugging
         similarity_score REAL,
         retrieval_rank INTEGER,
         was_relevant INTEGER,  -- Post-hoc annotation: was this node actually relevant?
@@ -238,23 +238,54 @@ class EvalDatabase:
 
                         result_id = cursor.lastrowid
 
-                        # Insert retrieved nodes
+                        # Insert retrieved nodes from vector_search.seeds
+                        nodes_inserted = set()
                         if "retrieval" in log and "vector_search" in log["retrieval"]:
                             for i, seed in enumerate(
                                 log["retrieval"]["vector_search"].get("seeds", [])
                             ):
-                                conn.execute(
-                                    """INSERT INTO retrieved_nodes
-                                       (result_id, node_id, node_type, similarity_score, retrieval_rank)
-                                       VALUES (?, ?, ?, ?, ?)""",
-                                    (
-                                        result_id,
-                                        seed.get("node_id", ""),
-                                        seed.get("node_type", ""),
-                                        seed.get("score", 0),
-                                        i + 1,
-                                    ),
-                                )
+                                node_id = seed.get("node_id", "")
+                                if node_id and node_id not in nodes_inserted:
+                                    conn.execute(
+                                        """INSERT INTO retrieved_nodes
+                                           (result_id, node_id, node_type, node_content, similarity_score, retrieval_rank)
+                                           VALUES (?, ?, ?, ?, ?, ?)""",
+                                        (
+                                            result_id,
+                                            node_id,
+                                            seed.get("node_type", ""),
+                                            seed.get("content")
+                                            or seed.get("text")
+                                            or seed.get("fact"),
+                                            seed.get("score", 0),
+                                            i + 1,
+                                        ),
+                                    )
+                                    nodes_inserted.add(node_id)
+
+                        # Insert from graph_traversal.final_ranked_nodes (Graphiti/Zep)
+                        if "retrieval" in log and "graph_traversal" in log["retrieval"]:
+                            gt = log["retrieval"]["graph_traversal"]
+                            node_details = gt.get("node_details", {})
+                            for i, node_id in enumerate(
+                                gt.get("final_ranked_nodes", [])
+                            ):
+                                if node_id and node_id not in nodes_inserted:
+                                    details = node_details.get(node_id, {})
+                                    conn.execute(
+                                        """INSERT INTO retrieved_nodes
+                                           (result_id, node_id, node_type, node_content, retrieval_rank)
+                                           VALUES (?, ?, ?, ?, ?)""",
+                                        (
+                                            result_id,
+                                            node_id,
+                                            details.get("type", "graph_node"),
+                                            details.get("content")
+                                            or details.get("fact"),
+                                            len(nodes_inserted) + 1,
+                                        ),
+                                    )
+                                    nodes_inserted.add(node_id)
 
                         imported += 1
 

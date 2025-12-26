@@ -49,31 +49,54 @@
     </div>
 </div>
 
-<!-- Pipeline Timeline -->
+<!-- Pipeline Timing Table -->
 {% if pipeline %}
     {% set ing_ms = pipeline.ingestion.duration_ms or 0 %}
     {% set ret_ms = pipeline.retrieval.duration_ms or 0 %}
     {% set gen_ms = pipeline.generation.duration_ms or 0 %}
     {% set total_ms = ing_ms + ret_ms + gen_ms %}
-    {% if total_ms == 0 %}{% set total_ms = 1 %}{% endif %}
     
-    <div class="card" style="padding: 16px;">
-        <div class="text-small text-muted font-bold mb-2 uppercase" style="letter-spacing: 0.5px;">Execution Pipeline</div>
-        <div class="pipeline-wrapper">
-            <div class="pipeline-segment" style="flex: {{ ing_ms }}; background: var(--color-primary); opacity: 0.6;" title="Ingestion: {{ ing_ms }}ms">
-                Ingestion
-            </div>
-            <div class="pipeline-segment" style="flex: {{ ret_ms }}; background: var(--color-warning); opacity: 0.6;" title="Retrieval: {{ ret_ms }}ms">
-                Retrieval
-            </div>
-            <div class="pipeline-segment" style="flex: {{ gen_ms }}; background: var(--color-success); opacity: 0.6;" title="Generation: {{ gen_ms }}ms">
-                Gen
-            </div>
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Execution Pipeline</h3>
         </div>
-        <div class="flex justify-between text-small text-mono text-muted">
-            <div style="width: 33%">Ingestion: {{ ing_ms }}ms</div>
-            <div style="width: 33%; text-align: center;">Retrieval: {{ ret_ms }}ms</div>
-            <div style="width: 33%; text-align: right;">Generation: {{ gen_ms }}ms</div>
+        <div class="table-wrapper" style="border: none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Stage</th>
+                        <th class="text-right">Duration</th>
+                        <th class="text-right">% of Total</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--color-primary); margin-right: 8px;"></span>Ingestion</td>
+                        <td class="text-right text-mono">{{ "%.2f"|format(ing_ms/1000) }}s</td>
+                        <td class="text-right text-mono text-muted">{{ "%.1f"|format(ing_ms/total_ms*100 if total_ms > 0 else 0) }}%</td>
+                        <td class="text-small text-muted">{{ pipeline.ingestion.nodes or 0 }} nodes, {{ pipeline.ingestion.relationships or 0 }} edges</td>
+                    </tr>
+                    <tr>
+                        <td><span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--color-warning); margin-right: 8px;"></span>Retrieval</td>
+                        <td class="text-right text-mono">{{ "%.2f"|format(ret_ms/1000) }}s</td>
+                        <td class="text-right text-mono text-muted">{{ "%.1f"|format(ret_ms/total_ms*100 if total_ms > 0 else 0) }}%</td>
+                        <td class="text-small text-muted">{{ pipeline.retrieval.nodes_retrieved or 0 }} nodes, {{ pipeline.retrieval.edges_retrieved or 0 }} edges</td>
+                    </tr>
+                    <tr>
+                        <td><span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--color-success); margin-right: 8px;"></span>Generation</td>
+                        <td class="text-right text-mono">{{ "%.2f"|format(gen_ms/1000) }}s</td>
+                        <td class="text-right text-mono text-muted">{{ "%.1f"|format(gen_ms/total_ms*100 if total_ms > 0 else 0) }}%</td>
+                        <td class="text-small text-muted">{{ pipeline.generation.model or 'unknown' }}, {{ pipeline.generation.prompt_tokens or 0 }} tokens</td>
+                    </tr>
+                    <tr style="font-weight: 600; border-top: 2px solid var(--border-default);">
+                        <td>Total</td>
+                        <td class="text-right text-mono">{{ "%.2f"|format(total_ms/1000) }}s</td>
+                        <td class="text-right text-mono text-muted">100%</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 {% endif %}
@@ -131,7 +154,16 @@
         </div>
         {% else %}
         <div class="card">
-            <div class="card-body text-center text-muted">No session data available.</div>
+            <div class="card-body text-center">
+                <div class="text-muted mb-2">No session data available for this question.</div>
+                <div class="text-small text-muted">
+                    {% if result.benchmark == 'personamem' %}
+                    Session data should exist for PersonaMem. Check if <code>shared_contexts_32k.jsonl</code> is present.
+                    {% else %}
+                    Session display is only available for PersonaMem benchmark questions.
+                    {% endif %}
+                </div>
+            </div>
         </div>
         {% endif %}
     </div>
@@ -164,6 +196,9 @@
                 </div>
                 
                 {% if deep_log.ingestion.memories_created %}
+                {% set mem = deep_log.ingestion.memories_created %}
+                {% set has_persona_types = (mem.psyche or 0) > 0 or (mem.goals or 0) > 0 %}
+                {% if has_persona_types %}
                 <h4>Memories Created</h4>
                 <div class="table-wrapper mt-2">
                     <table>
@@ -171,12 +206,15 @@
                             <tr><th>Type</th><th>Count</th></tr>
                         </thead>
                         <tbody>
-                            {% for type, count in deep_log.ingestion.memories_created.items() %}
+                            {% for type, count in mem.items() %}
+                            {% if count > 0 %}
                             <tr><td>{{ type }}</td><td>{{ count }}</td></tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
+                {% endif %}
                 {% endif %}
                 {% else %}
                 <div class="text-muted">No ingestion data recorded.</div>
@@ -187,12 +225,100 @@
 
     <!-- Retrieval Tab -->
     <div id="tab-retrieval" class="tab-content">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Retrieved Context</h3>
+        {% set graph_traversal = deep_log.retrieval.graph_traversal if deep_log and deep_log.retrieval else {} %}
+        {% set final_nodes = graph_traversal.final_ranked_nodes if graph_traversal else [] %}
+        {% set nodes_visited = graph_traversal.nodes_visited if graph_traversal else 0 %}
+        {% set edges_traversed = graph_traversal.relationships_traversed if graph_traversal else 0 %}
+        
+        <!-- LLM Context Card - Most Important -->
+        <div class="card" style="border-color: var(--color-primary); border-width: 2px;">
+            <div class="card-header" style="background: var(--color-primary-dim);">
+                <h3 class="card-title" style="color: var(--color-primary);">Context Passed to LLM</h3>
+                <span class="badge" style="background: var(--color-primary-dim); color: var(--color-primary); border: 1px solid var(--color-primary);">Critical for Debugging</span>
             </div>
             <div class="card-body">
-                {% if retrieved_nodes %}
+                <p class="text-small text-muted mb-3">This is the exact context string the memory system constructed and passed to the LLM for answer generation. This is what the model "sees" from memory.</p>
+                {% if deep_log and deep_log.retrieval and deep_log.retrieval.retrieved_context %}
+                <div class="code-block" style="max-height: 500px; overflow-y: auto; background: #0a0c10; border: 1px solid var(--color-primary-dim);">
+                    <pre style="white-space: pre-wrap; word-break: break-word;">{{ deep_log.retrieval.retrieved_context }}</pre>
+                </div>
+                <div class="mt-2 text-small text-muted">
+                    {{ deep_log.retrieval.retrieved_context|length }} characters
+                </div>
+                {% else %}
+                <div class="text-center" style="padding: 40px; background: var(--bg-input); border-radius: var(--radius-md);">
+                    <div class="text-warning mb-2">No context string captured</div>
+                    <div class="text-small text-muted">
+                        The adapter may not be logging <code>retrieved_context</code> in the retrieval step.<br>
+                        Ensure your adapter returns <code>{"retrieved_context": "..."}</code> in deep logs.
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Retrieval Metrics -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Retrieval Metrics</h3>
+            </div>
+            <div class="card-body">
+                {% if final_nodes or retrieved_nodes %}
+                <div class="grid grid-3 mb-4">
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Nodes Retrieved</div>
+                        <div class="stat-value">{{ nodes_visited or retrieved_nodes|length }}</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Edges Traversed</div>
+                        <div class="stat-value">{{ edges_traversed }}</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-input);">
+                        <div class="stat-label">Duration</div>
+                        <div class="stat-value">{{ (pipeline.retrieval.duration_ms or 0)|int }}ms</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-muted">No retrieval metrics available.</div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Retrieved Nodes -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Retrieved Nodes</h3>
+                <span class="text-small text-muted">Node IDs from graph/vector search</span>
+            </div>
+            <div class="card-body">
+                {% if final_nodes %}
+                <div class="text-small text-warning mb-3" style="padding: 8px 12px; background: var(--color-warning-dim); border-radius: var(--radius-sm);">
+                    Note: Only node UUIDs are logged. To see node content, enable <code>log_node_content=True</code> in your adapter.
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">Rank</th>
+                                <th>Node UUID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for node_id in final_nodes[:20] %}
+                            <tr>
+                                <td class="text-center font-bold">#{{ loop.index }}</td>
+                                <td class="text-mono text-small">{{ node_id }}</td>
+                            </tr>
+                            {% endfor %}
+                            {% if final_nodes|length > 20 %}
+                            <tr>
+                                <td colspan="2" class="text-muted text-center">... and {{ final_nodes|length - 20 }} more nodes</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                {% elif retrieved_nodes %}
                 <div class="table-wrapper">
                     <table>
                         <thead>
@@ -201,31 +327,24 @@
                                 <th>Score</th>
                                 <th>Node ID</th>
                                 <th>Type</th>
+                                <th>Content</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for node in retrieved_nodes %}
                             <tr>
-                                <td class="text-center font-bold">#{{ node.retrieval_rank }}</td>
-                                <td class="text-mono">{{ "%.4f"|format(node.similarity_score) }}</td>
-                                <td class="text-mono text-small">{{ node.node_id }}</td>
-                                <td><span class="badge badge-outline">{{ node.node_type }}</span></td>
+                                <td class="text-center font-bold">#{{ node.retrieval_rank or loop.index }}</td>
+                                <td class="text-mono">{{ "%.4f"|format(node.similarity_score) if node.similarity_score else '-' }}</td>
+                                <td class="text-mono text-small">{{ node.node_id[:16] }}...</td>
+                                <td><span class="badge badge-outline">{{ node.node_type or 'node' }}</span></td>
+                                <td class="text-small">{{ node.node_content[:100] if node.node_content else '-' }}{% if node.node_content and node.node_content|length > 100 %}...{% endif %}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 {% else %}
-                <div class="text-muted">No nodes retrieved.</div>
-                {% endif %}
-                
-                <h4 class="mt-4 mb-2">Raw Context</h4>
-                {% if deep_log and deep_log.retrieval and deep_log.retrieval.retrieved_context %}
-                <div class="code-block" style="max-height: 400px; overflow-y: auto;">
-                    <pre>{{ deep_log.retrieval.retrieved_context }}</pre>
-                </div>
-                {% else %}
-                <div class="text-muted text-small font-italic">No context string available.</div>
+                <div class="text-muted text-center" style="padding: 20px;">No nodes retrieved or logged.</div>
                 {% endif %}
             </div>
         </div>
@@ -241,7 +360,7 @@
                 <div class="flex gap-4 mb-4">
                     <div>
                         <span class="text-small text-muted block">Model</span>
-                        <span class="font-bold">Unknown</span> <!-- Model name not passed in vars explicitly? -->
+                        <span class="font-bold">{{ pipeline.generation.model or 'Unknown' }}</span>
                     </div>
                     <div>
                         <span class="text-small text-muted block">Duration</span>

@@ -3,17 +3,64 @@
 {% block title %}Benchmarks - Eval Explorer{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <h2>Available Benchmarks</h2>
-    <p class="text-muted">Download and install benchmarks to run evaluations against your memory systems.</p>
+<!-- Supported Systems Section -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h3 class="card-title">Supported Memory Systems</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-4">Eval Explorer supports any memory system that implements the adapter interface. Build your own adapter to run benchmarks.</p>
+        <div class="flex flex-wrap gap-4">
+            {% for sys in supported_systems %}
+            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                <span class="font-bold">{{ sys.name }}</span>
+                {% if sys.status == 'supported' %}
+                <span class="badge badge-success" style="font-size: 10px;">Supported</span>
+                {% elif sys.status == 'coming_soon' %}
+                <span class="badge badge-warning" style="font-size: 10px;">Coming Soon</span>
+                {% elif sys.status == 'experimental' %}
+                <span class="badge badge-neutral" style="font-size: 10px;">Experimental</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="mt-4 text-small text-muted">
+            <strong>Build your own adapter:</strong> Implement the <code>MemorySystem</code> interface in <code>evals/adapters/base.py</code> with <code>add_session()</code>, <code>query()</code>, and <code>reset()</code> methods.
+        </div>
+    </div>
 </div>
 
-<div class="grid grid-2">
+<div class="mb-4">
+    <h2>Available Benchmarks</h2>
+    <p class="text-muted">Ranked by relevance for memory system evaluation. Essential benchmarks test core capabilities; Legacy benchmarks are included for historical comparison.</p>
+</div>
+
+<style>
+    .benchmark-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    @media (min-width: 600px) {
+        .benchmark-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 1000px) {
+        .benchmark-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .relevance-essential { border-left: 3px solid var(--color-success-fg); }
+    .relevance-recommended { border-left: 3px solid var(--color-primary); }
+    .relevance-legacy { border-left: 3px solid var(--text-tertiary); opacity: 0.8; }
+</style>
+
+<div class="benchmark-grid">
     {% for bench in benchmarks %}
-    <div class="card" style="display: flex; flex-direction: column; height: 100%;">
-        <div class="card-body flex-1">
+    <div class="card relevance-{{ bench.relevance|lower }}" style="display: flex; flex-direction: column; height: 100%;">
+        <div class="card-body" style="flex: 1; display: flex; flex-direction: column;">
             <div class="flex justify-between items-start mb-2">
-                <h3 class="card-title" style="font-size: 18px;">{{ bench.name }}</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-mono text-muted" style="font-size: 12px;">#{{ bench.rank }}</span>
+                    <h3 class="card-title" style="font-size: 18px; margin: 0;">{{ bench.name }}</h3>
+                </div>
                 {% if bench.installed %}
                 <span class="badge badge-success">INSTALLED</span>
                 {% else %}
@@ -21,46 +68,76 @@
                 {% endif %}
             </div>
             
-            <p class="text-muted mb-4" style="line-height: 1.6;">{{ bench.description }}</p>
+            <div class="flex gap-2 mb-3">
+                {% if bench.relevance == 'Essential' %}
+                <span class="badge badge-success" style="font-size: 10px;">Essential</span>
+                {% elif bench.relevance == 'Recommended' %}
+                <span class="badge" style="font-size: 10px; background: var(--color-primary-dim); color: var(--color-primary); border: 1px solid rgba(88,166,255,0.2);">Recommended</span>
+                {% elif bench.relevance == 'Legacy' %}
+                <span class="badge badge-neutral" style="font-size: 10px;">Legacy</span>
+                {% endif %}
+                <span class="text-small text-muted">{{ bench.year }}</span>
+            </div>
             
-            <div class="mb-4">
+            <p class="text-muted" style="line-height: 1.5; margin-bottom: 16px; flex-shrink: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">{{ bench.description }}</p>
+            
+            {% if bench.stats %}
+            <div class="mb-3" style="display: flex; gap: 16px;">
+                {% if bench.stats.questions %}
+                <div class="text-small">
+                    <span class="text-muted">Questions:</span> <span class="font-bold">{{ bench.stats.questions }}</span>
+                </div>
+                {% endif %}
+                {% if bench.stats.max_tokens %}
+                <div class="text-small">
+                    <span class="text-muted">Max Tokens:</span> <span class="font-bold">{{ bench.stats.max_tokens }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <div class="mb-3">
                 <div class="text-small text-muted font-bold mb-2">VARIANTS</div>
-                <div class="flex flex-wrap gap-2">
+                <div class="flex flex-wrap gap-2" style="display: flex; flex-wrap: wrap;">
                     {% for v in bench.variants %}
                     <span class="badge badge-outline text-mono">{{ v }}</span>
                     {% endfor %}
                 </div>
             </div>
 
-            <div class="mb-4">
+            <div style="flex: 1;">
                 <div class="text-small text-muted font-bold mb-2">QUESTION TYPES</div>
-                <div class="flex flex-wrap gap-2">
-                    {% for qt in bench.question_types %}
+                <div class="flex flex-wrap gap-2" style="display: flex; flex-wrap: wrap;">
+                    {% for qt in bench.question_types[:4] %}
                     <span class="badge badge-neutral">{{ qt }}</span>
                     {% endfor %}
+                    {% if bench.question_types|length > 4 %}
+                    <span class="badge badge-outline text-muted">+{{ bench.question_types|length - 4 }} more</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
         
-        <div class="card-footer">
+        <div class="card-footer" style="border-top: 1px solid var(--border-default); padding: 12px 16px; margin-top: auto;">
             <div class="flex justify-between items-center">
-                <div class="flex gap-2">
+                <div class="flex gap-3 flex-wrap">
                     {% if bench.paper_url %}
-                    <a href="{{ bench.paper_url }}" target="_blank" class="text-small">Read Paper ↗</a>
+                    <a href="{{ bench.paper_url }}" target="_blank" class="text-small">Paper ↗</a>
+                    {% endif %}
+                    {% if bench.download_url %}
+                    <a href="{{ bench.download_url }}" target="_blank" class="text-small">GitHub ↗</a>
+                    {% endif %}
+                    {% if bench.huggingface_url %}
+                    <a href="{{ bench.huggingface_url }}" target="_blank" class="text-small">HuggingFace ↗</a>
                     {% endif %}
                 </div>
                 
                 {% if bench.installed %}
-                <button class="btn btn-sm" disabled style="opacity: 0.6; cursor: default;">Ready to Run</button>
+                <span class="badge badge-success" style="font-size: 11px;">Ready</span>
                 {% else %}
-                <a href="{{ bench.download_url }}" target="_blank" class="btn btn-primary btn-sm">Download Data</a>
+                <span class="badge badge-neutral" style="font-size: 11px;">Download</span>
                 {% endif %}
             </div>
-            {% if not bench.installed %}
-            <div class="mt-2 text-small text-muted">
-                Unzip to <code>persona/evals/data/{{ bench.id }}</code> to install
-            </div>
-            {% endif %}
         </div>
     </div>
     {% endfor %}

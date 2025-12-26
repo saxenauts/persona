@@ -148,6 +148,7 @@ def extract_pipeline_metrics(
         "total_duration_ms": 0,
     }
 
+    # Stage log provides basic timing from adapter
     if stage_log.get("stage1_ingestion_complete"):
         ing = stage_log["stage1_ingestion_complete"]
         metrics["ingestion"]["sessions"] = ing.get("total_sessions", 0)
@@ -160,6 +161,7 @@ def extract_pipeline_metrics(
         metrics["retrieval"]["edges_retrieved"] = gen.get("edges_count", 0)
         metrics["generation"]["duration_ms"] = gen.get("generation_ms", 0)
 
+    # Deep log has richer data from the runner
     if deep_log:
         if "ingestion" in deep_log:
             ing = deep_log["ingestion"]
@@ -174,12 +176,25 @@ def extract_pipeline_metrics(
             if not metrics["retrieval"]["duration_ms"]:
                 metrics["retrieval"]["duration_ms"] = ret.get("duration_ms", 0)
             metrics["retrieval"]["context"] = ret.get("retrieved_context", "")
+            # Extract graph traversal stats
+            if ret.get("graph_traversal"):
+                gt = ret["graph_traversal"]
+                metrics["retrieval"]["nodes_retrieved"] = gt.get("nodes_visited", 0)
+                metrics["retrieval"]["edges_retrieved"] = gt.get(
+                    "relationships_traversed", 0
+                )
+                metrics["retrieval"]["final_ranked_nodes"] = gt.get(
+                    "final_ranked_nodes", []
+                )
 
         if "generation" in deep_log:
             gen = deep_log["generation"]
             if not metrics["generation"]["duration_ms"]:
                 metrics["generation"]["duration_ms"] = gen.get("duration_ms", 0)
             metrics["generation"]["model"] = gen.get("model", "unknown")
+            metrics["generation"]["temperature"] = gen.get("temperature", 0)
+            metrics["generation"]["prompt_tokens"] = gen.get("prompt_tokens", 0)
+            metrics["generation"]["completion_tokens"] = gen.get("completion_tokens", 0)
 
     metrics["total_duration_ms"] = (
         metrics["ingestion"]["duration_ms"]
@@ -463,40 +478,131 @@ def export_run(run_id: str):
 @app.route("/benchmarks")
 def benchmarks():
     """Show available benchmarks and download options."""
+    # Supported memory systems
+    supported_systems = [
+        {"name": "Persona", "status": "supported", "adapter": "persona_adapter.py"},
+        {"name": "Graphiti", "status": "supported", "adapter": "zep_adapter.py"},
+        {"name": "Honcho", "status": "coming_soon", "adapter": None},
+        {"name": "Mem0", "status": "experimental", "adapter": "mem0_adapter.py"},
+    ]
+
+    # Benchmarks ranked by value (1 = highest priority, relevance for memory system evaluation)
     benchmarks_info = [
         {
             "id": "personamem",
             "name": "PersonaMem",
-            "description": "Personal memory evaluation with 589 questions across preference tracking, temporal reasoning, and cross-session understanding",
+            "rank": 1,
+            "relevance": "Essential",
+            "description": "Personal memory evaluation with 589 questions across preference tracking, temporal reasoning, and cross-session understanding. Best for testing personal AI assistants.",
             "paper_url": "https://arxiv.org/abs/2410.12139",
             "download_url": "https://github.com/InnerNets/PersonaMem",
+            "huggingface_url": "https://huggingface.co/datasets/InnerNets/PersonaMem",
             "variants": ["32k", "128k"],
+            "stats": {"questions": "589", "max_tokens": "128K"},
+            "year": 2024,
             "question_types": [
-                "single_session_qa",
-                "multi_session_qa",
-                "preference_tracking",
-                "temporal_reasoning",
-                "adversarial_memory",
+                "recall_user_shared_facts",
+                "provide_preference_aligned_recommendations",
+                "suggest_new_ideas",
+                "recalling_the_reasons_behind_previous_updates",
+                "generalizing_to_new_scenarios",
             ],
             "installed": (DATA_DIR / "personamem").exists(),
         },
         {
+            "id": "beam",
+            "name": "BEAM",
+            "rank": 2,
+            "relevance": "Essential",
+            "description": "Benchmark for Extremely long-context Associative Memory. Scales to 10M tokens - the gold standard for stress-testing memory systems at scale.",
+            "paper_url": "https://arxiv.org/abs/2410.15869",
+            "download_url": "https://github.com/shulin16/BEAM",
+            "huggingface_url": None,
+            "variants": ["100k", "500k", "1m", "10m"],
+            "stats": {"questions": "2,000", "max_tokens": "10M"},
+            "year": 2024,
+            "question_types": [
+                "information-extraction",
+                "temporal-reasoning",
+                "contradiction-resolution",
+                "instruction-following",
+                "preference-following",
+                "multi-session-reasoning",
+                "knowledge-update",
+                "event-ordering",
+                "working-memory",
+                "scratchpad",
+            ],
+            "installed": (DATA_DIR / "beam").exists(),
+        },
+        {
             "id": "longmemeval",
             "name": "LongMemEval",
-            "description": "Long-term memory evaluation focusing on multi-session conversations",
+            "rank": 3,
+            "relevance": "Recommended",
+            "description": "Long-term memory evaluation focusing on multi-session conversations with 500 questions testing 5 core memory abilities.",
             "paper_url": "https://arxiv.org/abs/2410.10813",
             "download_url": "https://github.com/xiaowu0162/LongMemEval",
+            "huggingface_url": "https://huggingface.co/datasets/xiaowu0162/LongMemEval",
             "variants": ["default"],
+            "stats": {"questions": "500", "max_tokens": "115K"},
+            "year": 2024,
             "question_types": [
                 "single-session-user",
+                "multi-session-user",
                 "temporal-reasoning",
                 "knowledge-update",
+                "single-session-assistant",
             ],
             "installed": (DATA_DIR / "longmemeval").exists(),
         },
+        {
+            "id": "convomem",
+            "name": "ConvoMem",
+            "rank": 4,
+            "relevance": "Recommended",
+            "description": "Conversational memory benchmark with 75K QA pairs. Key finding: RAG loses to full-context for first 150 conversations.",
+            "paper_url": "https://arxiv.org/abs/2411.06059",
+            "download_url": "https://github.com/princeton-nlp/ConvoMem",
+            "huggingface_url": None,
+            "variants": ["default"],
+            "stats": {"questions": "75,336", "max_tokens": "varies"},
+            "year": 2024,
+            "question_types": [
+                "factual-recall",
+                "preference-tracking",
+                "temporal-ordering",
+                "cross-conversation",
+            ],
+            "installed": (DATA_DIR / "convomem").exists(),
+        },
+        {
+            "id": "locomo",
+            "name": "LoCoMo",
+            "rank": 5,
+            "relevance": "Legacy",
+            "description": "Long Context Conversations benchmark (35 sessions, 26K tokens). Outdated - context fits in modern LLMs without memory systems.",
+            "paper_url": "https://arxiv.org/abs/2402.17753",
+            "download_url": "https://github.com/locomo-ai/locomo",
+            "huggingface_url": None,
+            "variants": ["default"],
+            "stats": {"questions": "1,540", "max_tokens": "26K"},
+            "year": 2024,
+            "question_types": [
+                "single-hop",
+                "multi-hop",
+                "temporal",
+                "open-ended",
+            ],
+            "installed": (DATA_DIR / "locomo").exists(),
+        },
     ]
 
-    return render_template("benchmarks.html", benchmarks=benchmarks_info)
+    return render_template(
+        "benchmarks.html",
+        benchmarks=benchmarks_info,
+        supported_systems=supported_systems,
+    )
 
 
 if __name__ == "__main__":

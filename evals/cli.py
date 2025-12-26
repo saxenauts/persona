@@ -728,6 +728,58 @@ def download(
 
 
 @app.command()
+def sync(
+    run_id: Optional[str] = typer.Argument(
+        None, help="Specific run ID to sync (syncs all if not provided)"
+    ),
+    system: str = typer.Option(
+        "graphiti", "--system", "-s", help="System name for the run"
+    ),
+):
+    """
+    Sync JSONL logs to SQLite database for Explorer UI.
+
+    Examples:
+
+        # Sync a specific run
+        python -m evals.cli sync graphiti_personamem_20251225 --system graphiti
+
+        # Sync all runs in results directory
+        python -m evals.cli sync
+    """
+    from .persona_eval.database import EvalDatabase
+
+    db_path = Path("evals/results/eval_analysis.db")
+    db = EvalDatabase(str(db_path))
+
+    results_dir = Path("evals/results")
+
+    if run_id:
+        run_id = _normalize_run_id(run_id)
+        run_dirs = [results_dir / f"run_{run_id}"]
+    else:
+        run_dirs = [
+            d for d in results_dir.iterdir() if d.is_dir() and d.name.startswith("run_")
+        ]
+
+    total_imported = 0
+    for run_dir in sorted(run_dirs):
+        deep_logs = run_dir / "deep_logs.jsonl"
+        if not deep_logs.exists():
+            continue
+
+        rid = run_dir.name.replace("run_", "")
+        print(f"Syncing {rid}...")
+        imported = db.import_from_jsonl(str(deep_logs), rid, system)
+        total_imported += imported
+        if imported > 0:
+            print(f"  Imported {imported} questions")
+
+    print(f"\nTotal imported: {total_imported} questions")
+    print(f"Database: {db_path}")
+
+
+@app.command()
 def explore():
     """Launch the Eval Explorer web UI."""
     import subprocess

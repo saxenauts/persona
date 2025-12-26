@@ -142,7 +142,7 @@
                 <select name="type" class="form-control" onchange="this.form.submit()" style="width: auto; min-width: 150px;">
                     <option value="">All Types</option>
                     {% for qt in question_types %}
-                    <option value="{{ qt }}" {% if filter_type == qt %}selected{% endif %}>{{ qt }}</option>
+                    <option value="{{ qt.question_type }}" {% if filter_type == qt.question_type %}selected{% endif %}>{{ qt.question_type }}</option>
                     {% endfor %}
                 </select>
                 

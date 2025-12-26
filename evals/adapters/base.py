@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 
+
 class MemorySystem(ABC):
+    log_node_content: bool = False
+
     @abstractmethod
     def add_session(self, user_id: str, session_data: str, date: str):
         """
         Ingest a session into the memory system.
-        
+
         Args:
             user_id: Unique identifier for the user.
             session_data: The text content of the session/conversation.
@@ -17,28 +20,28 @@ class MemorySystem(ABC):
         """
         Bulk ingest sessions. Default implementation loops.
         Adapters should override this for optimization.
-        
+
         Args:
             user_id: User ID.
             sessions: List of dicts [{"content": str, "date": str}]
         """
         for s in sessions:
             self.add_session(user_id, s["content"], s["date"])
-    
+
     @abstractmethod
     def query(self, user_id: str, query: str) -> str:
         """
         Query the memory system.
-        
+
         Args:
             user_id: Unique identifier for the user.
             query: The question to ask.
-            
+
         Returns:
             The answer string.
         """
         pass
-    
+
     @abstractmethod
     def reset(self, user_id: str):
         """

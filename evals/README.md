@@ -393,6 +393,62 @@ poetry run python -m evals.cli judge run_20241221_143052
 └─────────────────────────────────────────────────────────┘
 ```
 
+### Data Flow Diagram
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   Loaders    │───▶│    Runner    │───▶│   Adapters   │
+│ PersonaMem   │    │ Orchestrates │    │ Graphiti     │
+│ LongMemEval  │    │ eval flow    │    │ Persona      │
+└──────────────┘    └──────────────┘    │ Mem0         │
+                           │            └──────────────┘
+                           │                   │
+                           ▼                   ▼
+         ┌─────────────────────────────────────────────┐
+         │              LOGGING LAYER                   │
+         │                                              │
+         │  ┌────────────┐  ┌────────────┐  ┌────────┐ │
+         │  │deep_logs.  │  │stage_logs/ │  │eval_   │ │
+         │  │jsonl       │  │*.jsonl     │  │analysis│ │
+         │  │            │  │            │  │.db     │ │
+         │  │Full details│  │Per-adapter │  │SQLite  │ │
+         │  │per question│  │timing      │  │queries │ │
+         │  └────────────┘  └────────────┘  └────────┘ │
+         └─────────────────────────────────────────────┘
+                           │
+                           ▼
+         ┌─────────────────────────────────────────────┐
+         │            EXPLORER UI (Flask)               │
+         │                                              │
+         │  /              Run list + accuracy          │
+         │  /run/<id>      Details, by-type breakdown   │
+         │  /question/<id> Pipeline, retrieval, sessions│
+         │  /benchmarks    Available benchmarks         │
+         └─────────────────────────────────────────────┘
+```
+
+### Explorer UI
+
+Launch with `python -m evals.cli explore` (port 5001).
+
+| Route | Purpose |
+|-------|---------|
+| `/` | Run list with accuracy metrics |
+| `/run/<run_id>` | Run details, breakdown by question type |
+| `/question/<id>` | Pipeline timing, retrieval context, sessions |
+| `/benchmarks` | Available benchmarks with paper links |
+
+Features:
+- **LLM Context Display** - See the exact context string passed to the LLM (critical for debugging)
+- Pipeline timing table (ingestion → retrieval → generation)
+- Session viewer with gold answer highlighting
+- Retrieved node display with content (when `log_node_content=True`)
+- Benchmark browser with:
+  - Relevance ranking (Essential, Recommended, Legacy)
+  - Download links (GitHub, HuggingFace, Paper)
+  - Supported systems section
+  - Adapter interface documentation
+
 ### Adapter Interface
 
 All memory systems implement the `MemorySystem` base class:
@@ -401,6 +457,8 @@ All memory systems implement the `MemorySystem` base class:
 from evals.adapters.base import MemorySystem
 
 class YourAdapter(MemorySystem):
+    log_node_content: bool = False  # Set True to log full node content for debugging
+    
     def add_session(self, user_id: str, session_data: str, date: str) -> None:
         """Ingest a single session into the memory system."""
         pass
@@ -417,6 +475,12 @@ class YourAdapter(MemorySystem):
         """Clear memory for a user."""
         pass
 ```
+
+**Supported Systems:**
+- **Persona** - Full support
+- **Graphiti** (Zep) - Full support
+- **Honcho** - Coming soon
+- **Mem0** - Experimental
 
 ### Deep Logging Schema
 
@@ -443,16 +507,18 @@ Each question evaluation produces a structured log:
   "retrieval": {
     "query": "How many times did I visit the gym?",
     "duration_ms": 1847,
+    "retrieved_context": "...",  // CRITICAL: Exact string passed to LLM
     "vector_search": {
       "top_k": 5,
       "seeds": [
-        {"node_id": "episode_42", "score": 0.94, "type": "episode"}
+        {"node_id": "episode_42", "score": 0.94, "type": "episode", "content": "..."}
       ]
     },
     "graph_traversal": {
       "max_hops": 2,
       "nodes_visited": 23,
-      "final_ranked_nodes": ["episode_42", "episode_38"]
+      "final_ranked_nodes": ["episode_42", "episode_38"],
+      "node_details": {"episode_42": {"type": "episode", "content": "..."}}
     },
     "context_size_tokens": 3452
   },
