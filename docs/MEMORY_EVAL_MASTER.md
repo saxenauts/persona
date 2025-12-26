@@ -1,8 +1,8 @@
 # Memory Eval System: Master Document
 
 **Status:** Living document - consolidates all eval research and planning
-**Last Updated:** 2025-12-25
-**Branch:** `evals/v1`
+**Last Updated:** 2025-12-26
+**Branch:** `main` (V2 Modular)
 
 ---
 
@@ -628,8 +628,113 @@ def evaluate_question(q: Question, memory_system: MemoryAdapter) -> EvalResult:
 
 ---
 
+## Part 11: Modular Architecture Implementation (v2)
+
+### Architecture Overview
+The evaluation framework has been fully transitioned to a modular, async-first architecture. This design decouples the orchestration logic from specific benchmarks and metrics, allowing for high concurrency and robust error handling.
+
+```mermaid
+graph TD
+    subgraph "Core Layer"
+        models[Models: TestCase, RunResult]
+        interfaces[Interfaces: Protocols]
+        compat[Compat: Legacy Wrappers]
+    end
+
+    subgraph "Engine Layer"
+        executor[AsyncExecutor: Concurrency & Rate Limits]
+        engine[Engine: Orchestrator]
+    end
+
+    subgraph "Metrics Layer"
+        base[BaseMetric]
+        m_judge[LLM Judges]
+        m_retrieval[Retrieval Metrics]
+        m_match[Exact Match]
+    end
+
+    subgraph "Benchmarks Layer"
+        registry[Benchmark Registry]
+        b_persona[PersonaMem]
+        b_longmem[LongMemEval]
+    end
+
+    engine --> executor
+    engine --> base
+    engine --> registry
+    registry --> b_persona
+    registry --> b_longmem
+    base --> m_judge
+    base --> m_retrieval
+    base --> m_match
+```
+
+### Module Descriptions
+
+| Module | Purpose | Key Components |
+|:---|:---|:---|
+| **`core`** | Foundation types and interfaces. | `TestCase`, `QueryResult`, `MemorySystemAdapter` Protocol |
+| **`engine`** | Orchestration and execution. | `Engine`, `AsyncExecutor` (with TokenBucket rate limiting) |
+| **`metrics`** | Evaluation logic and judges. | `LLMBinaryJudge`, `ContextPrecision`, `AbstentionAccuracy` |
+| **`benchmarks`** | Standardized evaluation sets. | `PersonaMemBenchmark`, `LongMemEvalBenchmark` |
+| **`tests`** | Framework verification. | 80+ tests covering all modular components |
+
+### Key Design Decisions
+**1. Protocol-based Interfaces**: Uses structural subtyping (Protocols) instead of rigid inheritance. Any class implementing `ingest` and `retrieve` can be used as an adapter without inheriting from a base class.
+**2. Structured QueryResult**: Every system interaction returns a rich `QueryResult` object containing not just the answer, but retrieved nodes, usage stats, and timing data.
+**3. Binary Judgment Focus**: Moves away from noisy 1-5 scales. Metrics emphasize binary pass/fail outcomes, which are easier to calibrate and more consistent across judges.
+**4. Async-First Engine**: Built from the ground up to handle high-concurrency evaluation runs with built-in retries and rate limiting per-adapter.
+**5. Composable Metrics**: Metrics are single-purpose (e.g., `ContainsAnswer`, `OptionExtractor`) and can be composed into complex scoring logic using `AllOf` or `AnyOf` wrappers.
+
+### Usage Example
+```python
+from evals.core import wrap_legacy_adapter
+from evals.engine import create_default_engine
+from evals.benchmarks import LongMemEvalBenchmark
+from evals.adapters.persona_adapter import PersonaAdapter
+
+# Wrap legacy adapter for v2 compatibility
+legacy = PersonaAdapter()
+adapter = wrap_legacy_adapter(legacy, name="persona")
+
+# Create engine with concurrency control
+engine = create_default_engine(concurrency=10)
+
+# Run evaluation on LongMemEval
+result = await engine.run(
+    benchmark=LongMemEvalBenchmark(),
+    adapter=adapter,
+    metric_names=["llm_binary_judge", "abstention_accuracy"],
+    resources={"llm": llm_client},
+)
+
+# Output summary report
+print(result.summary())
+```
+
+### Available Metrics (8)
+**Answer Quality:**
+- `llm_binary_judge`: Reference-based LLM judgment of correctness.
+- `abstention_accuracy`: Specifically evaluates if the system correctly refuses to answer when information is absent.
+- `semantic_similarity`: Measures vector cosine similarity between generated and gold answers.
+
+**Retrieval Performance:**
+- `context_precision`: Measures the proportion of relevant chunks in the retrieved context.
+- `context_recall`: Measures the proportion of ground-truth information found in retrieved context.
+
+**String / Selection:**
+- `binary_exact_match`: Strict string comparison.
+- `option_extractor`: Extracts selection (A/B/C) from generated responses.
+- `contains_answer`: Fuzzy check if gold answer is present in generation.
+
+### Available Benchmarks
+- **PersonaMem**: Tests deep personalization across 100+ turn histories.
+- **LongMemEval**: Focuses on cross-session linking and temporal reasoning with 500+ questions.
+
+---
+
 *This document consolidates: INTERNAL_LEARNINGS.md, EVAL_SYSTEM_PLAN.md, BENCHMARK_RESEARCH.md, EVAL_FRAMEWORK_RESEARCH.md*
 
 *Supersedes all previous docs. Single source of truth.*
 
-*Last research update: Dec 25, 2025 - Added Eugene Yan, Hamel Husain insights, simplified architecture.*
+*Last research update: Dec 26, 2025 - Documented modular V2 architecture.*

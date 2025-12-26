@@ -30,7 +30,7 @@ from .interfaces import (
     EventStore,
 )
 
-from .compat import LegacyAdapterWrapper
+from .compat import LegacyAdapterWrapper, wrap_legacy_adapter
 
 __all__ = [
     # Models
@@ -54,4 +54,5 @@ __all__ = [
     "EventStore",
     # Compat
     "LegacyAdapterWrapper",
+    "wrap_legacy_adapter",
 ]
