@@ -63,6 +63,8 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
 5. **ContextFormatter** (`core/context.py`)
    - Transforms memories into XML context
    - Groups by type for LLM readability
+   - Supports multiple context views (profile, timeline, tasks, graph)
+   - Research-based ordering: UserCard first (primacy), Episodes last (recency)
 
 ## Data Flow
 
@@ -201,6 +203,68 @@ Every extracted memory includes source tracking:
 | `session_id` | Which conversation it came from |
 | `extraction_model` | LLM used (e.g., "gpt-4o-mini") |
 | `extraction_confidence` | Future: confidence score |
+
+## Context Engineering
+
+Research-backed context formatting based on "Lost in the Middle" (Stanford) and StructRAG findings.
+
+### UserCard
+
+A compact identity anchor placed at the start of context (primacy position):
+
+```python
+from persona.models.memory import UserCard
+
+card = UserCard(
+    user_id="user_123",
+    name="Alex",
+    roles=["software engineer", "parent"],
+    core_values=["work-life balance", "continuous learning"],
+    current_focus=["career transition", "health goals"],
+)
+```
+
+### Context Views
+
+Query-adaptive structure selection via `ContextView` enum:
+
+| View | Use Case | Ordering |
+|------|----------|----------|
+| `PROFILE` | Identity questions ("who am I?") | Psyche → Notes → Episodes |
+| `TIMELINE` | Temporal queries ("last week") | Chronological episodes |
+| `TASKS` | Action queries ("my tasks") | Active notes first |
+| `GRAPH_NEIGHBORHOOD` | Entity queries | Entity-linked memories |
+
+```python
+from persona.core.context import ContextView
+
+# View is auto-routed based on query
+context = await retriever.get_context(
+    query="What happened last week?",  # → TIMELINE view
+    user_timezone="America/Los_Angeles"
+)
+```
+
+### Memory Importance
+
+All memories have an `importance` field (0.0-1.0) used for ordering within context:
+
+```python
+from persona.models.memory import Episode
+
+episode = Episode(
+    content="Got promoted to senior engineer",
+    importance=0.9,  # High importance, appears earlier in context
+    ...
+)
+```
+
+### Link Scoring
+
+Graph traversal scores linked memories based on:
+- Base importance field
+- Entity matches from QueryExpansion (+0.2 per match)
+- Recency bonus for episodes (<7 days: +0.3, <30 days: +0.1)
 
 ## Further Reading
 
