@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Type, Union
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from persona.models.memory import (
     Memory,
     MemoryLink,
@@ -8,6 +8,19 @@ from persona.models.memory import (
     PsycheMemory,
     NoteMemory,
 )
+
+
+class ContextBudget(BaseModel):
+    """Token budget allocation for context building.
+
+    Inspired by SillyTavern's "golden reserve" pattern - always include
+    core identity traits, then fill remaining budget by recency/relevance.
+    """
+
+    total_tokens: int = 4000
+    psyche_budget: int = 800
+    episode_budget: int = 2500
+    note_budget: int = 700
 
 
 # =============================================================================
@@ -75,48 +88,43 @@ class MemoryAdapter:
 
 
 class ContextFormatter:
-    """
-    Formats retrieved memories into LLM-optimized context.
+    """Formats retrieved memories into LLM-optimized context."""
 
-    Design principles:
-    1. Semantic content first - no IDs for general consumption
-    2. Shallow, flat structure with explicit XML tags
-    3. Group by type for easy scanning
-    """
+    CHARS_PER_TOKEN = 4
 
     def format_context(
         self,
         memories: List[Memory],
         links: List[MemoryLink] = None,
         max_nodes: int = 50,
+        budget: Optional[ContextBudget] = None,
     ) -> str:
-        """
-        Build LLM context from memories.
-        """
+        """Build LLM context from memories with optional token budget."""
         limited_memories = memories[:max_nodes]
 
-        # Group by type
         episodes = [m for m in limited_memories if isinstance(m, EpisodeMemory)]
         psyches = [m for m in limited_memories if isinstance(m, PsycheMemory)]
         notes = [m for m in limited_memories if isinstance(m, NoteMemory)]
 
+        if budget:
+            episodes = self._fit_to_budget(episodes, budget.episode_budget)
+            psyches = self._fit_to_budget(psyches, budget.psyche_budget)
+            notes = self._fit_to_budget(notes, budget.note_budget)
+
         lines = ["<memory_context>"]
 
-        # Episodes - temporal memories
         if episodes:
             lines.append("<episodes>")
             for ep in episodes:
                 lines.append(self._format_episode(ep))
             lines.append("</episodes>")
 
-        # Psyche - identity/preference memories
         if psyches:
             lines.append("<psyche>")
             for p in psyches:
                 lines.append(self._format_psyche(p))
             lines.append("</psyche>")
 
-        # Notes - structured/unstructured items (tasks, facts, lists, etc.)
         if notes:
             lines.append("<notes>")
             for n in notes:
@@ -125,6 +133,23 @@ class ContextFormatter:
 
         lines.append("</memory_context>")
         return "\n".join(lines)
+
+    def _fit_to_budget(self, memories: list, token_budget: int) -> list:
+        """Select memories that fit within token budget (FIFO by position)."""
+        result = []
+        char_budget = token_budget * self.CHARS_PER_TOKEN
+        used = 0
+
+        for m in memories:
+            content = getattr(m, "content", "") or getattr(m, "title", "") or ""
+            size = len(content) + 50
+            if used + size <= char_budget:
+                result.append(m)
+                used += size
+            else:
+                break
+
+        return result
 
     def _format_episode(self, node: EpisodeMemory) -> str:
         """Format episode with date and semantic content."""
