@@ -99,7 +99,7 @@ class TestRetriever:
         await retriever.get_context("find running memories", top_k=3)
 
         mock_graph_ops.text_similarity_search.assert_called_once_with(
-            query="find running memories", user_id=user_id, limit=3
+            query="find running memories", user_id=user_id, limit=3, date_range=None
         )
 
     @pytest.mark.asyncio

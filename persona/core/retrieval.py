@@ -11,6 +11,7 @@ from uuid import UUID
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
 from persona.core.context import ContextFormatter, convert_to_memories
+from persona.core.query_expansion import expand_query, QueryExpansion, DateRange
 from persona.models.memory import Memory
 from server.logging_config import get_logger
 
@@ -57,6 +58,8 @@ class Retriever:
         top_k: int = 5,
         hop_depth: int = 1,
         include_static: bool = True,
+        user_timezone: str = "UTC",
+        use_query_expansion: bool = True,
     ) -> str:
         """
         Get formatted context for a user query.
@@ -66,11 +69,25 @@ class Retriever:
             top_k: Number of vector search results.
             hop_depth: How many relationship hops to crawl.
             include_static: Whether to include static context (active goals, psyche).
+            user_timezone: User's timezone for temporal query parsing.
+            use_query_expansion: Whether to use LLM-enhanced query expansion.
 
         Returns:
             XML-formatted context string.
         """
         all_memories: dict[UUID, Memory] = {}
+        expansion: Optional[QueryExpansion] = None
+
+        # 0. Query Expansion (LLM-enhanced parsing of temporal refs, entities)
+        if use_query_expansion:
+            try:
+                expansion = await expand_query(query, user_timezone=user_timezone)
+                logger.debug(
+                    f"Query expansion: date_range={expansion.date_range}, "
+                    f"entities={expansion.entities}, semantic_query={expansion.semantic_query}"
+                )
+            except Exception as e:
+                logger.warning(f"Query expansion failed: {e}")
 
         # 1. Static Context (always-on background)
         if include_static:
@@ -80,7 +97,12 @@ class Retriever:
             logger.debug(f"Static context: {len(static)} memories")
 
         # 2. Vector Search (query-specific)
-        seeds, _seed_nodes = await self._vector_search(query, top_k)
+        # Use semantic_query if expansion succeeded, otherwise raw query
+        search_query = expansion.semantic_query if expansion else query
+        date_range = expansion.date_range if expansion else None
+        seeds, _seed_nodes = await self._vector_search(
+            search_query, top_k, date_range=date_range
+        )
         for m in seeds:
             all_memories[m.id] = m
         logger.debug(f"Vector search: {len(seeds)} seeds")
@@ -106,12 +128,38 @@ class Retriever:
         top_k: int = 5,
         hop_depth: int = 1,
         include_static: bool = True,
+        user_timezone: str = "UTC",
+        use_query_expansion: bool = True,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Get formatted context plus retrieval stats for logging.
         """
         all_memories: dict[UUID, Memory] = {}
         stats: Dict[str, Any] = {}
+        expansion: Optional[QueryExpansion] = None
+
+        # 0. Query Expansion
+        if use_query_expansion:
+            try:
+                expansion_start = time.time()
+                expansion = await expand_query(query, user_timezone=user_timezone)
+                expansion_ms = (time.time() - expansion_start) * 1000
+                stats["query_expansion"] = {
+                    "original_query": query,
+                    "semantic_query": expansion.semantic_query,
+                    "date_range": (
+                        {
+                            "start": str(expansion.date_range.start),
+                            "end": str(expansion.date_range.end),
+                        }
+                        if expansion.date_range
+                        else None
+                    ),
+                    "entities": expansion.entities,
+                    "duration_ms": expansion_ms,
+                }
+            except Exception as e:
+                logger.warning(f"Query expansion failed: {e}")
 
         # 1. Static Context
         if include_static:
@@ -121,8 +169,12 @@ class Retriever:
             stats["static_count"] = len(static)
 
         # 2. Vector Search
+        search_query = expansion.semantic_query if expansion else query
+        date_range = expansion.date_range if expansion else None
         vector_start = time.time()
-        seeds, seed_nodes = await self._vector_search(query, top_k)
+        seeds, seed_nodes = await self._vector_search(
+            search_query, top_k, date_range=date_range
+        )
         vector_ms = (time.time() - vector_start) * 1000
         for m in seeds:
             all_memories[m.id] = m
@@ -191,20 +243,32 @@ class Retriever:
         return memories
 
     async def _vector_search(
-        self, query: str, top_k: int
+        self, query: str, top_k: int, date_range: Optional[DateRange] = None
     ) -> Tuple[List[Memory], List[Dict[str, Any]]]:
         """
         Semantic similarity search.
 
         Embeds the query and finds top-K most similar memories.
-        Handles date parsing from query string (e.g., "(date: 2023-05-29) ...")
+
+        Args:
+            query: The search query (ideally cleaned semantic_query from expansion).
+            top_k: Number of results to return.
+            date_range: Optional DateRange from query expansion (takes precedence over
+                        inline date parsing).
         """
-        # Extra date extraction
-        date_range = self._extract_date_filter(query)
+        # Use provided date_range or fall back to inline extraction
+        effective_date_range = None
+        if date_range:
+            effective_date_range = (date_range.start, date_range.end)
+        else:
+            effective_date_range = self._extract_date_filter(query)
 
         try:
             results = await self.graph_ops.text_similarity_search(
-                query=query, user_id=self.user_id, limit=top_k, date_range=date_range
+                query=query,
+                user_id=self.user_id,
+                limit=top_k,
+                date_range=effective_date_range,
             )
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
