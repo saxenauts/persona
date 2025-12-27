@@ -2,9 +2,11 @@ import requests
 import os
 from .base import MemorySystem
 
+
 class PersonaAdapter(MemorySystem):
     def __init__(self):
-        self.base_url = "http://localhost:8000/api/v1"
+        port = os.environ.get("PERSONA_PORT", "8000")
+        self.base_url = f"http://localhost:{port}/api/v1"
         self.last_ingest_stats = None
         self.last_query_stats = None
 
@@ -12,8 +14,8 @@ class PersonaAdapter(MemorySystem):
         # First ensure user exists
         resp = requests.post(f"{self.base_url}/users/{user_id}")
         if resp.status_code not in [200, 201]:
-             print(f"Persona Create User Error: {resp.status_code} - {resp.text}")
-             resp.raise_for_status()
+            print(f"Persona Create User Error: {resp.status_code} - {resp.text}")
+            resp.raise_for_status()
 
         # Ingest
         response = requests.post(
@@ -21,9 +23,9 @@ class PersonaAdapter(MemorySystem):
             json={
                 "title": f"Session {date}",
                 "content": session_data,
-                "metadata": {"date": date}
+                "metadata": {"date": date},
             },
-            timeout=300  # Increased timeout for large batches
+            timeout=300,  # Increased timeout for large batches
         )
         if response.status_code != 201:
             print(f"Persona Ingest Error: {response.status_code} - {response.text}")
@@ -40,21 +42,24 @@ class PersonaAdapter(MemorySystem):
         """
         # Create user if needed
         requests.post(f"{self.base_url}/users/{user_id}")
-        
+
         # Prepare batch payload using new API format
         items = []
         for s in sessions:
             content = f"Date: {s['date']}\n\n{s['content']}"
-            items.append({
-                "content": content,
-                "source_type": "conversation"
-            })
-            
+            items.append({"content": content, "source_type": "conversation"})
+
         payload = {"items": items}
-        
+
         try:
-            print(f"      → Calling /ingest/batch with {len(items)} items...", flush=True)
-            resp = requests.post(f"{self.base_url}/users/{user_id}/ingest/batch", json=payload, timeout=300)
+            print(
+                f"      → Calling /ingest/batch with {len(items)} items...", flush=True
+            )
+            resp = requests.post(
+                f"{self.base_url}/users/{user_id}/ingest/batch",
+                json=payload,
+                timeout=300,
+            )
             resp.raise_for_status()
             print(f"      → Batch ingest complete", flush=True)
             try:
@@ -63,7 +68,7 @@ class PersonaAdapter(MemorySystem):
                 self.last_ingest_stats = None
         except Exception as e:
             print(f"[PersonaAdapter] Batch ingest failed: {e}")
-            if hasattr(e, 'response') and e.response:
+            if hasattr(e, "response") and e.response:
                 print(f"  Response: {e.response.text}")
             raise e
 
@@ -71,10 +76,10 @@ class PersonaAdapter(MemorySystem):
         # Benchmark usually asks for an answer.
         # Check API docs in README:
         # POST /api/v1/users/{user_id}/rag/query
-        
+
         response = requests.post(
             f"{self.base_url}/users/{user_id}/rag/query",
-            json={"query": query, "include_stats": True}
+            json={"query": query, "include_stats": True},
         )
         if response.status_code != 200:
             print(f"Persona Query Error: {response.status_code} - {response.text}")

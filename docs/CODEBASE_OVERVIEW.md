@@ -66,6 +66,25 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Supports multiple context views (profile, timeline, tasks, graph)
    - Research-based ordering: UserCard first (primacy), Episodes last (recency)
 
+### Services
+
+Business logic layer between API and core:
+
+1. **MemoryIngestionService** (`services/ingestion_service.py`)
+   - Extracts memories from raw text using LLM
+   - Creates Episode, Psyche, and Note memories
+   - Handles temporal linking between episodes
+
+2. **UserCardService** (`services/user_service.py`)
+   - Synthesizes UserCard from Psyche memories + active Notes
+   - Uses LLM to generate name, roles, values, current focus
+   - Falls back to rule-based extraction on LLM failure
+   - Cached per session (lazy generation on first query)
+
+3. **RAGService** (`services/rag_service.py`)
+   - Thin wrapper around RAGInterface for API use
+   - Handles async context management
+
 ## Data Flow
 
 ### Ingestion

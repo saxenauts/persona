@@ -119,7 +119,9 @@ Synthesize into a user profile JSON."""
             ChatMessage(role="user", content=user_prompt),
         ]
 
-        response = await self.chat_client.chat(messages, json_mode=True)
+        response = await self.chat_client.chat(
+            messages, response_format={"type": "json_object"}
+        )
 
         import json
 
