@@ -15,26 +15,28 @@ logger = get_logger(__name__)
 
 class Neo4jGraphDatabase(GraphDatabase):
     """Neo4j implementation of GraphDatabase interface."""
-    
+
     def __init__(self):
         self.uri = config.NEO4J.URI
         self.username = config.NEO4J.USER
         self.password = config.NEO4J.PASSWORD
         self.driver = None
-    
+
     async def initialize(self) -> None:
         """Initialize the connection and wait for Neo4j to be ready."""
         await self._connect()
         await self._wait_for_ready()
-    
+
     async def _connect(self) -> None:
-        """Create the driver connection."""
         self.driver = AsyncGraphDatabase.driver(
             self.uri,
             auth=basic_auth(self.username, self.password),
-            max_connection_lifetime=3600
+            max_connection_pool_size=50,
+            connection_acquisition_timeout=60.0,
+            max_connection_lifetime=3600,
+            keep_alive=True,
         )
-    
+
     async def _wait_for_ready(self, timeout: int = 60) -> None:
         """Wait for Neo4j to be ready."""
         start_time = time.time()
@@ -53,16 +55,16 @@ class Neo4jGraphDatabase(GraphDatabase):
                     logger.error(f"Failed to connect to Neo4j after {timeout} seconds.")
                     raise e
                 await asyncio.sleep(2)
-    
+
     async def close(self) -> None:
         if self.driver:
             await self.driver.close()
             self.driver = None
-    
+
     async def clean_graph(self) -> None:
         async with self.driver.session() as session:
             await session.run("MATCH (n) DETACH DELETE n")
-    
+
     # Node Operations
     async def create_nodes(self, nodes: List[Dict[str, Any]], user_id: str) -> None:
         if not await self.user_exists(user_id):
@@ -91,10 +93,9 @@ class Neo4jGraphDatabase(GraphDatabase):
 
                 props[k] = json.dumps(v) if is_complex else v
 
-            grouped_rows.setdefault(labels, []).append({
-                "name": node["name"],
-                "props": props
-            })
+            grouped_rows.setdefault(labels, []).append(
+                {"name": node["name"], "props": props}
+            )
 
         async with self.driver.session() as session:
             for labels, rows in grouped_rows.items():
@@ -106,7 +107,7 @@ class Neo4jGraphDatabase(GraphDatabase):
                 SET n += row.props
                 """
                 await session.run(query, rows=rows, user_id=user_id)
-    
+
     async def get_node(self, node_name: str, user_id: str) -> Optional[Dict[str, Any]]:
         # Return all node properties as flat dict
         query = """
@@ -120,7 +121,7 @@ class Neo4jGraphDatabase(GraphDatabase):
                 node = dict(record["n"])
                 return node
             return None
-    
+
     async def get_all_nodes(self, user_id: str) -> List[Dict[str, Any]]:
         # Return all node properties as flat dicts
         query = """
@@ -135,30 +136,40 @@ class Neo4jGraphDatabase(GraphDatabase):
                 node = dict(record["n"])
                 nodes.append(node)
             return nodes
-    
-    async def check_node_exists(self, node_name: str, node_type: str, user_id: str) -> bool:
+
+    async def check_node_exists(
+        self, node_name: str, node_type: str, user_id: str
+    ) -> bool:
         query = """
         MATCH (n {name: $node_name, NodeType: $node_type, UserId: $user_id})
         RETURN n.name AS NodeName
         """
         async with self.driver.session() as session:
-            result = await session.run(query, node_name=node_name, node_type=node_type, user_id=user_id)
+            result = await session.run(
+                query, node_name=node_name, node_type=node_type, user_id=user_id
+            )
             return result.single() is not None
-    
+
     # Relationship Operations
-    async def create_relationships(self, relationships: List[Dict[str, Any]], user_id: str) -> None:
+    async def create_relationships(
+        self, relationships: List[Dict[str, Any]], user_id: str
+    ) -> None:
         if not await self.user_exists(user_id):
-            logger.warning(f"User {user_id} does not exist. Cannot create relationships.")
+            logger.warning(
+                f"User {user_id} does not exist. Cannot create relationships."
+            )
             return
 
         grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
         for relationship in relationships:
             relation_type = relationship["relation"].upper().replace(" ", "_")
-            grouped_rows.setdefault(relation_type, []).append({
-                "source": relationship["source"],
-                "target": relationship["target"],
-                "value": relationship.get("value")
-            })
+            grouped_rows.setdefault(relation_type, []).append(
+                {
+                    "source": relationship["source"],
+                    "target": relationship["target"],
+                    "value": relationship.get("value"),
+                }
+            )
 
         async with self.driver.session() as session:
             for relation_type, rows in grouped_rows.items():
@@ -175,8 +186,10 @@ class Neo4jGraphDatabase(GraphDatabase):
                     )
                 """
                 await session.run(query, rows=rows, user_id=user_id)
-    
-    async def get_node_relationships(self, node_name: str, user_id: str) -> List[Dict[str, Any]]:
+
+    async def get_node_relationships(
+        self, node_name: str, user_id: str
+    ) -> List[Dict[str, Any]]:
         query = """
         MATCH (n:NodeName {name: $node_name, UserId: $user_id})-[r]-(m:NodeName)
         RETURN type(r) AS relation, m.name AS related_node, r.value AS value,
@@ -186,14 +199,18 @@ class Neo4jGraphDatabase(GraphDatabase):
             result = await session.run(query, node_name=node_name, user_id=user_id)
             return [
                 {
-                    "source": node_name if record["direction"] == "outgoing" else record["related_node"],
-                    "target": record["related_node"] if record["direction"] == "outgoing" else node_name,
+                    "source": node_name
+                    if record["direction"] == "outgoing"
+                    else record["related_node"],
+                    "target": record["related_node"]
+                    if record["direction"] == "outgoing"
+                    else node_name,
                     "relation": record["relation"],
-                    "value": record["value"]
-                } 
+                    "value": record["value"],
+                }
                 for record in await result.data()
             ]
-    
+
     async def get_all_relationships(self, user_id: str) -> List[Dict[str, Any]]:
         query = """
         MATCH (source:NodeName {UserId: $user_id})-[r]->(target:NodeName {UserId: $user_id})
@@ -202,7 +219,7 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
             return await result.data()
-    
+
     # User Management
     async def create_user(self, user_id: str) -> None:
         query = """
@@ -212,7 +229,7 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
         logger.info(f"User {user_id} created successfully.")
-    
+
     async def user_exists(self, user_id: str) -> bool:
         query = """
         MATCH (u:User {id: $user_id})
@@ -221,8 +238,8 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
             record = await result.single()
-            return record and record['exists']
-    
+            return record and record["exists"]
+
     async def delete_user(self, user_id: str) -> None:
         query1 = """
         MATCH (n {UserId: $user_id})
