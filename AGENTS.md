@@ -53,10 +53,11 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 ## Key Architecture Patterns
 
-1. **Unified Memory Model**: All data stored as `Episode`, `Psyche`, or `Goal` types
+1. **Unified Memory Model**: All data stored as `Episode`, `Psyche`, or `Note` types
 2. **PersonaAdapter**: Single entry point for ingestion (extracts, links, persists)
-3. **Retriever**: Vector similarity + graph traversal for context retrieval
-4. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()`
+3. **Retriever**: Vector similarity + graph traversal + query expansion for context retrieval
+4. **QueryExpansion**: LLM-enhanced parsing of temporal refs and entities
+5. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()`
 
 ## Environment Configuration
 
