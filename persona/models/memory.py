@@ -36,6 +36,15 @@ class BaseMemory(BaseModel):
     # Provenance
     source_type: str = Field(default="conversation")
     source_ref: Optional[str] = Field(default=None)
+    session_id: Optional[str] = Field(
+        default=None, description="Source conversation session ID"
+    )
+    extraction_model: Optional[str] = Field(
+        default=None, description="LLM model that extracted this memory"
+    )
+    extraction_confidence: Optional[float] = Field(
+        default=None, description="Extraction confidence 0-1"
+    )
 
     # Retrieval
     embedding: Optional[List[float]] = Field(default=None)
@@ -55,7 +64,6 @@ class EpisodeMemory(BaseMemory):
     """Narrative memory of an event."""
 
     type: Literal["episode"] = Field(default="episode")
-    session_id: Optional[str] = None
     summary: Optional[str] = None
 
 

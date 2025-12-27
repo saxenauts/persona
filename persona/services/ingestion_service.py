@@ -28,6 +28,7 @@ from persona.models.memory import (
 from persona.llm.client_factory import get_chat_client, get_embedding_client
 from persona.llm.providers.base import ChatMessage
 from server.logging_config import get_logger
+from server.config import config
 
 logger = get_logger(__name__)
 
@@ -146,6 +147,9 @@ class MemoryIngestionService:
             extraction = await self._extract(raw_content, timestamp, source_type)
             extract_time_ms = (time.time() - start_extract) * 1000
 
+            # Get extraction model for provenance
+            extraction_model = config.MACHINE_LEARNING.LLM_SERVICE or "unknown"
+
             memories: List[Memory] = []
             links: List[MemoryLink] = []
 
@@ -163,6 +167,7 @@ class MemoryIngestionService:
                 session_id=session_id,
                 source_type=source_type,
                 source_ref=source_ref,
+                extraction_model=extraction_model,
                 user_id=user_id,
             )
             memories.append(episode)
@@ -177,7 +182,9 @@ class MemoryIngestionService:
                     timestamp=timestamp,
                     created_at=datetime.utcnow(),
                     day_id=day_id,
+                    session_id=session_id,
                     source_type=source_type,
+                    extraction_model=extraction_model,
                     user_id=user_id,
                 )
                 memories.append(psyche)
@@ -201,7 +208,9 @@ class MemoryIngestionService:
                     timestamp=timestamp,
                     created_at=datetime.utcnow(),
                     day_id=day_id,
+                    session_id=session_id,
                     source_type=source_type,
+                    extraction_model=extraction_model,
                     user_id=user_id,
                 )
                 memories.append(note)
