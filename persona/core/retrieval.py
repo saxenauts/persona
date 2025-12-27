@@ -10,9 +10,9 @@ from uuid import UUID
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.core.context import ContextFormatter, convert_to_memories
+from persona.core.context import ContextFormatter, convert_to_memories, ContextView
 from persona.core.query_expansion import expand_query, QueryExpansion, DateRange
-from persona.models.memory import Memory
+from persona.models.memory import Memory, UserCard
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -60,6 +60,7 @@ class Retriever:
         include_static: bool = True,
         user_timezone: str = "UTC",
         use_query_expansion: bool = True,
+        user_card: Optional[UserCard] = None,
     ) -> str:
         """
         Get formatted context for a user query.
@@ -71,6 +72,7 @@ class Retriever:
             include_static: Whether to include static context (active goals, psyche).
             user_timezone: User's timezone for temporal query parsing.
             use_query_expansion: Whether to use LLM-enhanced query expansion.
+            user_card: Optional UserCard for identity anchor (placed first in context).
 
         Returns:
             XML-formatted context string.
@@ -78,7 +80,6 @@ class Retriever:
         all_memories: dict[UUID, Memory] = {}
         expansion: Optional[QueryExpansion] = None
 
-        # 0. Query Expansion (LLM-enhanced parsing of temporal refs, entities)
         if use_query_expansion:
             try:
                 expansion = await expand_query(query, user_timezone=user_timezone)
@@ -89,15 +90,14 @@ class Retriever:
             except Exception as e:
                 logger.warning(f"Query expansion failed: {e}")
 
-        # 1. Static Context (always-on background)
+        view = self._route_context_view(query, expansion)
+
         if include_static:
             static = await self._get_static_context()
             for m in static:
                 all_memories[m.id] = m
             logger.debug(f"Static context: {len(static)} memories")
 
-        # 2. Vector Search (query-specific)
-        # Use semantic_query if expansion succeeded, otherwise raw query
         search_query = expansion.semantic_query if expansion else query
         date_range = expansion.date_range if expansion else None
         seeds, _seed_nodes = await self._vector_search(
@@ -107,20 +107,78 @@ class Retriever:
             all_memories[m.id] = m
         logger.debug(f"Vector search: {len(seeds)} seeds")
 
-        # 3. Graph Crawl (expand from seeds)
-        expanded = await self._expand_graph(seeds, hop_depth)
+        expanded = await self._expand_graph(seeds, hop_depth, query_expansion=expansion)
         for m in expanded:
             all_memories[m.id] = m
         logger.debug(f"Graph expansion: {len(expanded)} total after crawl")
 
-        # 4. Format
         memories = list(all_memories.values())
-        context = self.formatter.format_context(memories)
+        context = self.formatter.format_context(
+            memories, user_card=user_card, view=view
+        )
         logger.info(
-            f"Retriever: {len(memories)} memories, {len(context)} chars context"
+            f"Retriever: {len(memories)} memories, {len(context)} chars, view={view.value}"
         )
 
         return context
+
+    def _route_context_view(
+        self, query: str, expansion: Optional[QueryExpansion]
+    ) -> ContextView:
+        """
+        Route to appropriate context view based on query intent.
+
+        Uses query keywords and expansion signals to determine view:
+        - TIMELINE: temporal queries ("what happened", date ranges)
+        - TASKS: task/goal queries ("what should I do", "my tasks")
+        - PROFILE: identity queries ("who am I", "what do I like")
+        - GRAPH_NEIGHBORHOOD: entity-focused ("about X", specific topics)
+        """
+        query_lower = query.lower()
+
+        if expansion and expansion.date_range:
+            return ContextView.TIMELINE
+
+        timeline_signals = [
+            "what happened",
+            "when did",
+            "last week",
+            "yesterday",
+            "recently",
+            "history",
+            "timeline",
+        ]
+        if any(s in query_lower for s in timeline_signals):
+            return ContextView.TIMELINE
+
+        task_signals = [
+            "what should i do",
+            "my tasks",
+            "todo",
+            "to-do",
+            "goals",
+            "priorities",
+            "what's next",
+            "action items",
+        ]
+        if any(s in query_lower for s in task_signals):
+            return ContextView.TASKS
+
+        profile_signals = [
+            "who am i",
+            "what do i like",
+            "my preferences",
+            "about me",
+            "my values",
+            "my personality",
+        ]
+        if any(s in query_lower for s in profile_signals):
+            return ContextView.PROFILE
+
+        if expansion and expansion.entities:
+            return ContextView.GRAPH_NEIGHBORHOOD
+
+        return ContextView.PROFILE
 
     async def get_context_with_stats(
         self,
@@ -130,15 +188,13 @@ class Retriever:
         include_static: bool = True,
         user_timezone: str = "UTC",
         use_query_expansion: bool = True,
+        user_card: Optional[UserCard] = None,
     ) -> Tuple[str, Dict[str, Any]]:
-        """
-        Get formatted context plus retrieval stats for logging.
-        """
+        """Get formatted context plus retrieval stats for logging."""
         all_memories: dict[UUID, Memory] = {}
         stats: Dict[str, Any] = {}
         expansion: Optional[QueryExpansion] = None
 
-        # 0. Query Expansion
         if use_query_expansion:
             try:
                 expansion_start = time.time()
@@ -161,14 +217,15 @@ class Retriever:
             except Exception as e:
                 logger.warning(f"Query expansion failed: {e}")
 
-        # 1. Static Context
+        view = self._route_context_view(query, expansion)
+        stats["context_view"] = view.value
+
         if include_static:
             static = await self._get_static_context()
             for m in static:
                 all_memories[m.id] = m
             stats["static_count"] = len(static)
 
-        # 2. Vector Search
         search_query = expansion.semantic_query if expansion else query
         date_range = expansion.date_range if expansion else None
         vector_start = time.time()
@@ -179,16 +236,18 @@ class Retriever:
         for m in seeds:
             all_memories[m.id] = m
 
-        # 3. Graph Crawl
         graph_start = time.time()
-        expanded, graph_stats = await self._expand_graph_with_stats(seeds, hop_depth)
+        expanded, graph_stats = await self._expand_graph_with_stats(
+            seeds, hop_depth, query_expansion=expansion
+        )
         graph_ms = (time.time() - graph_start) * 1000
         for m in expanded:
             all_memories[m.id] = m
 
-        # 4. Format
         memories = list(all_memories.values())
-        context = self.formatter.format_context(memories)
+        context = self.formatter.format_context(
+            memories, user_card=user_card, view=view
+        )
 
         stats["vector_search"] = {
             "top_k": top_k,
@@ -206,7 +265,7 @@ class Retriever:
 
         logger.info(
             f"Retriever stats: seeds={len(seed_nodes)}, nodes={graph_stats['nodes_visited']}, "
-            f"context_chars={len(context)}"
+            f"context_chars={len(context)}, view={view.value}"
         )
 
         return context, stats
@@ -354,19 +413,17 @@ class Retriever:
         return None
 
     async def _expand_graph(
-        self, seeds: List[Memory], hop_depth: int, max_links_per_node: int = 15
+        self,
+        seeds: List[Memory],
+        hop_depth: int,
+        max_links_per_node: int = 15,
+        query_expansion: Optional[QueryExpansion] = None,
     ) -> List[Memory]:
         """
-        Crawl graph from seed memories.
+        Crawl graph from seed memories with query-aware link scoring.
 
         Follows relationships to find linked memories up to hop_depth.
-        Limits fanout per node to prevent single hub from dominating,
-        but allows full traversal depth to discover interesting connections.
-
-        Args:
-            seeds: Starting memories from vector search.
-            hop_depth: Maximum number of hops to traverse.
-            max_links_per_node: Fanout limit per node (prevents hub domination).
+        Uses query expansion hints to prioritize relevant link types.
         """
         if hop_depth <= 0:
             return seeds
@@ -379,8 +436,11 @@ class Retriever:
             for memory in frontier:
                 try:
                     linked = await self.store.get_connected(memory.id, self.user_id)
-                    linked = linked[:max_links_per_node]
-                    for m in linked:
+                    scored = self._score_links(linked, query_expansion)
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    top_linked = [m for _, m in scored[:max_links_per_node]]
+
+                    for m in top_linked:
                         if m.id not in all_memories:
                             all_memories[m.id] = m
                             next_frontier.append(m)
@@ -394,10 +454,52 @@ class Retriever:
 
         return list(all_memories.values())
 
+    def _score_links(
+        self, linked_memories: List[Memory], expansion: Optional[QueryExpansion]
+    ) -> List[Tuple[float, Memory]]:
+        """
+        Score linked memories based on query relevance.
+
+        Scoring factors:
+        - Memory type priority (psyche > note > episode for identity queries)
+        - Importance field
+        - Entity match (if expansion has entities)
+        - Recency bonus for episodes
+        """
+        scored = []
+        query_entities = set(
+            e.lower() for e in (expansion.entities if expansion else [])
+        )
+
+        for mem in linked_memories:
+            score = getattr(mem, "importance", 0.5)
+
+            if query_entities:
+                mem_text = f"{mem.title} {mem.content}".lower()
+                entity_matches = sum(1 for e in query_entities if e in mem_text)
+                score += entity_matches * 0.2
+
+            if hasattr(mem, "timestamp"):
+                from datetime import datetime, timedelta
+
+                days_old = (datetime.utcnow() - mem.timestamp).days
+                if days_old < 7:
+                    score += 0.3
+                elif days_old < 30:
+                    score += 0.1
+
+            scored.append((score, mem))
+
+        return scored
+
     async def _expand_graph_with_stats(
-        self, seeds: List[Memory], hop_depth: int, max_links_per_node: int = 15
+        self,
+        seeds: List[Memory],
+        hop_depth: int,
+        max_links_per_node: int = 15,
+        query_expansion: Optional[QueryExpansion] = None,
     ) -> Tuple[List[Memory], Dict[str, Any]]:
-        """Crawl graph from seed memories and return traversal stats."""
+        """Crawl graph with stats for logging/debugging."""
         if hop_depth <= 0:
             stats = {
                 "nodes_visited": len(seeds),
@@ -416,8 +518,11 @@ class Retriever:
                 try:
                     linked = await self.store.get_connected(memory.id, self.user_id)
                     relationships_traversed += len(linked)
-                    linked = linked[:max_links_per_node]
-                    for m in linked:
+                    scored = self._score_links(linked, query_expansion)
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    top_linked = [m for _, m in scored[:max_links_per_node]]
+
+                    for m in top_linked:
                         if m.id not in all_memories:
                             all_memories[m.id] = m
                             next_frontier.append(m)

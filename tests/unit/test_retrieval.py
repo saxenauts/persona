@@ -5,10 +5,12 @@ Unit tests for the Retrieval Layer.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from persona.core.retrieval import Retriever
-from persona.models.memory import EpisodeMemory, NoteMemory, PsycheMemory
+from persona.core.context import ContextView
+from persona.core.query_expansion import QueryExpansion, DateRange
+from persona.models.memory import EpisodeMemory, NoteMemory, PsycheMemory, UserCard
 
 
 @pytest.fixture
@@ -256,3 +258,136 @@ class TestRetriever:
         # Default max_links_per_node=15, so from 30 links only 15 should be added
         # Total: 1 seed + 15 linked = 16 max
         assert stats["graph_traversal"]["nodes_visited"] <= 16
+
+
+class TestContextViewRouter:
+    @pytest.fixture
+    def retriever(self, mock_store, mock_graph_ops, user_id):
+        return Retriever(user_id, mock_store, mock_graph_ops)
+
+    def test_timeline_view_from_date_range(self, retriever):
+        expansion = QueryExpansion(
+            original_query="test",
+            date_range=DateRange(
+                start=datetime.now().date() - timedelta(days=7),
+                end=datetime.now().date(),
+            ),
+        )
+        view = retriever._route_context_view("test", expansion)
+        assert view == ContextView.TIMELINE
+
+    def test_timeline_view_from_keywords(self, retriever):
+        view = retriever._route_context_view("what happened last week", None)
+        assert view == ContextView.TIMELINE
+
+    def test_tasks_view_from_keywords(self, retriever):
+        view = retriever._route_context_view("what should i do today", None)
+        assert view == ContextView.TASKS
+
+        view = retriever._route_context_view("show me my tasks", None)
+        assert view == ContextView.TASKS
+
+    def test_profile_view_from_keywords(self, retriever):
+        view = retriever._route_context_view("who am i", None)
+        assert view == ContextView.PROFILE
+
+        view = retriever._route_context_view("what do i like", None)
+        assert view == ContextView.PROFILE
+
+    def test_graph_neighborhood_from_entities(self, retriever):
+        expansion = QueryExpansion(
+            original_query="about Jordan",
+            entities=["Jordan"],
+        )
+        view = retriever._route_context_view("about Jordan", expansion)
+        assert view == ContextView.GRAPH_NEIGHBORHOOD
+
+    def test_default_to_profile(self, retriever):
+        view = retriever._route_context_view("random query", None)
+        assert view == ContextView.PROFILE
+
+
+class TestLinkScoring:
+    @pytest.fixture
+    def retriever(self, mock_store, mock_graph_ops, user_id):
+        return Retriever(user_id, mock_store, mock_graph_ops)
+
+    @pytest.fixture
+    def linked_memories(self, user_id):
+        now = datetime.utcnow()
+        return [
+            EpisodeMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="episode",
+                title="Recent with entity",
+                content="Meeting with Jordan about project",
+                timestamp=now - timedelta(days=1),
+                importance=0.8,
+            ),
+            EpisodeMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="episode",
+                title="Old episode",
+                content="Something old",
+                timestamp=now - timedelta(days=60),
+                importance=0.3,
+            ),
+            PsycheMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="psyche",
+                content="Important trait",
+                importance=0.9,
+            ),
+        ]
+
+    def test_scoring_boosts_recent_episodes(self, retriever, linked_memories):
+        scored = retriever._score_links(linked_memories, None)
+        scores = {m.title if hasattr(m, "title") else m.content: s for s, m in scored}
+        assert scores["Recent with entity"] > scores["Old episode"]
+
+    def test_scoring_boosts_entity_matches(self, retriever, linked_memories):
+        expansion = QueryExpansion(original_query="about Jordan", entities=["Jordan"])
+        scored = retriever._score_links(linked_memories, expansion)
+        scores = {m.title if hasattr(m, "title") else m.content: s for s, m in scored}
+        assert scores["Recent with entity"] > scores["Old episode"]
+
+    def test_scoring_uses_importance_field(self, retriever, linked_memories):
+        scored = retriever._score_links(linked_memories, None)
+        high_importance = [m for s, m in scored if m.importance >= 0.8]
+        low_importance = [m for s, m in scored if m.importance < 0.5]
+        assert len(high_importance) > 0
+        assert len(low_importance) > 0
+
+
+class TestUserCardIntegration:
+    @pytest.mark.asyncio
+    async def test_get_context_with_user_card(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get_by_type.return_value = []
+
+        card = UserCard(user_id=user_id, name="Test User", current_focus=["Testing"])
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context = await retriever.get_context("test", user_card=card)
+
+        assert "<user_card>" in context
+        assert "Test User" in context
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_stats_includes_view(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get_by_type.return_value = []
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_stats(
+            "what happened yesterday"
+        )
+
+        assert "context_view" in stats
+        assert stats["context_view"] == "timeline"

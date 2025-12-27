@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Optional, List, Dict, Any, Type, Union
 from pydantic import BaseModel, TypeAdapter
 from persona.models.memory import (
@@ -7,19 +8,26 @@ from persona.models.memory import (
     EpisodeMemory,
     PsycheMemory,
     NoteMemory,
+    UserCard,
 )
 
 
-class ContextBudget(BaseModel):
-    """Token budget allocation for context building.
+class ContextView(str, Enum):
+    """Context presentation view based on query intent."""
 
-    Inspired by SillyTavern's "golden reserve" pattern - always include
-    core identity traits, then fill remaining budget by recency/relevance.
-    """
+    PROFILE = "profile"
+    TIMELINE = "timeline"
+    TASKS = "tasks"
+    GRAPH_NEIGHBORHOOD = "graph_neighborhood"
+
+
+class ContextBudget(BaseModel):
+    """Token budget allocation for context building."""
 
     total_tokens: int = 4000
-    psyche_budget: int = 800
-    episode_budget: int = 2500
+    user_card_budget: int = 300
+    psyche_budget: int = 600
+    episode_budget: int = 2400
     note_budget: int = 700
 
 
@@ -98,8 +106,18 @@ class ContextFormatter:
         links: List[MemoryLink] = None,
         max_nodes: int = 50,
         budget: Optional[ContextBudget] = None,
+        user_card: Optional[UserCard] = None,
+        view: ContextView = ContextView.PROFILE,
     ) -> str:
-        """Build LLM context from memories with optional token budget."""
+        """
+        Build LLM context from memories with research-based ordering.
+
+        Ordering based on "Lost in the Middle" research:
+        1. User Card FIRST (primacy anchor)
+        2. Query-relevant psyche/notes (middle - sorted by importance)
+        3. Episodes LAST (recency anchor - most attention here)
+        4. Identity checksum (optional recap at very end)
+        """
         limited_memories = memories[:max_nodes]
 
         episodes = [m for m in limited_memories if isinstance(m, EpisodeMemory)]
@@ -111,13 +129,33 @@ class ContextFormatter:
             psyches = self._fit_to_budget(psyches, budget.psyche_budget)
             notes = self._fit_to_budget(notes, budget.note_budget)
 
+        psyches = self._sort_by_importance(psyches)
+        notes = self._sort_by_importance(notes)
+        episodes = self._sort_by_recency(episodes)
+
         lines = ["<memory_context>"]
 
-        if episodes:
-            lines.append("<episodes>")
-            for ep in episodes:
-                lines.append(self._format_episode(ep))
-            lines.append("</episodes>")
+        if user_card:
+            lines.append(self._format_user_card(user_card))
+
+        if view == ContextView.TASKS:
+            lines.extend(self._format_tasks_view(notes, psyches, episodes))
+        elif view == ContextView.TIMELINE:
+            lines.extend(self._format_timeline_view(episodes, psyches, notes))
+        else:
+            lines.extend(self._format_profile_view(psyches, notes, episodes))
+
+        lines.append("</memory_context>")
+        return "\n".join(lines)
+
+    def _format_profile_view(
+        self,
+        psyches: List[PsycheMemory],
+        notes: List[NoteMemory],
+        episodes: List[EpisodeMemory],
+    ) -> List[str]:
+        """Default view: psyche first, notes, then episodes last (recency)."""
+        lines = []
 
         if psyches:
             lines.append("<psyche>")
@@ -131,8 +169,118 @@ class ContextFormatter:
                 lines.append(self._format_note(n))
             lines.append("</notes>")
 
-        lines.append("</memory_context>")
-        return "\n".join(lines)
+        if episodes:
+            lines.append("<episodes>")
+            for ep in episodes:
+                lines.append(self._format_episode(ep))
+            lines.append("</episodes>")
+
+        return lines
+
+    def _format_tasks_view(
+        self,
+        notes: List[NoteMemory],
+        psyches: List[PsycheMemory],
+        episodes: List[EpisodeMemory],
+    ) -> List[str]:
+        """Tasks view: notes first, supporting psyche, recent episodes last."""
+        lines = []
+
+        active_notes = [n for n in notes if n.status != "COMPLETED"]
+        completed_notes = [n for n in notes if n.status == "COMPLETED"]
+
+        if active_notes:
+            lines.append("<active_tasks>")
+            for n in active_notes:
+                lines.append(self._format_note(n))
+            lines.append("</active_tasks>")
+
+        if psyches:
+            lines.append("<context>")
+            for p in psyches[:3]:
+                lines.append(self._format_psyche(p))
+            lines.append("</context>")
+
+        if episodes:
+            lines.append("<recent_activity>")
+            for ep in episodes[:5]:
+                lines.append(self._format_episode(ep))
+            lines.append("</recent_activity>")
+
+        return lines
+
+    def _format_timeline_view(
+        self,
+        episodes: List[EpisodeMemory],
+        psyches: List[PsycheMemory],
+        notes: List[NoteMemory],
+    ) -> List[str]:
+        """Timeline view: chronological episodes, minimal psyche/notes."""
+        lines = []
+
+        if psyches:
+            lines.append("<identity>")
+            for p in psyches[:2]:
+                lines.append(self._format_psyche(p))
+            lines.append("</identity>")
+
+        if episodes:
+            sorted_eps = sorted(episodes, key=lambda e: e.timestamp)
+            lines.append("<timeline>")
+            for ep in sorted_eps:
+                lines.append(self._format_episode(ep))
+            lines.append("</timeline>")
+
+        return lines
+
+    def _format_user_card(self, card: UserCard) -> str:
+        """Format UserCard as compact identity anchor."""
+        parts = []
+
+        header = []
+        if card.name:
+            header.append(card.name)
+        if card.timezone:
+            header.append(card.timezone)
+        if card.roles:
+            header.extend(card.roles[:3])
+        if header:
+            parts.append(" | ".join(header))
+
+        if card.summary:
+            parts.append(card.summary)
+
+        if card.current_focus:
+            focus_items = ", ".join(card.current_focus[:5])
+            parts.append(f"Current focus: {focus_items}")
+
+        if card.core_values:
+            values = ", ".join(card.core_values[:3])
+            parts.append(f"Values: {values}")
+
+        if card.key_relationships:
+            rels = ", ".join(card.key_relationships[:3])
+            parts.append(f"Key people: {rels}")
+
+        if card.communication_style:
+            parts.append(f"Style: {card.communication_style}")
+
+        if card.uncertainties:
+            uncertain = ", ".join(card.uncertainties[:2])
+            parts.append(f"[Uncertain: {uncertain}]")
+
+        content = "\n".join(parts)
+        return f"<user_card>\n{content}\n</user_card>"
+
+    def _sort_by_importance(self, memories: list) -> list:
+        """Sort memories by importance score (highest first)."""
+        return sorted(
+            memories, key=lambda m: getattr(m, "importance", 0.5), reverse=True
+        )
+
+    def _sort_by_recency(self, memories: list) -> list:
+        """Sort memories by timestamp (most recent first)."""
+        return sorted(memories, key=lambda m: m.timestamp, reverse=True)
 
     def _fit_to_budget(self, memories: list, token_budget: int) -> list:
         """Select memories that fit within token budget (FIFO by position)."""

@@ -52,9 +52,15 @@ class BaseMemory(BaseModel):
     # User ownership
     user_id: str = Field(...)
 
-    # Retention
+    # Retention & Importance
     access_count: int = Field(default=0)
     last_accessed: Optional[datetime] = Field(default=None)
+    importance: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Memory importance score 0-1. Used for ordering and pruning.",
+    )
 
     # Catch-all for forward compatibility
     properties: Dict[str, Any] = Field(default_factory=dict)
@@ -92,6 +98,28 @@ class NoteMemory(BaseMemory):
 Memory = Annotated[
     Union[EpisodeMemory, PsycheMemory, NoteMemory], Field(discriminator="type")
 ]
+
+
+class UserCard(BaseModel):
+    """
+    Compact identity anchor for context.
+
+    Based on research: User Card goes FIRST in context (primacy bias),
+    with optional checksum at END (recency bias). Contains stable identity
+    info that helps LLM understand who this person is.
+    """
+
+    user_id: str
+    name: Optional[str] = None
+    timezone: Optional[str] = None
+    roles: List[str] = Field(default_factory=list)
+    core_values: List[str] = Field(default_factory=list)
+    current_focus: List[str] = Field(default_factory=list)
+    key_relationships: List[str] = Field(default_factory=list)
+    communication_style: Optional[str] = None
+    uncertainties: List[str] = Field(default_factory=list)
+    summary: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class MemoryLink(BaseModel):
