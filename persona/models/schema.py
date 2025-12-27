@@ -24,6 +24,7 @@ class RAGQuery(BaseModel):
         None  # Separate query for retrieval (strips MCQ options)
     )
     include_stats: bool = False
+    use_router: bool = False  # Use IntentRouter for spray-and-pray retrieval
 
 
 class RAGResponse(BaseModel):

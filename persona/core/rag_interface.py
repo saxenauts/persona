@@ -4,13 +4,14 @@ RAG Interface for Persona.
 Provides context retrieval and query answering using the Memory architecture.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 from persona.core.context import format_memories_for_llm
+from persona.core.intent_router import IntentRouter, RetrievalHints, RetrievalMode
 from persona.models.memory import UserCard
 from persona.services.user_service import UserCardService
 from persona.llm.llm_graph import (
@@ -38,12 +39,12 @@ class RAGInterface:
         self._graph_db = None
         self._user_card: Optional[UserCard] = None
         self._user_card_service: Optional[UserCardService] = None
+        self._intent_router: Optional[IntentRouter] = None
 
     async def __aenter__(self):
         """Initialize resources."""
         self.graph_ops = await GraphOps().__aenter__()
 
-        # Initialize memory store
         self._graph_db = Neo4jGraphDatabase()
         await self._graph_db.initialize()
         self._memory_store = MemoryStore(self._graph_db)
@@ -51,7 +52,10 @@ class RAGInterface:
         self._retriever = Retriever(
             user_id=self.user_id, store=self._memory_store, graph_ops=self.graph_ops
         )
-        self._user_card_service = UserCardService(self._memory_store)
+        self._user_card_service = UserCardService(
+            self._memory_store, graph_ops=self.graph_ops
+        )
+        self._intent_router = IntentRouter()
 
         return self
 
@@ -115,12 +119,37 @@ class RAGInterface:
         query: str,
         retrieval_query: Optional[str] = None,
         include_stats: bool = False,
-    ):
+        use_router: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Query with RAG retrieval.
+
+        Args:
+            query: Natural language query.
+            retrieval_query: Optional override for retrieval (uses query if None).
+            include_stats: Return detailed stats (timing, tokens, routing).
+            use_router: Use IntentRouter for spray-and-pray retrieval.
+        """
         if not self._retriever:
             await self.__aenter__()
 
         user_card = await self._get_user_card()
 
+        if use_router:
+            return await self._query_with_router(query, user_card, include_stats)
+        else:
+            return await self._query_classic(
+                query, retrieval_query, user_card, include_stats
+            )
+
+    async def _query_classic(
+        self,
+        query: str,
+        retrieval_query: Optional[str],
+        user_card: Optional[UserCard],
+        include_stats: bool,
+    ) -> Dict[str, Any]:
+        """Classic retrieval path (vector + graph crawl)."""
         search_query = retrieval_query or query
 
         retrieval_stats = None
@@ -164,7 +193,77 @@ class RAGInterface:
                 "generation_ms": generation_ms,
             }
 
-        return await generate_response_with_context(query, context)
+        answer = await generate_response_with_context(query, context)
+        return {"answer": answer}
+
+    async def _query_with_router(
+        self,
+        query: str,
+        user_card: Optional[UserCard],
+        include_stats: bool,
+    ) -> Dict[str, Any]:
+        """IntentRouter retrieval path (spray-and-pray with fuzzy index)."""
+        routing_start = time.time()
+        hints = await self._intent_router.route(
+            query=query,
+            user_card=user_card,
+        )
+        routing_ms = (time.time() - routing_start) * 1000
+
+        retrieval_start = time.time()
+        if include_stats:
+            context, retrieval_stats = await self._retriever.get_context_with_hints(
+                query=query,
+                hints=hints,
+                user_card=user_card,
+                collect_stats=True,
+            )
+        else:
+            context = await self._retriever.get_context_with_hints(
+                query=query,
+                hints=hints,
+                user_card=user_card,
+            )
+            retrieval_stats = {}
+        retrieval_ms = (time.time() - retrieval_start) * 1000
+
+        logger.info(
+            f"RAG router: mode={hints.mode.value}, confidence={hints.confidence:.2f}, "
+            f"keywords={len(hints.search_keywords)}, seeds={len(hints.seed_memory_ids)}"
+        )
+
+        generation_start = time.time()
+        if include_stats:
+            answer, llm_stats = await generate_response_with_context_with_stats(
+                query, context
+            )
+            generation_ms = (time.time() - generation_start) * 1000
+
+            return {
+                "answer": answer,
+                "model": llm_stats.get("model"),
+                "usage": llm_stats.get("usage"),
+                "prompt_tokens": llm_stats.get("prompt_tokens"),
+                "completion_tokens": llm_stats.get("completion_tokens"),
+                "context_chars": len(context),
+                "routing": {
+                    "mode": hints.mode.value,
+                    "confidence": hints.confidence,
+                    "keywords": hints.search_keywords[:5],
+                    "seed_count": len(hints.seed_memory_ids),
+                    "memory_boosts": hints.memory_type_boost,
+                    "date_range": (
+                        [str(d) for d in hints.date_range] if hints.date_range else None
+                    ),
+                    "routing_ms": routing_ms,
+                },
+                "retrieval": retrieval_stats,
+                "retrieval_ms": retrieval_ms,
+                "generation_ms": generation_ms,
+            }
+
+        answer = await generate_response_with_context(query, context)
+        return {"answer": answer}
 
     async def close(self):
         """Close resources."""

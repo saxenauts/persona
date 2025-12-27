@@ -127,6 +127,7 @@ class RAGQuery(BaseModel):
     query: str
     retrieval_query: Optional[str] = None
     include_stats: bool = False
+    use_router: bool = False
 
 
 class RAGResponse(BaseModel):

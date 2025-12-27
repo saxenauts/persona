@@ -24,11 +24,15 @@ def extract_question_for_retrieval(full_query: str) -> str:
 
 
 class PersonaAdapter(MemorySystem):
-    def __init__(self):
+    def __init__(self, use_router: bool = None):
         port = os.environ.get("PERSONA_PORT", "8000")
         self.base_url = f"http://localhost:{port}/api/v1"
         self.last_ingest_stats = None
         self.last_query_stats = None
+        # Allow env var override: PERSONA_USE_ROUTER=true
+        if use_router is None:
+            use_router = os.environ.get("PERSONA_USE_ROUTER", "").lower() == "true"
+        self.use_router = use_router
 
     def add_session(self, user_id: str, session_data: str, date: str):
         # First ensure user exists
@@ -101,6 +105,7 @@ class PersonaAdapter(MemorySystem):
                 "query": query,
                 "retrieval_query": retrieval_query,
                 "include_stats": True,
+                "use_router": self.use_router,
             },
         )
         if response.status_code != 200:

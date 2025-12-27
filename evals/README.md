@@ -343,6 +343,20 @@ evals/
 
 ## Results (December 2025)
 
+### PersonaMem Performance
+
+| System | Overall | Fact Recall | Preference Tracking | Reasoning | Suggestions |
+|--------|---------|-------------|---------------------|-----------|-------------|
+| **Persona (IntentRouter)** | **69.05%** | **83.3%** | **55.6%** | **77.8%** | **57.1%** |
+| Persona (baseline) | 51.7% | 45.3% | 51.4% | 73.9% | 29.3% |
+| Graphiti | 62.9% | - | - | - | - |
+
+**Key Findings (Dec 27, 2025):**
+- IntentRouter improved Persona from 51.7% → 69.05% (+17.35 points)
+- Now exceeds Graphiti's 62.9% by +6.15 points
+- Largest gains in fact recall (+38 points) and suggestions (+27.8 points)
+- IntentRouter uses UserCard fuzzy index for spray-and-pray retrieval
+
 ### LongMemEval Performance
 
 | System | Overall | Multi-Session | Temporal | Knowledge Update |

@@ -102,16 +102,35 @@ Memory = Annotated[
 
 class UserCard(BaseModel):
     """
-    Compact identity anchor for context.
+    Compact identity anchor for context + fuzzy retrieval index.
 
     Based on research: User Card goes FIRST in context (primacy bias),
     with optional checksum at END (recency bias). Contains stable identity
     info that helps LLM understand who this person is.
+
+    The fuzzy index enables spray-and-pray retrieval by providing:
+    - Prose paragraphs (identity, themes, preferences)
+    - Pointers to existing memories (keyword_hints, pinned_memories)
+    - Graph structure hints (dominant types, link types)
+    - Named anchors (temporal, entity aliases)
     """
 
     user_id: str
     name: Optional[str] = None
     timezone: Optional[str] = None
+
+    # === PROSE PARAGRAPHS (LLM-generated) ===
+    identity_summary: Optional[str] = Field(
+        default=None, description="1-2 sentences: who they are, core values"
+    )
+    current_themes: Optional[str] = Field(
+        default=None, description="1-2 sentences: active life threads, projects"
+    )
+    preferences_summary: Optional[str] = Field(
+        default=None, description="1-2 sentences: key likes/dislikes, patterns"
+    )
+
+    # === LEGACY FIELDS (kept for compatibility) ===
     roles: List[str] = Field(default_factory=list)
     core_values: List[str] = Field(default_factory=list)
     current_focus: List[str] = Field(default_factory=list)
@@ -119,7 +138,43 @@ class UserCard(BaseModel):
     communication_style: Optional[str] = None
     uncertainties: List[str] = Field(default_factory=list)
     summary: Optional[str] = None
+
+    # === FUZZY INDEX (pointers to existing graph) ===
+    # Memory/link type distribution: "this user has lots of X"
+    dominant_memory_types: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Distribution of memory types: {'preference': 0.4, 'task': 0.3}",
+    )
+    dominant_link_types: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Distribution of link types: {'derived_from': 0.5, 'contradicts': 0.1}",
+    )
+
+    # Quick lookup: keywords → memory IDs (for spray-and-pray)
+    keyword_hints: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Keywords to memory IDs: {'fitness': ['id1', 'id2'], 'sarah': ['id3']}",
+    )
+
+    # Pinned memories by tag/theme
+    pinned_memories: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Named collections: {'fitness_baseline': ['id1'], 'career_goals': ['id2']}",
+    )
+
+    # === NAMED ANCHORS ===
+    temporal_anchors: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Named dates: {'wedding': '2020-06-15', 'job_start': '2023-01-10'}",
+    )
+    entity_aliases: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Alias resolution: {'my coach': 'Jordan', 'the move': 'Austin relocation'}",
+    )
+
+    # === METADATA ===
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    version: int = Field(default=1, description="Schema version for migrations")
 
 
 class MemoryLink(BaseModel):

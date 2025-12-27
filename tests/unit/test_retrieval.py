@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from persona.core.retrieval import Retriever
 from persona.core.context import ContextView
 from persona.core.query_expansion import QueryExpansion, DateRange
+from persona.core.intent_router import RetrievalHints, RetrievalMode
 from persona.models.memory import EpisodeMemory, NoteMemory, PsycheMemory, UserCard
 
 
@@ -391,3 +392,239 @@ class TestUserCardIntegration:
 
         assert "context_view" in stats
         assert stats["context_view"] == "timeline"
+
+
+class TestGetContextWithHints:
+    @pytest.fixture
+    def mock_store(self):
+        store = AsyncMock()
+        return store
+
+    @pytest.fixture
+    def mock_graph_ops(self):
+        ops = AsyncMock()
+        return ops
+
+    @pytest.fixture
+    def user_id(self):
+        return "test_user_hints"
+
+    @pytest.fixture
+    def sample_memories(self, user_id):
+        return [
+            EpisodeMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="episode",
+                title="Fitness session",
+                content="Did a 5k run in the morning",
+                timestamp=datetime.utcnow(),
+                importance=0.7,
+            ),
+            NoteMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="note",
+                title="Marathon goal",
+                content="Run a marathon by end of year",
+                note_type="goal",
+                status="active",
+            ),
+            PsycheMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="psyche",
+                content="Prefers morning exercise",
+                psyche_type="preference",
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_returns_context(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get.return_value = None
+
+        hints = RetrievalHints(
+            mode=RetrievalMode.FAST,
+            search_keywords=["fitness"],
+            seed_memory_ids=[],
+            top_k=5,
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context = await retriever.get_context_with_hints("fitness query", hints)
+
+        assert isinstance(context, str)
+        assert "<memory_context>" in context
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_fetches_seeds(
+        self, mock_store, mock_graph_ops, user_id, sample_memories
+    ):
+        seed_memory = sample_memories[0]
+        mock_store.get.return_value = seed_memory
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get_connected.return_value = []
+
+        hints = RetrievalHints(
+            seed_memory_ids=[str(seed_memory.id)],
+            hop_depth=0,
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context = await retriever.get_context_with_hints("test", hints)
+
+        assert "Fitness session" in context or "5k run" in context
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_uses_keywords(
+        self, mock_store, mock_graph_ops, user_id, sample_memories
+    ):
+        mock_store.get.return_value = sample_memories[0]
+        mock_graph_ops.text_similarity_search.return_value = {
+            "results": [{"nodeName": str(sample_memories[0].id), "score": 0.8}]
+        }
+        mock_store.get_connected.return_value = []
+
+        hints = RetrievalHints(
+            search_keywords=["fitness", "running"],
+            hop_depth=0,
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        await retriever.get_context_with_hints("test", hints)
+
+        assert mock_graph_ops.text_similarity_search.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_applies_memory_type_boost(
+        self, mock_store, mock_graph_ops, user_id, sample_memories
+    ):
+        mock_store.get.side_effect = lambda mid, uid: next(
+            (m for m in sample_memories if str(m.id) == str(mid)), None
+        )
+        mock_graph_ops.text_similarity_search.return_value = {
+            "results": [
+                {"nodeName": str(sample_memories[0].id), "score": 0.7},
+                {"nodeName": str(sample_memories[1].id), "score": 0.6},
+            ]
+        }
+        mock_store.get_connected.return_value = []
+
+        hints = RetrievalHints(
+            memory_type_boost=["note"],
+            hop_depth=0,
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_hints(
+            "test", hints, collect_stats=True
+        )
+
+        assert "vector_lane" in stats
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_graph_expansion(
+        self, mock_store, mock_graph_ops, user_id, sample_memories
+    ):
+        seed = sample_memories[0]
+        linked = sample_memories[1]
+
+        mock_store.get.return_value = seed
+        mock_graph_ops.text_similarity_search.return_value = {
+            "results": [{"nodeName": str(seed.id), "score": 0.9}]
+        }
+        mock_store.get_connected.return_value = [linked]
+
+        hints = RetrievalHints(
+            hop_depth=1,
+            link_type_boost=["DERIVED_FROM"],
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_hints(
+            "test", hints, collect_stats=True
+        )
+
+        assert "graph_traversal" in stats
+        assert stats["graph_traversal"]["nodes_visited"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_routes_view_from_date_range(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        from datetime import date
+
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get.return_value = None
+
+        hints = RetrievalHints(
+            date_range=(date(2025, 12, 19), date(2025, 12, 26)),
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_hints(
+            "test", hints, collect_stats=True
+        )
+
+        assert stats["context_view"] == "timeline"
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_routes_view_from_note_boost(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get.return_value = None
+
+        hints = RetrievalHints(
+            memory_type_boost=["note"],
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_hints(
+            "test", hints, collect_stats=True
+        )
+
+        assert stats["context_view"] == "tasks"
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_includes_stats(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get.return_value = None
+
+        hints = RetrievalHints(
+            mode=RetrievalMode.FAST,
+            confidence=0.75,
+        )
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_hints(
+            "test", hints, collect_stats=True
+        )
+
+        assert stats["mode"] == "fast"
+        assert stats["confidence"] == 0.75
+        assert "total_retrieval_ms" in stats
+        assert "context_chars" in stats
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_hints_uses_user_card(
+        self, mock_store, mock_graph_ops, user_id
+    ):
+        mock_graph_ops.text_similarity_search.return_value = {"results": []}
+        mock_store.get.return_value = None
+
+        hints = RetrievalHints()
+        user_card = UserCard(user_id=user_id, name="Test Runner")
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context = await retriever.get_context_with_hints(
+            "test", hints, user_card=user_card
+        )
+
+        assert "<user_card>" in context
+        assert "Test Runner" in context

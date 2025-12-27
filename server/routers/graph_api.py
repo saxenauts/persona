@@ -292,6 +292,7 @@ async def rag_query(
             query.query,
             retrieval_query=query.retrieval_query,
             include_stats=query.include_stats,
+            use_router=query.use_router,
         )
         logger.info(f"RAG query completed successfully for user {user_id}")
         if isinstance(result, dict):
