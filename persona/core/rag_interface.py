@@ -136,7 +136,9 @@ class RAGInterface:
         user_card = await self._get_user_card()
 
         if use_router:
-            return await self._query_with_router(query, user_card, include_stats)
+            return await self._query_with_router(
+                query, retrieval_query, user_card, include_stats
+            )
         else:
             return await self._query_classic(
                 query, retrieval_query, user_card, include_stats
@@ -199,13 +201,22 @@ class RAGInterface:
     async def _query_with_router(
         self,
         query: str,
+        retrieval_query: Optional[str],
         user_card: Optional[UserCard],
         include_stats: bool,
     ) -> Dict[str, Any]:
-        """IntentRouter retrieval path (spray-and-pray with fuzzy index)."""
+        """IntentRouter retrieval path (spray-and-pray with fuzzy index).
+
+        Args:
+            query: Full query (including MCQ options) for LLM generation.
+            retrieval_query: Stripped query (question only) for routing and retrieval.
+                             Avoids entity contamination from MCQ answer options.
+        """
+        search_query = retrieval_query or query
+
         routing_start = time.time()
         hints = await self._intent_router.route(
-            query=query,
+            query=search_query,  # Use stripped query for routing
             user_card=user_card,
         )
         routing_ms = (time.time() - routing_start) * 1000
@@ -213,14 +224,14 @@ class RAGInterface:
         retrieval_start = time.time()
         if include_stats:
             context, retrieval_stats = await self._retriever.get_context_with_hints(
-                query=query,
+                query=search_query,  # Use stripped query for retrieval
                 hints=hints,
                 user_card=user_card,
                 collect_stats=True,
             )
         else:
             context = await self._retriever.get_context_with_hints(
-                query=query,
+                query=search_query,  # Use stripped query for retrieval
                 hints=hints,
                 user_card=user_card,
             )
