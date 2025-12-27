@@ -68,6 +68,12 @@ def run(
         "--skip-judge",
         help="Skip LongMemEval LLM judge (log responses for later evaluation)",
     ),
+    resume: Optional[str] = typer.Option(
+        None,
+        "--resume",
+        "-r",
+        help="Resume a previous run by ID (e.g., 20251227_140842 or run_20251227_140842)",
+    ),
 ):
     """
     Run evaluation benchmarks
@@ -87,8 +93,18 @@ def run(
         # Compare multiple adapters
         python -m evals.cli run --benchmark personamem \\
             --adapter persona --adapter mem0
+        
+        # Resume a crashed run
+        python -m evals.cli run --config evals/configs/full_eval.yaml --resume 20251227_140842
     """
+    import os
     from .runner import EvaluationRunner
+
+    if resume:
+        os.environ["EVAL_CHECKPOINT_ENABLED"] = "true"
+        resume_id = resume[4:] if resume.startswith("run_") else resume
+        os.environ["EVAL_RESUME_RUN_ID"] = resume_id
+        print(f"✓ Resuming run: {resume_id}")
 
     # Load config from file or create from CLI args
     if config:

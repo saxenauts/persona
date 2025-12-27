@@ -160,11 +160,12 @@ class EvaluationRunner:
         """
         self.config = config
         self.use_golden_set = use_golden_set
-        self.logger = DeepLogger(output_dir=config.output_dir)
+
+        resume_run_id = os.getenv("EVAL_RESUME_RUN_ID")
+        self.logger = DeepLogger(output_dir=config.output_dir, run_id=resume_run_id)
         self._log_lock = threading.Lock()
         self._print_lock = threading.Lock()
 
-        # Checkpointing support (prototype from supermemory research)
         self.checkpoint_enabled = os.getenv(
             "EVAL_CHECKPOINT_ENABLED", "false"
         ).lower() in {"1", "true", "yes"}
