@@ -11,6 +11,8 @@ from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 from persona.core.context import format_memories_for_llm
+from persona.models.memory import UserCard
+from persona.services.user_service import UserCardService
 from persona.llm.llm_graph import (
     generate_response_with_context,
     generate_response_with_context_with_stats,
@@ -27,12 +29,15 @@ class RAGInterface:
     Uses the Retriever (Vector Search + Graph Crawl) for context retrieval.
     """
 
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, user_timezone: str = "UTC"):
         self.user_id = user_id
+        self.user_timezone = user_timezone
         self.graph_ops = None
         self._memory_store = None
         self._retriever = None
         self._graph_db = None
+        self._user_card: Optional[UserCard] = None
+        self._user_card_service: Optional[UserCardService] = None
 
     async def __aenter__(self):
         """Initialize resources."""
@@ -43,10 +48,10 @@ class RAGInterface:
         await self._graph_db.initialize()
         self._memory_store = MemoryStore(self._graph_db)
 
-        # Initialize retriever
         self._retriever = Retriever(
             user_id=self.user_id, store=self._memory_store, graph_ops=self.graph_ops
         )
+        self._user_card_service = UserCardService(self._memory_store)
 
         return self
 
@@ -90,23 +95,43 @@ class RAGInterface:
         )
         return context
 
-    async def query(self, query: str, include_stats: bool = False):
-        """
-        Get a generated response for a query.
+    async def _get_user_card(self) -> Optional[UserCard]:
+        if self._user_card:
+            return self._user_card
+        if self._user_card_service:
+            try:
+                self._user_card = await self._user_card_service.generate(
+                    self.user_id, timezone=self.user_timezone
+                )
+                logger.info(
+                    f"Generated UserCard for {self.user_id}: {self._user_card.summary or 'no summary'}"
+                )
+            except Exception as e:
+                logger.warning(f"UserCard generation failed: {e}")
+        return self._user_card
 
-        Retrieves context and generates a response using LLM.
-        """
+    async def query(self, query: str, include_stats: bool = False):
         if not self._retriever:
             await self.__aenter__()
+
+        user_card = await self._get_user_card()
 
         retrieval_stats = None
         retrieval_start = time.time()
         if include_stats:
-            context, retrieval_stats = await self._retriever.get_context_with_stats(
-                query
+            result = await self._retriever.get_context(
+                query=query,
+                user_card=user_card,
+                user_timezone=self.user_timezone,
+                collect_stats=True,
             )
+            context, retrieval_stats = result  # type: ignore
         else:
-            context = await self.get_context(query)
+            context = await self._retriever.get_context(
+                query=query,
+                user_card=user_card,
+                user_timezone=self.user_timezone,
+            )  # type: ignore
         retrieval_ms = (time.time() - retrieval_start) * 1000
 
         logger.info(f"Context for RAG query: {context[:200]}...")

@@ -32,10 +32,6 @@ from server.config import config
 
 logger = get_logger(__name__)
 
-EXTRACTION_TIMEOUT_SECONDS = 120
-EXTRACTION_MAX_RETRIES = 3
-EXTRACTION_RETRY_DELAY_SECONDS = 2
-
 # Configuration
 EXTRACTION_TIMEOUT_SECONDS = 120  # 2 minutes per extraction attempt
 EXTRACTION_MAX_RETRIES = 3
