@@ -353,13 +353,23 @@ class Retriever:
 
         return None
 
-    async def _expand_graph(self, seeds: List[Memory], hop_depth: int) -> List[Memory]:
+    async def _expand_graph(
+        self, seeds: List[Memory], hop_depth: int, budget: int = 50
+    ) -> List[Memory]:
         """
-        Crawl graph from seed memories.
+        Crawl graph from seed memories with budget control.
 
         Follows relationships to find linked memories up to hop_depth.
-        This justifies using a graph database - we get relational context
-        that pure vector search would miss.
+        Uses beam-search style traversal: at each hop, prioritize nodes
+        and limit fanout to prevent explosion.
+
+        Args:
+            seeds: Starting memories from vector search.
+            hop_depth: Maximum number of hops to traverse.
+            budget: Maximum total nodes to collect (prevents explosion).
+
+        Returns:
+            List of memories including seeds and discovered nodes.
         """
         if hop_depth <= 0:
             return seeds
@@ -368,48 +378,69 @@ class Retriever:
         frontier = list(seeds)
 
         for hop in range(hop_depth):
+            if len(all_memories) >= budget:
+                logger.debug(f"Budget exhausted at hop {hop}, stopping traversal")
+                break
+
             next_frontier = []
             for memory in frontier:
+                if len(all_memories) >= budget:
+                    break
+
                 try:
                     linked = await self.store.get_connected(memory.id, self.user_id)
+                    # TODO: Sort by link strength/recency when available
+                    # For now, limit fanout per node
+                    linked = linked[:10]  # Max 10 links per node
                     for m in linked:
-                        if m.id not in all_memories:
+                        if m.id not in all_memories and len(all_memories) < budget:
                             all_memories[m.id] = m
                             next_frontier.append(m)
                 except Exception as e:
                     logger.debug(f"Failed to get connected for {memory.id}: {e}")
 
             frontier = next_frontier
-            logger.debug(f"Hop {hop + 1}: found {len(next_frontier)} new memories")
+            logger.debug(
+                f"Hop {hop + 1}: found {len(next_frontier)} new memories, total={len(all_memories)}"
+            )
 
         return list(all_memories.values())
 
     async def _expand_graph_with_stats(
-        self, seeds: List[Memory], hop_depth: int
+        self, seeds: List[Memory], hop_depth: int, budget: int = 50
     ) -> Tuple[List[Memory], Dict[str, Any]]:
-        """
-        Crawl graph from seed memories and return traversal stats.
-        """
+        """Crawl graph from seed memories and return traversal stats."""
         if hop_depth <= 0:
             stats = {
                 "nodes_visited": len(seeds),
                 "relationships_traversed": 0,
                 "final_ranked_nodes": [str(m.id) for m in seeds],
+                "budget_exhausted": False,
             }
             return seeds, stats
 
         all_memories = {m.id: m for m in seeds}
         frontier = list(seeds)
         relationships_traversed = 0
+        budget_exhausted = False
 
-        for _hop in range(hop_depth):
+        for hop in range(hop_depth):
+            if len(all_memories) >= budget:
+                budget_exhausted = True
+                break
+
             next_frontier = []
             for memory in frontier:
+                if len(all_memories) >= budget:
+                    budget_exhausted = True
+                    break
+
                 try:
                     linked = await self.store.get_connected(memory.id, self.user_id)
                     relationships_traversed += len(linked)
+                    linked = linked[:10]
                     for m in linked:
-                        if m.id not in all_memories:
+                        if m.id not in all_memories and len(all_memories) < budget:
                             all_memories[m.id] = m
                             next_frontier.append(m)
                 except Exception as e:
@@ -422,6 +453,7 @@ class Retriever:
             "nodes_visited": len(memories),
             "relationships_traversed": relationships_traversed,
             "final_ranked_nodes": [str(m.id) for m in memories],
+            "budget_exhausted": budget_exhausted,
         }
 
         return memories, stats

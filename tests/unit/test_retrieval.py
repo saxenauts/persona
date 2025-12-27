@@ -220,3 +220,38 @@ class TestRetriever:
         # Should not raise, should deduplicate
         context = await retriever.get_context("test")
         assert isinstance(context, str)
+
+    @pytest.mark.asyncio
+    async def test_graph_expansion_respects_budget(
+        self, mock_store, mock_graph_ops, user_id, sample_memories
+    ):
+        """Test that graph expansion stops when budget is reached."""
+        from uuid import uuid4
+
+        seed = sample_memories["episode"]
+        linked_memories = [
+            EpisodeMemory(
+                id=uuid4(),
+                user_id=user_id,
+                type="episode",
+                title=f"Linked {i}",
+                content=f"Content {i}",
+                timestamp=datetime.utcnow(),
+            )
+            for i in range(20)
+        ]
+
+        mock_store.get_by_type.return_value = []
+        mock_graph_ops.text_similarity_search.return_value = {
+            "results": [{"nodeName": str(seed.id), "score": 0.9}]
+        }
+        mock_store.get.return_value = seed
+        mock_store.get_connected.return_value = linked_memories
+
+        retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context, stats = await retriever.get_context_with_stats(
+            "test", hop_depth=2, include_static=False
+        )
+
+        # With budget=50 (default), should collect seed + up to 10 links per node
+        assert stats["graph_traversal"]["nodes_visited"] <= 50
