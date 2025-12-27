@@ -110,17 +110,24 @@ class RAGInterface:
                 logger.warning(f"UserCard generation failed: {e}")
         return self._user_card
 
-    async def query(self, query: str, include_stats: bool = False):
+    async def query(
+        self,
+        query: str,
+        retrieval_query: Optional[str] = None,
+        include_stats: bool = False,
+    ):
         if not self._retriever:
             await self.__aenter__()
 
         user_card = await self._get_user_card()
 
+        search_query = retrieval_query or query
+
         retrieval_stats = None
         retrieval_start = time.time()
         if include_stats:
             result = await self._retriever.get_context(
-                query=query,
+                query=search_query,
                 user_card=user_card,
                 user_timezone=self.user_timezone,
                 collect_stats=True,
@@ -128,7 +135,7 @@ class RAGInterface:
             context, retrieval_stats = result  # type: ignore
         else:
             context = await self._retriever.get_context(
-                query=query,
+                query=search_query,
                 user_card=user_card,
                 user_timezone=self.user_timezone,
             )  # type: ignore

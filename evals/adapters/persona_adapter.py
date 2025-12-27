@@ -1,6 +1,26 @@
 import requests
 import os
+import re
 from .base import MemorySystem
+
+
+def extract_question_for_retrieval(full_query: str) -> str:
+    """Extract just the question part for retrieval, stripping MCQ options.
+
+    PersonaMem format:
+    Question: <the actual question>
+    Options: (a)... (b)... (c)... (d)...
+    Answer with only the letter (a/b/c/d).
+
+    We want ONLY the question for retrieval to avoid entity contamination.
+    """
+    if "Options:" in full_query:
+        parts = full_query.split("Options:")
+        question_part = parts[0].strip()
+        if question_part.startswith("Question:"):
+            question_part = question_part[len("Question:") :].strip()
+        return question_part
+    return full_query
 
 
 class PersonaAdapter(MemorySystem):
@@ -73,13 +93,15 @@ class PersonaAdapter(MemorySystem):
             raise e
 
     def query(self, user_id: str, query: str) -> str:
-        # Benchmark usually asks for an answer.
-        # Check API docs in README:
-        # POST /api/v1/users/{user_id}/rag/query
+        retrieval_query = extract_question_for_retrieval(query)
 
         response = requests.post(
             f"{self.base_url}/users/{user_id}/rag/query",
-            json={"query": query, "include_stats": True},
+            json={
+                "query": query,
+                "retrieval_query": retrieval_query,
+                "include_stats": True,
+            },
         )
         if response.status_code != 200:
             print(f"Persona Query Error: {response.status_code} - {response.text}")

@@ -32,9 +32,9 @@ def _build_rag_messages(query: str, context: str) -> list[ChatMessage]:
     return [
         ChatMessage(
             role="system",
-            content="You are a helpful assistant that answers queries about a user based on the provided context from their graph."
+            content="You are a helpful assistant that answers queries about a user based on the provided context from their graph.",
         ),
-        ChatMessage(role="user", content=prompt)
+        ChatMessage(role="user", content=prompt),
     ]
 
 
@@ -43,7 +43,7 @@ async def generate_response_with_context(query: str, context: str) -> str:
     try:
         messages = _build_rag_messages(query, context)
         client = get_chat_client()
-        response = await client.chat(messages=messages, temperature=0.7)
+        response = await client.chat(messages=messages, temperature=0.0)
         return response.content
     except Exception as e:
         logger.error(f"Error generating response with context: {e}")
@@ -57,25 +57,33 @@ async def generate_response_with_context_with_stats(
     try:
         messages = _build_rag_messages(query, context)
         client = get_chat_client()
-        response = await client.chat(messages=messages, temperature=0.7)
+        response = await client.chat(messages=messages, temperature=0.0)
         usage = response.usage or {}
         stats = {
             "model": response.model,
             "usage": usage,
             "prompt_tokens": usage.get("prompt_tokens"),
             "completion_tokens": usage.get("completion_tokens"),
-            "temperature": 0.7
+            "temperature": 0.0,
         }
         return response.content, stats
     except Exception as e:
         logger.error(f"Error generating response with context (stats): {e}")
         return (
             "I apologize, but I encountered an error while processing your request.",
-            {"model": "error", "usage": {}, "prompt_tokens": None, "completion_tokens": None, "temperature": 0.7}
+            {
+                "model": "error",
+                "usage": {},
+                "prompt_tokens": None,
+                "completion_tokens": None,
+                "temperature": 0.0,
+            },
         )
 
 
-async def generate_structured_insights(ask_request: AskRequest, context: str) -> Dict[str, Any]:
+async def generate_structured_insights(
+    ask_request: AskRequest, context: str
+) -> Dict[str, Any]:
     """
     Generate structured insights based on the provided context and query using the configured LLM service
     """
@@ -94,17 +102,19 @@ async def generate_structured_insights(ask_request: AskRequest, context: str) ->
     try:
         messages = [
             ChatMessage(role="system", content=GENERATE_STRUCTURED_INSIGHTS),
-            ChatMessage(role="user", content=prompt)
+            ChatMessage(role="user", content=prompt),
         ]
-        
+
         client = get_chat_client()
         response = await client.chat(
-            messages=messages,
-            response_format={"type": "json_object"}
+            messages=messages, response_format={"type": "json_object"}
         )
-        
+
         return json.loads(response.content)
-        
+
     except Exception as e:
         logger.error(f"Error in generate_structured_insights: {e}")
-        return {k: [] if isinstance(v, list) else {} for k, v in ask_request.output_schema.items()}
+        return {
+            k: [] if isinstance(v, list) else {}
+            for k, v in ask_request.output_schema.items()
+        }

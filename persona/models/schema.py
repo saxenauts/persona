@@ -13,12 +13,18 @@ from typing import Dict, Any, Optional
 # API Request/Response Models
 # =============================================================================
 
+
 class UserCreate(BaseModel):
     user_id: str
 
+
 class RAGQuery(BaseModel):
     query: str
+    retrieval_query: Optional[str] = (
+        None  # Separate query for retrieval (strips MCQ options)
+    )
     include_stats: bool = False
+
 
 class RAGResponse(BaseModel):
     answer: str
@@ -32,9 +38,13 @@ class RAGResponse(BaseModel):
     retrieval_ms: Optional[float] = None
     generation_ms: Optional[float] = None
 
+
 class AskRequest(BaseModel):
     query: str
-    output_schema: Dict[str, Any] = Field(..., description="Expected output structure with example values")
+    output_schema: Dict[str, Any] = Field(
+        ..., description="Expected output structure with example values"
+    )
+
 
 class AskResponse(BaseModel):
     result: Dict[str, Any]
@@ -44,38 +54,30 @@ class AskResponse(BaseModel):
 # Dynamic Schema Helper
 # =============================================================================
 
+
 def create_dynamic_schema(output_schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     Creates a JSON schema based on the provided output schema for OpenAI structured output
     """
+
     def create_property_schema(value: Any) -> Dict[str, Any]:
         if isinstance(value, dict):
-            properties = {
-                k: create_property_schema(v) for k, v in value.items()
-            }
+            properties = {k: create_property_schema(v) for k, v in value.items()}
             return {
                 "type": "object",
                 "properties": properties,
-                "required": list(value.keys())
+                "required": list(value.keys()),
             }
         elif isinstance(value, list):
             if value and isinstance(value[0], dict):
-                return {
-                    "type": "array",
-                    "items": create_property_schema(value[0])
-                }
-            return {
-                "type": "array",
-                "items": {"type": "string"}
-            }
+                return {"type": "array", "items": create_property_schema(value[0])}
+            return {"type": "array", "items": {"type": "string"}}
         return {"type": "string"}
 
     schema = {
         "type": "object",
-        "properties": {
-            k: create_property_schema(v) for k, v in output_schema.items()
-        },
-        "required": list(output_schema.keys())
+        "properties": {k: create_property_schema(v) for k, v in output_schema.items()},
+        "required": list(output_schema.keys()),
     }
-    
+
     return schema
