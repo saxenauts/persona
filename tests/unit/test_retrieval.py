@@ -222,10 +222,10 @@ class TestRetriever:
         assert isinstance(context, str)
 
     @pytest.mark.asyncio
-    async def test_graph_expansion_respects_budget(
+    async def test_graph_expansion_limits_fanout_per_node(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that graph expansion stops when budget is reached."""
+        """Test that graph expansion limits links per node to prevent hub domination."""
         from uuid import uuid4
 
         seed = sample_memories["episode"]
@@ -238,7 +238,7 @@ class TestRetriever:
                 content=f"Content {i}",
                 timestamp=datetime.utcnow(),
             )
-            for i in range(20)
+            for i in range(30)
         ]
 
         mock_store.get_by_type.return_value = []
@@ -250,8 +250,9 @@ class TestRetriever:
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
         context, stats = await retriever.get_context_with_stats(
-            "test", hop_depth=2, include_static=False
+            "test", hop_depth=1, include_static=False
         )
 
-        # With budget=50 (default), should collect seed + up to 10 links per node
-        assert stats["graph_traversal"]["nodes_visited"] <= 50
+        # Default max_links_per_node=15, so from 30 links only 15 should be added
+        # Total: 1 seed + 15 linked = 16 max
+        assert stats["graph_traversal"]["nodes_visited"] <= 16
