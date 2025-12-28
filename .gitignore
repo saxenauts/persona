@@ -30,7 +30,8 @@ docs/MEMORY_EVAL_MASTER.md
 benchmark_*.log
 analysis/
 
-# Internal Roadmap
-TODO.md
+# Internal tracking (oh-my-opencode pattern)
+.opencode/*.md
+
 mintlify-docs
 
