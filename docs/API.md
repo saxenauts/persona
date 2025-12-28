@@ -80,6 +80,50 @@ Response: 200 OK
 }
 ```
 
+### Agent RAG Query
+Agentic query with tool-calling loop. The agent autonomously decides when to search memories, read context, or write new information.
+
+```http
+POST /users/{user_id}/rag/agent
+Content-Type: application/json
+
+{
+    "query": "What do you remember about my fitness goals?",
+    "include_stats": true,
+    "user_timezone": "America/Los_Angeles",
+    "max_turns": 10,
+    "timeout": 30.0
+}
+
+Response: 200 OK
+{
+    "answer": "Based on your memories, you set a goal to...",
+    "status": "completed",
+    "stats": {
+        "tool_calls_made": 3,
+        "turns": 2,
+        "usage": {"prompt_tokens": 500, "completion_tokens": 200},
+        "total_ms": 1234.5
+    }
+}
+```
+
+**Parameters:**
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| query | string | required | The user's question |
+| include_stats | bool | false | Include execution statistics |
+| user_timezone | string | "UTC" | Timezone for temporal queries |
+| session_id | string | null | Session ID for conversation continuity |
+| max_turns | int | null | Max tool-calling turns (null = unlimited) |
+| timeout | float | null | Max seconds before returning (null = unlimited) |
+
+**Status values:**
+- `completed` - Agent finished naturally
+- `max_turns` - Hit turn limit
+- `timeout` - Hit time limit
+- `error` - LLM call failed
+
 ### Ask (Structured Insights)
 ```http
 POST /users/{user_id}/ask

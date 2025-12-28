@@ -10,7 +10,7 @@ All memories are stored the same way, differentiated by `type`.
 Links connect memories to each other.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Union, Annotated, Literal
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
@@ -102,79 +102,60 @@ Memory = Annotated[
 
 class UserCard(BaseModel):
     """
-    Compact identity anchor for context + fuzzy retrieval index.
+    Compact identity anchor for LLM context.
 
-    Based on research: User Card goes FIRST in context (primacy bias),
-    with optional checksum at END (recency bias). Contains stable identity
-    info that helps LLM understand who this person is.
+    Updated after every session ingestion via consolidation.
+    All fields are prose - no structured lists that assume categories.
 
-    The fuzzy index enables spray-and-pray retrieval by providing:
-    - Prose paragraphs (identity, themes, preferences)
-    - Pointers to existing memories (keyword_hints, pinned_memories)
-    - Graph structure hints (dominant types, link types)
-    - Named anchors (temporal, entity aliases)
+    Design principles:
+    - LLMs consume text naturally, so we provide prose
+    - No category assumptions (roles, values, etc.) - let structure emerge
+    - Consolidation rewrites entire prose (emergent, not additive)
+    - Simple to update, simple to format
     """
 
     user_id: str
-    name: Optional[str] = None
     timezone: Optional[str] = None
 
-    # === PROSE PARAGRAPHS (LLM-generated) ===
-    identity_summary: Optional[str] = Field(
-        default=None, description="1-2 sentences: who they are, core values"
-    )
-    current_themes: Optional[str] = Field(
-        default=None, description="1-2 sentences: active life threads, projects"
-    )
-    preferences_summary: Optional[str] = Field(
-        default=None, description="1-2 sentences: key likes/dislikes, patterns"
-    )
-
-    # === LEGACY FIELDS (kept for compatibility) ===
-    roles: List[str] = Field(default_factory=list)
-    core_values: List[str] = Field(default_factory=list)
-    current_focus: List[str] = Field(default_factory=list)
-    key_relationships: List[str] = Field(default_factory=list)
-    communication_style: Optional[str] = None
-    uncertainties: List[str] = Field(default_factory=list)
-    summary: Optional[str] = None
-
-    # === FUZZY INDEX (pointers to existing graph) ===
-    # Memory/link type distribution: "this user has lots of X"
-    dominant_memory_types: Dict[str, float] = Field(
-        default_factory=dict,
-        description="Distribution of memory types: {'preference': 0.4, 'task': 0.3}",
-    )
-    dominant_link_types: Dict[str, float] = Field(
-        default_factory=dict,
-        description="Distribution of link types: {'derived_from': 0.5, 'contradicts': 0.1}",
-    )
-
-    # Quick lookup: keywords → memory IDs (for spray-and-pray)
-    keyword_hints: Dict[str, List[str]] = Field(
-        default_factory=dict,
-        description="Keywords to memory IDs: {'fitness': ['id1', 'id2'], 'sarah': ['id3']}",
-    )
-
-    # Pinned memories by tag/theme
-    pinned_memories: Dict[str, List[str]] = Field(
-        default_factory=dict,
-        description="Named collections: {'fitness_baseline': ['id1'], 'career_goals': ['id2']}",
-    )
-
-    # === NAMED ANCHORS ===
-    temporal_anchors: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Named dates: {'wedding': '2020-06-15', 'job_start': '2023-01-10'}",
-    )
-    entity_aliases: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Alias resolution: {'my coach': 'Jordan', 'the move': 'Austin relocation'}",
+    # === CORE IDENTITY (LLM-generated prose) ===
+    identity_prose: str = Field(
+        default="",
+        description="""
+        2-3 sentences: Who this person is, their context, what matters to them.
+        Updated on consolidation after each session. Written for LLM consumption.
+        Example: "Alex is a software engineer in Austin who recently started 
+        a fitness journey. They're focused on work-life balance and maintaining
+        connections with family. Currently navigating a career transition."
+        """,
     )
 
     # === METADATA ===
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    version: int = Field(default=1, description="Schema version for migrations")
+    version: int = Field(default=2, description="Schema version for migrations")
+
+    # === FUTURE: Memory Clusters ===
+    # TODO: Phase 2 - Ranked clusters with pointers to linked memories
+    # memory_clusters: List[MemoryCluster] = Field(default_factory=list)
+
+
+class WorkingMemoryConfig(BaseModel):
+    """Time tuner for working memory retrieval. Global defaults, overridable per-user."""
+
+    episode_window: timedelta = Field(
+        default=timedelta(days=2),
+        description="How far back to fetch episodes",
+    )
+    psyche_window: timedelta = Field(
+        default=timedelta(days=2),
+        description="How far back to fetch psyche updates",
+    )
+
+    max_episodes: int = Field(default=10)
+    max_psyche: int = Field(default=5)
+    max_active_notes: int = Field(default=5)
+
+
+DEFAULT_WORKING_MEMORY_CONFIG = WorkingMemoryConfig()
 
 
 class MemoryLink(BaseModel):

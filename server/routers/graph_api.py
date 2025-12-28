@@ -3,6 +3,7 @@ from persona.core.graph_ops import GraphOps
 from persona.core.rag_interface import RAGInterface
 from persona.models.schema import UserCreate, RAGQuery, RAGResponse
 from persona.models.schema import AskRequest, AskResponse
+from persona.models.schema import AgentRAGQuery, AgentRAGResponse
 from persona.services.user_service import UserService
 from persona.services.rag_service import RAGService
 from persona.services.ask_service import AskService
@@ -292,7 +293,6 @@ async def rag_query(
             query.query,
             retrieval_query=query.retrieval_query,
             include_stats=query.include_stats,
-            use_router=query.use_router,
         )
         logger.info(f"RAG query completed successfully for user {user_id}")
         if isinstance(result, dict):
@@ -313,6 +313,48 @@ async def rag_query(
                 status_code=502,
                 detail="External service error. Please try again later.",
             )
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error occurred while processing query",
+        )
+
+
+@router.post(
+    "/users/{user_id}/rag/agent",
+    response_model=AgentRAGResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def rag_query_with_agent(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    query: AgentRAGQuery = Body(...),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    try:
+        if not query or not query.query:
+            raise HTTPException(status_code=400, detail="Query is required")
+
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        logger.info(
+            f"Processing agent RAG query for user {user_id}: {query.query[:100]}..."
+        )
+        result = await RAGService.query_with_agent(
+            user_id=user_id,
+            query=query.query,
+            include_stats=query.include_stats,
+            user_timezone=query.user_timezone,
+            session_id=query.session_id,
+            max_turns=query.max_turns,
+            timeout=query.timeout,
+        )
+        logger.info(f"Agent RAG query completed for user {user_id}")
+        return AgentRAGResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in agent RAG query for user {user_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail="Internal server error occurred while processing query",

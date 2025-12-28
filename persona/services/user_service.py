@@ -398,3 +398,90 @@ Synthesize into a user profile JSON."""
             updated_at=datetime.utcnow(),
             version=2,
         )
+    def _compute_memory_type_distribution(self, memories: List[Memory]) -> Dict[str, float]:
+        """Compute distribution of memory types."""
+        if not memories:
+            return {}
+        
+        type_counts = {}
+        for memory in memories:
+            mtype = getattr(memory, "memory_type", "episode")
+            type_counts[mtype] = type_counts.get(mtype, 0) + 1
+        
+        total = len(memories)
+        return {k: v/total for k, v in type_counts.items()}
+
+    async def _compute_link_type_distribution(self, user_id: str) -> Dict[str, float]:
+        """Compute distribution of link types for this user."""
+        # TODO: Implement when graph_ops supports user-scoped queries
+        return {}
+
+    def _extract_keyword_hints(self, memories: List[Memory]) -> Dict[str, List[str]]:
+        """Extract keyword-to-memory mappings from memories."""
+        hints = {}
+        
+        # Process ALL memories, not just "important" ones
+        for memory in memories[:20]:  # Limit to avoid explosion
+            content = (getattr(memory, "title", "") + " " + getattr(memory, "content", "")).lower()
+            
+            # Split into words and extract potential keywords
+            words = content.split()
+            keywords = []
+            
+            for word in words:
+                word = word.strip(".,!?()[]")
+                # More aggressive: include words 3+ chars, exclude only the most common
+                if (len(word) >= 3 and word.isalpha() and 
+                    word not in {"the", "and", "for", "are", "but", "not", "you", "can", "had", "has", "was", "one", "our", "her", "was", "all", "would", "there", "their", "what", "when", "where", "which", "that", "this", "with", "from", "they", "have", "been", "were"}):
+                    keywords.append(word)
+            
+            # Map keywords to memory IDs (limit to 3 per memory)
+            for keyword in keywords[:3]:
+                if keyword not in hints:
+                    hints[keyword] = []
+                hints[keyword].append(str(getattr(memory, "id", memory)))
+        
+        logger.info(f"Extracted {len(hints)} keyword hints for user")
+        return hints
+
+    def _extract_temporal_anchors(self, episodes: List[Memory]) -> Dict[str, str]:
+        """Extract named temporal anchors from episodes."""
+        anchors = {}
+        
+        for episode in episodes[:10]:
+            content = (getattr(episode, "title", "") + " " + getattr(episode, "content", "")).lower()
+            
+            # Look for patterns like "my wedding", "the move"
+            import re
+            patterns = [
+                r"my (\w+)",
+                r"the (\w+)", 
+                r"our (\w+)",
+                r"last (\w+)",
+                r"this (\w+)",
+            ]
+            
+            for pattern in patterns:
+                matches = re.findall(pattern, content)
+                for match in matches:
+                    if len(match) > 3 and match not in {"name", "life", "time", "year", "week", "month", "day"}:
+                        if hasattr(episode, "timestamp") and episode.timestamp:
+                            anchors[match] = episode.timestamp.strftime("%Y-%m-%d")
+        
+        return anchors
+
+    def _compute_pinned_memories(self, memories: List[Memory]) -> Dict[str, List[str]]:
+        """Identify memories that should be pinned for quick access."""
+        pinned = {}
+        
+        # Pin recent memories (last 5)
+        recent = sorted(
+            memories, 
+            key=lambda m: getattr(m, "timestamp", None) or datetime.min, 
+            reverse=True
+        )[:5]
+        
+        if recent:
+            pinned["recent"] = [str(getattr(m, "id", m)) for m in recent]
+        
+        return pinned

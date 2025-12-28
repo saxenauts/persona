@@ -63,7 +63,6 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
 5. **ContextFormatter** (`core/context.py`)
    - Transforms memories into XML context
    - Groups by type for LLM readability
-   - Supports multiple context views (profile, timeline, tasks, graph)
    - Research-based ordering: UserCard first (primacy), Episodes last (recency)
 
 ### Services
@@ -197,7 +196,7 @@ expansion = await expand_query("What did I eat last week?", user_timezone="Ameri
 from persona.core.retrieval import Retriever
 
 retriever = Retriever(user_id, store, graph_ops)
-context = await retriever.get_context(
+context = await retriever.get_working_memory(
     query="What happened last week?",
     top_k=5,              # Vector search results
     hop_depth=1,          # Graph traversal depth
@@ -240,27 +239,6 @@ card = UserCard(
     roles=["software engineer", "parent"],
     core_values=["work-life balance", "continuous learning"],
     current_focus=["career transition", "health goals"],
-)
-```
-
-### Context Views
-
-Query-adaptive structure selection via `ContextView` enum:
-
-| View | Use Case | Ordering |
-|------|----------|----------|
-| `PROFILE` | Identity questions ("who am I?") | Psyche → Notes → Episodes |
-| `TIMELINE` | Temporal queries ("last week") | Chronological episodes |
-| `TASKS` | Action queries ("my tasks") | Active notes first |
-| `GRAPH_NEIGHBORHOOD` | Entity queries | Entity-linked memories |
-
-```python
-from persona.core.context import ContextView
-
-# View is auto-routed based on query
-context = await retriever.get_context(
-    query="What happened last week?",  # → TIMELINE view
-    user_timezone="America/Los_Angeles"
 )
 ```
 

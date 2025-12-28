@@ -81,7 +81,7 @@ class RAGInterface:
                     self.user_id, timezone=self.user_timezone
                 )
                 logger.info(
-                    f"Generated UserCard for {self.user_id}: {self._user_card.summary or 'no summary'}"
+                    f"Generated UserCard for {self.user_id}: {self._user_card.identity_prose[:50] if self._user_card.identity_prose else 'empty'}"
                 )
             except Exception as e:
                 logger.warning(f"UserCard generation failed: {e}")

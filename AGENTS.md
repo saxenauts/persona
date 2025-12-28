@@ -58,17 +58,11 @@ poetry run pytest tests/unit -v    # Local unit tests only
 3. **Retriever**: Vector similarity + graph traversal + query expansion for context retrieval
 4. **QueryExpansion**: LLM-enhanced parsing of temporal refs and entities
 5. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()`
-6. **Context Engineering**: Research-based context formatting with UserCard, ContextView routing, importance scoring
+6. **Context Engineering**: Research-based context formatting with UserCard, importance scoring
 
 ## Context Engineering Patterns
 
-**UserCard** (`persona/models/memory.py`): Compact identity anchor placed first in context (primacy effect). Contains name, roles, values, current focus.
-
-**ContextView** (`persona/core/context.py`): Query-adaptive structure selection:
-- `PROFILE` - Identity questions → Psyche first
-- `TIMELINE` - Temporal queries → Chronological episodes
-- `TASKS` - Action queries → Active notes first
-- `GRAPH_NEIGHBORHOOD` - Entity queries → Linked memories
+**UserCard** (`persona/models/memory.py`): Compact identity anchor placed first in context (primacy effect). Contains name, roles, values, current focus, and fuzzy index hints for retrieval.
 
 **Importance Field**: All memories have `importance: float` (0.0-1.0) for ordering within context sections.
 

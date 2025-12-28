@@ -1,109 +1,29 @@
-"""Unit tests for context formatting with token budget."""
+"""Unit tests for context formatting (prose format)."""
 
 import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from persona.core.context import ContextFormatter, ContextBudget, ContextView
-from persona.models.memory import EpisodeMemory, PsycheMemory, NoteMemory, UserCard
+from persona.core.context import (
+    format_working_memory_prose,
+    format_working_memory,
+    ContextFormatter,
+    MemoryAdapter,
+)
+from persona.models.memory import (
+    EpisodeMemory,
+    PsycheMemory,
+    NoteMemory,
+    UserCard,
+    MemoryLink,
+)
 
 
-class TestContextBudget:
-    """Test token budget enforcement."""
-
-    @pytest.fixture
-    def formatter(self):
-        return ContextFormatter()
+class TestFormatWorkingMemoryProse:
+    """Test the main prose formatting function."""
 
     @pytest.fixture
     def sample_episodes(self):
-        return [
-            EpisodeMemory(
-                id=uuid4(),
-                user_id="test",
-                type="episode",
-                title=f"Episode {i}",
-                content="x" * 200,
-                timestamp=datetime.now(),
-            )
-            for i in range(10)
-        ]
-
-    def test_default_budget_values(self):
-        """Test ContextBudget has sensible defaults."""
-        budget = ContextBudget()
-        assert budget.total_tokens == 4000
-        assert budget.user_card_budget == 300
-        assert budget.psyche_budget == 600
-        assert budget.episode_budget == 2400
-        assert budget.note_budget == 700
-
-    def test_fit_to_budget_limits_content(self, formatter, sample_episodes):
-        """Test that _fit_to_budget respects token limits."""
-        small_budget = 100
-        limited = formatter._fit_to_budget(sample_episodes, small_budget)
-        assert len(limited) < len(sample_episodes)
-        assert len(limited) > 0
-
-    def test_format_context_with_budget(self, formatter, sample_episodes):
-        """Test format_context respects budget parameter."""
-        budget = ContextBudget(episode_budget=100)
-        context = formatter.format_context(sample_episodes, budget=budget)
-        assert "<memory_context>" in context
-        assert "</memory_context>" in context
-        episode_count = context.count("<episode")
-        assert episode_count < len(sample_episodes)
-
-    def test_format_context_without_budget(self, formatter, sample_episodes):
-        """Test format_context includes all memories without budget."""
-        context = formatter.format_context(sample_episodes)
-        episode_count = context.count("<episode ")
-        assert episode_count == len(sample_episodes)
-
-
-class TestUserCard:
-    @pytest.fixture
-    def formatter(self):
-        return ContextFormatter()
-
-    def test_user_card_rendering(self, formatter):
-        card = UserCard(
-            user_id="test",
-            name="Alex",
-            timezone="PST",
-            roles=["Founder", "Engineer"],
-            current_focus=["Launch MVP", "Training"],
-            core_values=["Speed", "Quality"],
-        )
-        output = formatter._format_user_card(card)
-        assert "<user_card>" in output
-        assert "Alex" in output
-        assert "PST" in output
-        assert "Current focus:" in output
-
-    def test_user_card_in_context(self, formatter):
-        card = UserCard(user_id="test", name="Test User")
-        memories = [
-            EpisodeMemory(
-                id=uuid4(),
-                user_id="test",
-                type="episode",
-                title="Test",
-                content="Test content",
-                timestamp=datetime.now(),
-            )
-        ]
-        context = formatter.format_context(memories, user_card=card)
-        assert context.index("<user_card>") < context.index("<episodes>")
-
-
-class TestContextOrdering:
-    @pytest.fixture
-    def formatter(self):
-        return ContextFormatter()
-
-    @pytest.fixture
-    def mixed_memories(self):
         now = datetime.now()
         return [
             EpisodeMemory(
@@ -111,75 +31,272 @@ class TestContextOrdering:
                 user_id="test",
                 type="episode",
                 title="Recent Episode",
-                content="Recent",
+                content="Had a great meeting with the team",
                 timestamp=now,
-                importance=0.8,
             ),
             EpisodeMemory(
                 id=uuid4(),
                 user_id="test",
                 type="episode",
-                title="Old Episode",
-                content="Old",
-                timestamp=now - timedelta(days=30),
-                importance=0.3,
+                title="Older Episode",
+                content="Started the project",
+                timestamp=now - timedelta(days=7),
             ),
+        ]
+
+    @pytest.fixture
+    def sample_psyche(self):
+        return [
             PsycheMemory(
                 id=uuid4(),
                 user_id="test",
                 type="psyche",
                 psyche_type="trait",
-                content="Important trait",
-                importance=0.9,
+                content="Values efficiency and direct communication",
             ),
             PsycheMemory(
                 id=uuid4(),
                 user_id="test",
                 type="psyche",
                 psyche_type="preference",
-                content="Less important pref",
-                importance=0.4,
+                content="Prefers morning meetings",
+            ),
+        ]
+
+    @pytest.fixture
+    def sample_notes(self):
+        return [
+            NoteMemory(
+                id=uuid4(),
+                user_id="test",
+                type="note",
+                title="Launch MVP",
+                content="Ship the product by end of month",
+                status="active",
             ),
             NoteMemory(
                 id=uuid4(),
                 user_id="test",
                 type="note",
-                title="Active Task",
-                content="Do this",
-                status="active",
-                importance=0.7,
+                title="Completed task",
+                content="Already done",
+                status="COMPLETED",
             ),
         ]
 
-    def test_profile_view_ordering(self, formatter, mixed_memories):
-        context = formatter.format_context(mixed_memories, view=ContextView.PROFILE)
-        psyche_pos = context.find("<psyche>")
-        notes_pos = context.find("<notes>")
-        episodes_pos = context.find("<episodes>")
-        assert psyche_pos < notes_pos < episodes_pos
+    def test_empty_context(self):
+        """Test formatting with no memories."""
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=[],
+            psyche=[],
+            active_notes=[],
+        )
+        assert result == ""
 
-    def test_tasks_view_ordering(self, formatter, mixed_memories):
-        context = formatter.format_context(mixed_memories, view=ContextView.TASKS)
-        assert "<active_tasks>" in context
+    def test_user_card_rendering(self):
+        """Test that user card appears in output."""
+        card = UserCard(
+            user_id="test",
+            timezone="PST",
+            identity_prose="Alex is a founder building an AI startup.",
+        )
+        result = format_working_memory_prose(
+            user_card=card,
+            episodes=[],
+            psyche=[],
+            active_notes=[],
+        )
+        assert "<user>" in result
+        assert "Alex is a founder" in result
+        assert "</user>" in result
 
-    def test_timeline_view_ordering(self, formatter, mixed_memories):
-        context = formatter.format_context(mixed_memories, view=ContextView.TIMELINE)
-        assert "<timeline>" in context
+    def test_episodes_in_recent_context(self, sample_episodes):
+        """Test episodes appear in recent_context section."""
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=sample_episodes,
+            psyche=[],
+            active_notes=[],
+        )
+        assert "<recent_context>" in result
+        assert "</recent_context>" in result
+        assert "great meeting" in result
+        assert "Started the project" in result
 
-    def test_importance_sorting(self, formatter, mixed_memories):
-        psyches = [m for m in mixed_memories if isinstance(m, PsycheMemory)]
-        sorted_psyches = formatter._sort_by_importance(psyches)
-        assert sorted_psyches[0].importance >= sorted_psyches[1].importance
+    def test_episodes_sorted_by_recency(self, sample_episodes):
+        """Test that more recent episodes appear first."""
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=sample_episodes,
+            psyche=[],
+            active_notes=[],
+        )
+        recent_pos = result.find("great meeting")
+        older_pos = result.find("Started the project")
+        assert recent_pos < older_pos
 
-    def test_recency_sorting(self, formatter, mixed_memories):
-        episodes = [m for m in mixed_memories if isinstance(m, EpisodeMemory)]
-        sorted_eps = formatter._sort_by_recency(episodes)
-        assert sorted_eps[0].timestamp >= sorted_eps[1].timestamp
+    def test_psyche_in_active_context(self, sample_psyche):
+        """Test psyche appears in active_context section."""
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=[],
+            psyche=sample_psyche,
+            active_notes=[],
+        )
+        assert "<active_context>" in result
+        assert "Trait:" in result
+        assert "Preference:" in result
+
+    def test_notes_filter_completed(self, sample_notes):
+        """Test that completed notes are filtered out."""
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=[],
+            psyche=[],
+            active_notes=sample_notes,
+        )
+        assert "Launch MVP" in result
+        assert "Already done" not in result
+
+    def test_full_context_structure(self, sample_episodes, sample_psyche, sample_notes):
+        """Test full context with all memory types."""
+        card = UserCard(
+            user_id="test",
+            timezone="PST",
+            identity_prose="Test user identity",
+        )
+        result = format_working_memory_prose(
+            user_card=card,
+            episodes=sample_episodes,
+            psyche=sample_psyche,
+            active_notes=sample_notes,
+        )
+        user_pos = result.find("<user>")
+        recent_pos = result.find("<recent_context>")
+        active_pos = result.find("<active_context>")
+        assert user_pos < recent_pos < active_pos
 
 
-class TestContextViewEnum:
-    def test_context_view_values(self):
-        assert ContextView.PROFILE.value == "profile"
-        assert ContextView.TIMELINE.value == "timeline"
-        assert ContextView.TASKS.value == "tasks"
-        assert ContextView.GRAPH_NEIGHBORHOOD.value == "graph_neighborhood"
+class TestContextFormatter:
+    """Test the legacy ContextFormatter wrapper."""
+
+    def test_format_working_memory_dispatches_correctly(self):
+        """Test that ContextFormatter.format_working_memory works."""
+        formatter = ContextFormatter()
+        episode = EpisodeMemory(
+            id=uuid4(),
+            user_id="test",
+            type="episode",
+            title="Test",
+            content="Test content",
+            timestamp=datetime.now(),
+        )
+        result = formatter.format_working_memory([episode])
+        assert "<recent_context>" in result
+        assert "Test content" in result
+
+    def test_format_working_memory_module_function(self):
+        """Test the module-level format_working_memory function."""
+        episode = EpisodeMemory(
+            id=uuid4(),
+            user_id="test",
+            type="episode",
+            title="Test",
+            content="Module test",
+            timestamp=datetime.now(),
+        )
+        result = format_working_memory([episode])
+        assert "Module test" in result
+
+
+class TestMemoryAdapter:
+    """Test MemoryAdapter for storage->model conversion."""
+
+    def test_from_storage_episode(self):
+        """Test converting raw storage dict to EpisodeMemory."""
+        adapter = MemoryAdapter()
+        raw = {
+            "id": str(uuid4()),
+            "user_id": "test",
+            "type": "episode",
+            "title": "Test Episode",
+            "content": "Content here",
+            "timestamp": "2025-12-27T10:00:00Z",
+        }
+        memory = adapter.from_storage(raw)
+        assert memory.type == "episode"
+        assert memory.title == "Test Episode"
+
+    def test_from_storage_goal_to_note_migration(self):
+        """Test that old 'goal' type is migrated to 'note'."""
+        adapter = MemoryAdapter()
+        raw = {
+            "id": str(uuid4()),
+            "user_id": "test",
+            "type": "goal",
+            "goal_type": "task",
+            "title": "Old Goal",
+            "content": "Content",
+        }
+        memory = adapter.from_storage(raw)
+        assert memory.type == "note"
+        assert hasattr(memory, "note_type")
+        assert memory.note_type == "task"
+
+    def test_from_storage_batch(self):
+        """Test batch conversion."""
+        adapter = MemoryAdapter()
+        raw_list = [
+            {
+                "id": str(uuid4()),
+                "user_id": "test",
+                "type": "episode",
+                "content": f"Episode {i}",
+            }
+            for i in range(3)
+        ]
+        memories = adapter.from_storage_batch(raw_list)
+        assert len(memories) == 3
+
+
+class TestLinkProseFormatting:
+    """Test link context in prose output."""
+
+    def test_links_appear_in_episode_context(self):
+        """Test that links are rendered in episode prose."""
+        ep1_id = uuid4()
+        ep2_id = uuid4()
+        episodes = [
+            EpisodeMemory(
+                id=ep1_id,
+                user_id="test",
+                type="episode",
+                title="First event",
+                content="Something happened",
+                timestamp=datetime.now(),
+            ),
+            EpisodeMemory(
+                id=ep2_id,
+                user_id="test",
+                type="episode",
+                title="Second event",
+                content="Follow-up",
+                timestamp=datetime.now() - timedelta(hours=1),
+            ),
+        ]
+        links = [
+            MemoryLink(
+                source_id=ep1_id,
+                target_id=ep2_id,
+                relation="led_to",
+            )
+        ]
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=episodes,
+            psyche=[],
+            active_notes=[],
+            links=links,
+        )
+        assert "led to" in result
