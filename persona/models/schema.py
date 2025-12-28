@@ -24,7 +24,6 @@ class RAGQuery(BaseModel):
         None  # Separate query for retrieval (strips MCQ options)
     )
     include_stats: bool = False
-    use_router: bool = False  # Use IntentRouter for spray-and-pray retrieval
 
 
 class RAGResponse(BaseModel):
@@ -38,6 +37,31 @@ class RAGResponse(BaseModel):
     retrieval: Optional[Dict[str, Any]] = None
     retrieval_ms: Optional[float] = None
     generation_ms: Optional[float] = None
+
+
+class AgentRAGQuery(BaseModel):
+    query: str
+    include_stats: bool = False
+    session_id: Optional[str] = None
+    user_timezone: str = "UTC"
+    max_turns: Optional[int] = Field(
+        default=None, description="Maximum tool-calling turns before returning"
+    )
+    timeout: Optional[float] = Field(
+        default=None, description="Maximum seconds before returning"
+    )
+
+
+class AgentRAGResponse(BaseModel):
+    answer: str
+    status: str = Field(
+        default="completed",
+        description="Agent status: completed, max_turns, timeout, error",
+    )
+    state: Optional[str] = Field(
+        default=None, description="Serialized state for resumption (if can_resume)"
+    )
+    stats: Optional[Dict[str, Any]] = None
 
 
 class AskRequest(BaseModel):

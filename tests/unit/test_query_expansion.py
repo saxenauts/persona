@@ -118,7 +118,6 @@ class TestQueryExpansionModel:
 
         assert expansion.date_range is None
         assert expansion.entities == []
-        assert expansion.relationship_threads == []
         assert expansion.semantic_query == ""
 
     def test_model_with_date_range(self):

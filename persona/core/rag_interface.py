@@ -1,17 +1,12 @@
-"""
-RAG Interface for Persona.
+"""RAG Interface for Persona - simplified for agent tool pattern."""
 
-Provides context retrieval and query answering using the Memory architecture.
-"""
-
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
-from persona.core.context import format_memories_for_llm
-from persona.core.intent_router import IntentRouter, RetrievalHints, RetrievalMode
+from persona.core.context import format_working_memory
 from persona.models.memory import UserCard
 from persona.services.user_service import UserCardService
 from persona.llm.llm_graph import (
@@ -24,25 +19,17 @@ logger = get_logger(__name__)
 
 
 class RAGInterface:
-    """
-    Retrieval-Augmented Generation interface for Persona.
-
-    Uses the Retriever (Vector Search + Graph Crawl) for context retrieval.
-    """
-
     def __init__(self, user_id: str, user_timezone: str = "UTC"):
         self.user_id = user_id
         self.user_timezone = user_timezone
-        self.graph_ops = None
-        self._memory_store = None
-        self._retriever = None
-        self._graph_db = None
+        self.graph_ops: Optional[GraphOps] = None
+        self._memory_store: Optional[MemoryStore] = None
+        self._retriever: Optional[Retriever] = None
+        self._graph_db: Optional[Neo4jGraphDatabase] = None
         self._user_card: Optional[UserCard] = None
         self._user_card_service: Optional[UserCardService] = None
-        self._intent_router: Optional[IntentRouter] = None
 
     async def __aenter__(self):
-        """Initialize resources."""
         self.graph_ops = await GraphOps().__aenter__()
 
         self._graph_db = Neo4jGraphDatabase()
@@ -55,49 +42,35 @@ class RAGInterface:
         self._user_card_service = UserCardService(
             self._memory_store, graph_ops=self.graph_ops
         )
-        self._intent_router = IntentRouter()
 
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Cleanup resources."""
         if self.graph_ops:
             await self.graph_ops.__aexit__(exc_type, exc_val, exc_tb)
         if self._graph_db:
             await self._graph_db.close()
 
-    async def get_context(
+    async def get_working_memory(
         self,
         query: str,
         top_k: int = 5,
         hop_depth: int = 1,
         include_static: bool = True,
     ) -> str:
-        """
-        Get formatted context for a query.
-
-        Uses the new Retriever with Vector Search + Graph Crawl.
-
-        Args:
-            query: Natural language query.
-            top_k: Number of vector search results.
-            hop_depth: How many relationship hops to crawl.
-            include_static: Whether to include active notes and psyche.
-
-        Returns:
-            XML-formatted context string.
-        """
         if not self._retriever:
             await self.__aenter__()
+        assert self._retriever is not None
 
-        context = await self._retriever.get_context(
+        result = await self._retriever.get_working_memory(
             query=query, top_k=top_k, hop_depth=hop_depth, include_static=include_static
         )
+        working_memory = result if isinstance(result, str) else result[0]
 
         logger.info(
-            f"RAGInterface: got {len(context)} chars context for query: {query[:50]}..."
+            f"RAGInterface: got {len(working_memory)} chars working memory for query: {query[:50]}..."
         )
-        return context
+        return working_memory
 
     async def _get_user_card(self) -> Optional[UserCard]:
         if self._user_card:
@@ -119,69 +92,43 @@ class RAGInterface:
         query: str,
         retrieval_query: Optional[str] = None,
         include_stats: bool = False,
-        use_router: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Query with RAG retrieval.
-
-        Args:
-            query: Natural language query.
-            retrieval_query: Optional override for retrieval (uses query if None).
-            include_stats: Return detailed stats (timing, tokens, routing).
-            use_router: Use IntentRouter for spray-and-pray retrieval.
-        """
         if not self._retriever:
             await self.__aenter__()
+        assert self._retriever is not None
 
         user_card = await self._get_user_card()
-
-        if use_router:
-            return await self._query_with_router(
-                query, retrieval_query, user_card, include_stats
-            )
-        else:
-            return await self._query_classic(
-                query, retrieval_query, user_card, include_stats
-            )
-
-    async def _query_classic(
-        self,
-        query: str,
-        retrieval_query: Optional[str],
-        user_card: Optional[UserCard],
-        include_stats: bool,
-    ) -> Dict[str, Any]:
-        """Classic retrieval path (vector + graph crawl)."""
         search_query = retrieval_query or query
 
-        retrieval_stats = None
+        retrieval_stats: Optional[Dict[str, Any]] = None
         retrieval_start = time.time()
         if include_stats:
-            result = await self._retriever.get_context(
+            result = await self._retriever.get_working_memory(
                 query=search_query,
                 user_card=user_card,
                 user_timezone=self.user_timezone,
                 collect_stats=True,
             )
-            context, retrieval_stats = result  # type: ignore
+            working_memory, retrieval_stats = result  # type: ignore
         else:
-            context = await self._retriever.get_context(
+            result = await self._retriever.get_working_memory(
                 query=search_query,
                 user_card=user_card,
                 user_timezone=self.user_timezone,
-            )  # type: ignore
+            )
+            working_memory = result if isinstance(result, str) else result[0]
         retrieval_ms = (time.time() - retrieval_start) * 1000
 
-        logger.info(f"Context for RAG query: {context[:200]}...")
+        logger.info(f"Working memory for RAG query: {working_memory[:200]}...")
 
         if include_stats:
             generation_start = time.time()
             answer, llm_stats = await generate_response_with_context_with_stats(
-                query, context
+                query, working_memory
             )
             generation_ms = (time.time() - generation_start) * 1000
             retrieval_stats = retrieval_stats or {}
-            retrieval_stats["context_preview"] = context[:1000]
+            retrieval_stats["working_memory_preview"] = working_memory[:1000]
             return {
                 "answer": answer,
                 "model": llm_stats.get("model"),
@@ -189,146 +136,14 @@ class RAGInterface:
                 "temperature": llm_stats.get("temperature"),
                 "prompt_tokens": llm_stats.get("prompt_tokens"),
                 "completion_tokens": llm_stats.get("completion_tokens"),
-                "context_chars": len(context),
+                "working_memory_chars": len(working_memory),
                 "retrieval": retrieval_stats,
                 "retrieval_ms": retrieval_ms,
                 "generation_ms": generation_ms,
             }
 
-        answer = await generate_response_with_context(query, context)
-        return {"answer": answer}
-
-    async def _query_with_router(
-        self,
-        query: str,
-        retrieval_query: Optional[str],
-        user_card: Optional[UserCard],
-        include_stats: bool,
-    ) -> Dict[str, Any]:
-        """IntentRouter retrieval path (spray-and-pray with fuzzy index).
-
-        Args:
-            query: Full query (including MCQ options) for LLM generation.
-            retrieval_query: Stripped query (question only) for routing and retrieval.
-                             Avoids entity contamination from MCQ answer options.
-        """
-        search_query = retrieval_query or query
-
-        routing_start = time.time()
-        hints = await self._intent_router.route(
-            query=search_query,  # Use stripped query for routing
-            user_card=user_card,
-        )
-        routing_ms = (time.time() - routing_start) * 1000
-
-        retrieval_start = time.time()
-        if include_stats:
-            context, retrieval_stats = await self._retriever.get_context_with_hints(
-                query=search_query,  # Use stripped query for retrieval
-                hints=hints,
-                user_card=user_card,
-                collect_stats=True,
-            )
-        else:
-            context = await self._retriever.get_context_with_hints(
-                query=search_query,  # Use stripped query for retrieval
-                hints=hints,
-                user_card=user_card,
-            )
-            retrieval_stats = {}
-        retrieval_ms = (time.time() - retrieval_start) * 1000
-
-        logger.info(
-            f"RAG router: mode={hints.mode.value}, confidence={hints.confidence:.2f}, "
-            f"keywords={len(hints.search_keywords)}, seeds={len(hints.seed_memory_ids)}"
-        )
-
-        generation_start = time.time()
-        if include_stats:
-            answer, llm_stats = await generate_response_with_context_with_stats(
-                query, context
-            )
-            generation_ms = (time.time() - generation_start) * 1000
-
-            return {
-                "answer": answer,
-                "model": llm_stats.get("model"),
-                "usage": llm_stats.get("usage"),
-                "prompt_tokens": llm_stats.get("prompt_tokens"),
-                "completion_tokens": llm_stats.get("completion_tokens"),
-                "context_chars": len(context),
-                "routing": {
-                    "mode": hints.mode.value,
-                    "confidence": hints.confidence,
-                    "keywords": hints.search_keywords[:5],
-                    "seed_count": len(hints.seed_memory_ids),
-                    "memory_boosts": hints.memory_type_boost,
-                    "date_range": (
-                        [str(d) for d in hints.date_range] if hints.date_range else None
-                    ),
-                    "routing_ms": routing_ms,
-                },
-                "retrieval": retrieval_stats,
-                "retrieval_ms": retrieval_ms,
-                "generation_ms": generation_ms,
-            }
-
-        answer = await generate_response_with_context(query, context)
+        answer = await generate_response_with_context(query, working_memory)
         return {"answer": answer}
 
     async def close(self):
-        """Close resources."""
         await self.__aexit__(None, None, None)
-
-    # ========== V2 Memory Engine: get_user_context ==========
-
-    async def get_user_context(
-        self,
-        current_conversation: Optional[str] = None,
-        include_notes: bool = True,
-        include_psyche: bool = True,
-        include_previous_episode: bool = True,
-        max_episodes: int = 5,
-        max_notes: int = 10,
-        max_psyche: int = 10,
-    ) -> str:
-        """
-        Compose structured context from memory layers using the universal XML formatter.
-        """
-        if not self._memory_store:
-            await self.__aenter__()
-
-        all_memories = []
-
-        # 1. Previous Episodes
-        if include_previous_episode:
-            episodes = await self._memory_store.get_recent(
-                self.user_id, memory_type="episode", limit=max_episodes
-            )
-            all_memories.extend(episodes)
-
-        # 2. Active Notes
-        if include_notes:
-            notes = await self._memory_store.get_by_type(
-                "note", self.user_id, limit=max_notes
-            )
-            all_memories.extend(notes)
-
-        # 3. Psyche (traits, preferences)
-        if include_psyche:
-            psyche = await self._memory_store.get_by_type(
-                "psyche", self.user_id, limit=max_psyche
-            )
-            all_memories.extend(psyche)
-
-        # Generate XML context
-        context = format_memories_for_llm(all_memories)
-
-        # 4. Current Conversation (Keep as raw text outside XML context for now)
-        if current_conversation:
-            context = f"{context}\n\n<current_conversation>\n{current_conversation}\n</current_conversation>"
-
-        logger.info(
-            f"Generated universal user context: {len(all_memories)} memories, {len(context)} chars"
-        )
-        return context

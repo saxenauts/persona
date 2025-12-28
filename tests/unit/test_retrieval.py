@@ -8,22 +8,18 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 
 from persona.core.retrieval import Retriever
-from persona.core.context import ContextView
 from persona.core.query_expansion import QueryExpansion, DateRange
-from persona.core.intent_router import RetrievalHints, RetrievalMode
 from persona.models.memory import EpisodeMemory, NoteMemory, PsycheMemory, UserCard
 
 
 @pytest.fixture
 def mock_store():
-    """Mock MemoryStore."""
     store = AsyncMock()
     return store
 
 
 @pytest.fixture
 def mock_graph_ops():
-    """Mock GraphOps."""
     ops = AsyncMock()
     return ops
 
@@ -35,7 +31,6 @@ def user_id():
 
 @pytest.fixture
 def sample_memories():
-    """Sample memories for testing."""
     return {
         "episode": EpisodeMemory(
             id=uuid4(),
@@ -66,14 +61,10 @@ def sample_memories():
 
 
 class TestRetriever:
-    """Tests for Retriever class."""
-
     @pytest.mark.asyncio
-    async def test_get_context_returns_xml(
+    async def test_get_working_memory_returns_xml(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that get_context returns XML-formatted string."""
-        # Setup mocks
         mock_graph_ops.text_similarity_search.return_value = {
             "results": [{"nodeName": str(sample_memories["episode"].id), "score": 0.9}]
         }
@@ -81,25 +72,26 @@ class TestRetriever:
         mock_store.get_by_type.return_value = []
         mock_store.get_connected.return_value = []
 
-        # Execute
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context("running", top_k=5, hop_depth=1)
+        context = await retriever.get_working_memory(
+            "running", top_k=5, hop_depth=1, use_query_expansion=False
+        )
 
-        # Assert
         assert isinstance(context, str)
-        assert "<memory_context>" in context
-        assert "</memory_context>" in context
+        assert "<working_memory>" in context
+        assert "</working_memory>" in context
 
     @pytest.mark.asyncio
     async def test_vector_search_called_with_query(
         self, mock_store, mock_graph_ops, user_id
     ):
-        """Test that vector search is called with the query."""
         mock_graph_ops.text_similarity_search.return_value = {"results": []}
         mock_store.get_by_type.return_value = []
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        await retriever.get_context("find running memories", top_k=3)
+        await retriever.get_working_memory(
+            "find running memories", top_k=3, use_query_expansion=False
+        )
 
         mock_graph_ops.text_similarity_search.assert_called_once_with(
             query="find running memories", user_id=user_id, limit=3, date_range=None
@@ -109,7 +101,6 @@ class TestRetriever:
     async def test_static_context_includes_active_notes(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that static context includes active notes."""
         active_note = sample_memories["note"]
         completed_note = NoteMemory(
             id=uuid4(),
@@ -127,7 +118,9 @@ class TestRetriever:
         mock_graph_ops.text_similarity_search.return_value = {"results": []}
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context("test query")
+        context = await retriever.get_working_memory(
+            "test query", use_query_expansion=False
+        )
 
         # Active goal should be in context, completed should not
         assert "Run 10k" in context or "Training for marathon" in context
@@ -136,7 +129,6 @@ class TestRetriever:
     async def test_graph_expansion_follows_relationships(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that graph expansion follows relationships."""
         seed = sample_memories["episode"]
         linked = sample_memories["note"]
 
@@ -148,16 +140,16 @@ class TestRetriever:
         mock_store.get_connected.return_value = [linked]
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context("running", hop_depth=1)
+        context = await retriever.get_working_memory(
+            "running", hop_depth=1, use_query_expansion=False
+        )
 
-        # Both seed and linked memory should be in context
         mock_store.get_connected.assert_called()
 
     @pytest.mark.asyncio
     async def test_hop_depth_zero_skips_expansion(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that hop_depth=0 skips graph expansion."""
         seed = sample_memories["episode"]
 
         mock_graph_ops.text_similarity_search.return_value = {
@@ -167,47 +159,46 @@ class TestRetriever:
         mock_store.get_by_type.return_value = []
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        await retriever.get_context("running", hop_depth=0)
+        await retriever.get_working_memory(
+            "running", hop_depth=0, use_query_expansion=False
+        )
 
-        # get_connected should not be called when hop_depth=0
         mock_store.get_connected.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_include_static_false_skips_static_context(
         self, mock_store, mock_graph_ops, user_id
     ):
-        """Test that include_static=False skips static context."""
         mock_graph_ops.text_similarity_search.return_value = {"results": []}
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        await retriever.get_context("test", include_static=False)
+        await retriever.get_working_memory(
+            "test", include_static=False, use_query_expansion=False
+        )
 
-        # get_by_type should not be called for static context
         mock_store.get_by_type.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_handles_vector_search_failure(
         self, mock_store, mock_graph_ops, user_id
     ):
-        """Test graceful handling of vector search failure."""
         mock_graph_ops.text_similarity_search.side_effect = Exception("Vector DB error")
         mock_store.get_by_type.return_value = []
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context("test query")
+        context = await retriever.get_working_memory(
+            "test query", use_query_expansion=False
+        )
 
-        # Should still return valid context (empty or with static)
         assert isinstance(context, str)
-        assert "<memory_context>" in context
+        assert "<working_memory>" in context
 
     @pytest.mark.asyncio
     async def test_deduplicates_memories(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that duplicate memories are deduplicated."""
         memory = sample_memories["episode"]
 
-        # Same memory appears in static and vector search
         mock_store.get_by_type.side_effect = [
             [memory],  # notes (pretend episode is a note for test)
             [],  # psyche
@@ -219,16 +210,14 @@ class TestRetriever:
         mock_store.get_connected.return_value = []
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
+        context = await retriever.get_working_memory("test", use_query_expansion=False)
 
-        # Should not raise, should deduplicate
-        context = await retriever.get_context("test")
         assert isinstance(context, str)
 
     @pytest.mark.asyncio
     async def test_graph_expansion_limits_fanout_per_node(
         self, mock_store, mock_graph_ops, user_id, sample_memories
     ):
-        """Test that graph expansion limits links per node to prevent hub domination."""
         from uuid import uuid4
 
         seed = sample_memories["episode"]
@@ -252,60 +241,12 @@ class TestRetriever:
         mock_store.get_connected.return_value = linked_memories
 
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_stats(
-            "test", hop_depth=1, include_static=False
+        context, stats = await retriever.get_working_memory_with_stats(
+            "test", hop_depth=1, include_static=False, use_query_expansion=False
         )
 
         # Default max_links_per_node=15, so from 30 links only 15 should be added
-        # Total: 1 seed + 15 linked = 16 max
         assert stats["graph_traversal"]["nodes_visited"] <= 16
-
-
-class TestContextViewRouter:
-    @pytest.fixture
-    def retriever(self, mock_store, mock_graph_ops, user_id):
-        return Retriever(user_id, mock_store, mock_graph_ops)
-
-    def test_timeline_view_from_date_range(self, retriever):
-        expansion = QueryExpansion(
-            original_query="test",
-            date_range=DateRange(
-                start=datetime.now().date() - timedelta(days=7),
-                end=datetime.now().date(),
-            ),
-        )
-        view = retriever._route_context_view("test", expansion)
-        assert view == ContextView.TIMELINE
-
-    def test_timeline_view_from_keywords(self, retriever):
-        view = retriever._route_context_view("what happened last week", None)
-        assert view == ContextView.TIMELINE
-
-    def test_tasks_view_from_keywords(self, retriever):
-        view = retriever._route_context_view("what should i do today", None)
-        assert view == ContextView.TASKS
-
-        view = retriever._route_context_view("show me my tasks", None)
-        assert view == ContextView.TASKS
-
-    def test_profile_view_from_keywords(self, retriever):
-        view = retriever._route_context_view("who am i", None)
-        assert view == ContextView.PROFILE
-
-        view = retriever._route_context_view("what do i like", None)
-        assert view == ContextView.PROFILE
-
-    def test_graph_neighborhood_from_entities(self, retriever):
-        expansion = QueryExpansion(
-            original_query="about Jordan",
-            entities=["Jordan"],
-        )
-        view = retriever._route_context_view("about Jordan", expansion)
-        assert view == ContextView.GRAPH_NEIGHBORHOOD
-
-    def test_default_to_profile(self, retriever):
-        view = retriever._route_context_view("random query", None)
-        assert view == ContextView.PROFILE
 
 
 class TestLinkScoring:
@@ -365,7 +306,7 @@ class TestLinkScoring:
 
 class TestUserCardIntegration:
     @pytest.mark.asyncio
-    async def test_get_context_with_user_card(
+    async def test_get_working_memory_with_user_card(
         self, mock_store, mock_graph_ops, user_id
     ):
         mock_graph_ops.text_similarity_search.return_value = {"results": []}
@@ -373,258 +314,9 @@ class TestUserCardIntegration:
 
         card = UserCard(user_id=user_id, name="Test User", current_focus=["Testing"])
         retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context("test", user_card=card)
+        context = await retriever.get_working_memory(
+            "test", user_card=card, use_query_expansion=False
+        )
 
         assert "<user_card>" in context
         assert "Test User" in context
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_stats_includes_view(
-        self, mock_store, mock_graph_ops, user_id
-    ):
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get_by_type.return_value = []
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_stats(
-            "what happened yesterday"
-        )
-
-        assert "context_view" in stats
-        assert stats["context_view"] == "timeline"
-
-
-class TestGetContextWithHints:
-    @pytest.fixture
-    def mock_store(self):
-        store = AsyncMock()
-        return store
-
-    @pytest.fixture
-    def mock_graph_ops(self):
-        ops = AsyncMock()
-        return ops
-
-    @pytest.fixture
-    def user_id(self):
-        return "test_user_hints"
-
-    @pytest.fixture
-    def sample_memories(self, user_id):
-        return [
-            EpisodeMemory(
-                id=uuid4(),
-                user_id=user_id,
-                type="episode",
-                title="Fitness session",
-                content="Did a 5k run in the morning",
-                timestamp=datetime.utcnow(),
-                importance=0.7,
-            ),
-            NoteMemory(
-                id=uuid4(),
-                user_id=user_id,
-                type="note",
-                title="Marathon goal",
-                content="Run a marathon by end of year",
-                note_type="goal",
-                status="active",
-            ),
-            PsycheMemory(
-                id=uuid4(),
-                user_id=user_id,
-                type="psyche",
-                content="Prefers morning exercise",
-                psyche_type="preference",
-            ),
-        ]
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_returns_context(
-        self, mock_store, mock_graph_ops, user_id
-    ):
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get.return_value = None
-
-        hints = RetrievalHints(
-            mode=RetrievalMode.FAST,
-            search_keywords=["fitness"],
-            seed_memory_ids=[],
-            top_k=5,
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context_with_hints("fitness query", hints)
-
-        assert isinstance(context, str)
-        assert "<memory_context>" in context
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_fetches_seeds(
-        self, mock_store, mock_graph_ops, user_id, sample_memories
-    ):
-        seed_memory = sample_memories[0]
-        mock_store.get.return_value = seed_memory
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get_connected.return_value = []
-
-        hints = RetrievalHints(
-            seed_memory_ids=[str(seed_memory.id)],
-            hop_depth=0,
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context_with_hints("test", hints)
-
-        assert "Fitness session" in context or "5k run" in context
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_uses_keywords(
-        self, mock_store, mock_graph_ops, user_id, sample_memories
-    ):
-        mock_store.get.return_value = sample_memories[0]
-        mock_graph_ops.text_similarity_search.return_value = {
-            "results": [{"nodeName": str(sample_memories[0].id), "score": 0.8}]
-        }
-        mock_store.get_connected.return_value = []
-
-        hints = RetrievalHints(
-            search_keywords=["fitness", "running"],
-            hop_depth=0,
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        await retriever.get_context_with_hints("test", hints)
-
-        assert mock_graph_ops.text_similarity_search.call_count >= 1
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_applies_memory_type_boost(
-        self, mock_store, mock_graph_ops, user_id, sample_memories
-    ):
-        mock_store.get.side_effect = lambda mid, uid: next(
-            (m for m in sample_memories if str(m.id) == str(mid)), None
-        )
-        mock_graph_ops.text_similarity_search.return_value = {
-            "results": [
-                {"nodeName": str(sample_memories[0].id), "score": 0.7},
-                {"nodeName": str(sample_memories[1].id), "score": 0.6},
-            ]
-        }
-        mock_store.get_connected.return_value = []
-
-        hints = RetrievalHints(
-            memory_type_boost=["note"],
-            hop_depth=0,
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_hints(
-            "test", hints, collect_stats=True
-        )
-
-        assert "vector_lane" in stats
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_graph_expansion(
-        self, mock_store, mock_graph_ops, user_id, sample_memories
-    ):
-        seed = sample_memories[0]
-        linked = sample_memories[1]
-
-        mock_store.get.return_value = seed
-        mock_graph_ops.text_similarity_search.return_value = {
-            "results": [{"nodeName": str(seed.id), "score": 0.9}]
-        }
-        mock_store.get_connected.return_value = [linked]
-
-        hints = RetrievalHints(
-            hop_depth=1,
-            link_type_boost=["DERIVED_FROM"],
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_hints(
-            "test", hints, collect_stats=True
-        )
-
-        assert "graph_traversal" in stats
-        assert stats["graph_traversal"]["nodes_visited"] >= 1
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_routes_view_from_date_range(
-        self, mock_store, mock_graph_ops, user_id
-    ):
-        from datetime import date
-
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get.return_value = None
-
-        hints = RetrievalHints(
-            date_range=(date(2025, 12, 19), date(2025, 12, 26)),
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_hints(
-            "test", hints, collect_stats=True
-        )
-
-        assert stats["context_view"] == "timeline"
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_routes_view_from_note_boost(
-        self, mock_store, mock_graph_ops, user_id
-    ):
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get.return_value = None
-
-        hints = RetrievalHints(
-            memory_type_boost=["note"],
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_hints(
-            "test", hints, collect_stats=True
-        )
-
-        assert stats["context_view"] == "tasks"
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_includes_stats(
-        self, mock_store, mock_graph_ops, user_id
-    ):
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get.return_value = None
-
-        hints = RetrievalHints(
-            mode=RetrievalMode.FAST,
-            confidence=0.75,
-        )
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context, stats = await retriever.get_context_with_hints(
-            "test", hints, collect_stats=True
-        )
-
-        assert stats["mode"] == "fast"
-        assert stats["confidence"] == 0.75
-        assert "total_retrieval_ms" in stats
-        assert "context_chars" in stats
-
-    @pytest.mark.asyncio
-    async def test_get_context_with_hints_uses_user_card(
-        self, mock_store, mock_graph_ops, user_id
-    ):
-        mock_graph_ops.text_similarity_search.return_value = {"results": []}
-        mock_store.get.return_value = None
-
-        hints = RetrievalHints()
-        user_card = UserCard(user_id=user_id, name="Test Runner")
-
-        retriever = Retriever(user_id, mock_store, mock_graph_ops)
-        context = await retriever.get_context_with_hints(
-            "test", hints, user_card=user_card
-        )
-
-        assert "<user_card>" in context
-        assert "Test Runner" in context

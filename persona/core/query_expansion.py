@@ -4,10 +4,10 @@ LLM-Enhanced Query Expansion for Retrieval.
 Expands natural language queries into structured retrieval hints:
 - Date ranges (temporal references like "last week")
 - Entity references (people, places mentioned)
-- Relationship threads (conversation topics to traverse)
 """
 
 import json
+import re
 from datetime import datetime, timedelta, date
 from typing import Optional, List, Tuple
 from pydantic import BaseModel, Field
@@ -19,6 +19,31 @@ from server.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _extract_json_from_text(text: str) -> Optional[dict]:
+    """Extract JSON object from LLM response, handling markdown code blocks and noise."""
+    if not text:
+        return None
+
+    code_block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if code_block:
+        try:
+            return json.loads(code_block.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    brace_match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+    if brace_match:
+        try:
+            return json.loads(brace_match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        return None
+
+
 class DateRange(BaseModel):
     start: date
     end: date
@@ -28,7 +53,6 @@ class QueryExpansion(BaseModel):
     original_query: str
     date_range: Optional[DateRange] = None
     entities: List[str] = Field(default_factory=list)
-    relationship_threads: List[str] = Field(default_factory=list)
     semantic_query: str = Field(default="")
 
 
@@ -37,8 +61,7 @@ QUERY_EXPANSION_PROMPT = """You are a query analyzer for a personal memory syste
 Given a query and the current date, extract:
 1. **date_range**: If the query mentions a time period (e.g., "last week", "yesterday", "in January"), compute the actual date range. Use null if no temporal reference.
 2. **entities**: Extract any named entities (people, places, organizations, specific things like "my car", "the gym").
-3. **relationship_threads**: Identify topic threads that might help find related memories (e.g., "fitness_journey", "work_projects", "family_events").
-4. **semantic_query**: Clean the query for vector search - remove temporal qualifiers, keep semantic meaning.
+3. **semantic_query**: Clean the query for vector search - remove temporal qualifiers, keep semantic meaning.
 
 Current date: {current_date}
 User timezone: {timezone}
@@ -47,7 +70,6 @@ Return JSON:
 {
   "date_range": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"} or null,
   "entities": ["entity1", "entity2"],
-  "relationship_threads": ["thread1", "thread2"],
   "semantic_query": "cleaned query for vector search"
 }"""
 
@@ -79,7 +101,10 @@ async def expand_query(
             response_format={"type": "json_object"},
         )
 
-        data = json.loads(response.content)
+        data = _extract_json_from_text(response.content)
+        if data is None:
+            logger.warning(f"JSON extraction failed from: {response.content[:200]}")
+            return _fallback_expansion(query, current_date)
 
         date_range = None
         if data.get("date_range"):
@@ -92,7 +117,6 @@ async def expand_query(
             original_query=query,
             date_range=date_range,
             entities=data.get("entities", []),
-            relationship_threads=data.get("relationship_threads", []),
             semantic_query=data.get("semantic_query", query),
         )
 
@@ -126,7 +150,6 @@ def _fallback_expansion(query: str, current_date: date) -> QueryExpansion:
         original_query=query,
         date_range=date_range,
         entities=[],
-        relationship_threads=[],
         semantic_query=query,
     )
 
