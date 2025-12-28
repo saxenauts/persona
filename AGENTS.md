@@ -55,18 +55,26 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 1. **Unified Memory Model**: All data stored as `Episode`, `Psyche`, or `Note` types
 2. **PersonaAdapter**: Single entry point for ingestion (extracts, links, persists)
-3. **Retriever**: Vector similarity + graph traversal + query expansion for context retrieval
-4. **QueryExpansion**: LLM-enhanced parsing of temporal refs and entities
+3. **Retriever**: Time-windowed fetch with vector similarity for context retrieval
+4. **Tools Layer** (`persona/tools/`): `recall(query)` and `record(text)` dialectic tools with internal intelligence
 5. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()`
-6. **Context Engineering**: Research-based context formatting with UserCard, importance scoring
+6. **Context Engineering**: Prose-based context formatting with UserCard identity anchor
+
+## Tools Layer
+
+**recall(query)** (`persona/tools/memory.py`): Parses temporal references ("last week", "yesterday"), extracts time windows, fetches memories via Retriever, formats as prose context.
+
+**record(text)** (`persona/tools/memory.py`): Ingests new memories with automatic type classification (episode/psyche/note).
+
+**AgentRunner** (`persona/tools/runner.py`): Generic tool execution loop for LLM agents with parallel tool calls support.
 
 ## Context Engineering Patterns
 
-**UserCard** (`persona/models/memory.py`): Compact identity anchor placed first in context (primacy effect). Contains name, roles, values, current focus, and fuzzy index hints for retrieval.
+**UserCard** (`persona/models/memory.py`): Compact identity anchor placed first in context (primacy effect). Contains `user_id`, `timezone`, and `identity_prose` (natural language identity summary).
 
-**Importance Field**: All memories have `importance: float` (0.0-1.0) for ordering within context sections.
+**Prose Format** (`persona/core/context.py`): `format_working_memory_prose()` renders memories as natural language with `<user>`, `<recent_context>`, `<active_context>` sections.
 
-**Link Scoring** (`persona/core/retrieval.py`): Graph traversal prioritizes links by importance + entity matches + recency.
+**Link Prose**: Memory links rendered inline (e.g., "led to X", "caused by Y") for narrative continuity.
 
 ## Environment Configuration
 

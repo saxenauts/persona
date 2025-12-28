@@ -46,24 +46,21 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Orchestrates: extraction → linking → persistence
 
 2. **Retriever** (`core/retrieval.py`)
-   - Combines vector similarity with graph traversal
-   - LLM-enhanced query expansion for temporal/entity parsing
+   - Time-windowed fetch with vector similarity
    - Returns formatted context for LLM consumption
 
-3. **QueryExpansion** (`core/query_expansion.py`)
-   - Parses natural language queries into structured hints
-   - Extracts date ranges ("last week" → date filter)
-   - Identifies entities and relationship threads
-   - Falls back to rule-based parsing when LLM fails
+3. **Tools Layer** (`tools/memory.py`)
+   - `recall(query)`: Parses temporal refs, fetches context
+   - `record(text)`: Ingests new memories with type classification
 
 4. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories
    - Handles temporal linking between episodes
 
 5. **ContextFormatter** (`core/context.py`)
-   - Transforms memories into XML context
-   - Groups by type for LLM readability
-   - Research-based ordering: UserCard first (primacy), Episodes last (recency)
+   - Transforms memories into prose context
+   - Renders links inline for narrative continuity
+   - Sections: `<user>`, `<recent_context>`, `<active_context>`
 
 ### Services
 
@@ -102,13 +99,11 @@ Raw Text → PersonaAdapter → MemoryIngestionService → MemoryStore → Neo4j
 
 ### Retrieval
 ```
-Query → QueryExpansion → Retriever → Vector Search + Graph Traversal → ContextFormatter → LLM
-             ↓                                                               ↓
-        Extracts:                                                    <memory_context>
-        - date_range                                                   <episodes>...</episodes>
-        - entities                                                     <psyche>...</psyche>
-        - semantic_query                                               <notes>...</notes>
-                                                                     </memory_context>
+Query → recall() tool → Retriever → Vector Search + Time Filter → format_working_memory_prose() → LLM
+              ↓                                                               ↓
+         Parses:                                                    <user>identity</user>
+         - temporal refs                                            <recent_context>episodes</recent_context>
+         - time windows                                             <active_context>psyche + notes</active_context>
 ```
 
 ## Dependency Injection
@@ -165,26 +160,20 @@ The `PersonaAdapter` acts as the primary interface for these customizations, all
 
 ## Retrieval Layer
 
-The retrieval layer (`core/retrieval.py` + `core/query_expansion.py`) implements intelligent context fetching.
+The retrieval layer (`core/retrieval.py` + `tools/memory.py`) implements intelligent context fetching.
 
-### Query Expansion
+### Temporal Parsing
 
-Before vector search, queries are expanded using LLM-enhanced parsing:
+The `recall()` tool parses temporal references using rule-based patterns:
 
 ```python
-from persona.core.query_expansion import expand_query
+from persona.tools.memory import recall
 
-expansion = await expand_query("What did I eat last week?", user_timezone="America/Los_Angeles")
-# Returns:
-# QueryExpansion(
-#     original_query="What did I eat last week?",
-#     date_range=DateRange(start=date(2025, 12, 19), end=date(2025, 12, 26)),
-#     entities=[],
-#     semantic_query="What did I eat"
-# )
+context = await recall("What did I eat last week?", user_id="user_123", timezone="America/Los_Angeles")
+# Parses "last week" → 7-day time window, fetches memories, formats as prose
 ```
 
-**Supported temporal patterns** (rule-based fallback):
+**Supported temporal patterns**:
 - "yesterday" → single day
 - "last week" / "past week" → 7-day window
 - "last month" / "past month" → 30-day window
@@ -198,19 +187,18 @@ from persona.core.retrieval import Retriever
 retriever = Retriever(user_id, store, graph_ops)
 context = await retriever.get_working_memory(
     query="What happened last week?",
-    top_k=5,              # Vector search results
-    hop_depth=1,          # Graph traversal depth
-    include_static=True,  # Include active notes + psyche
-    user_timezone="UTC",  # For temporal parsing
+    config=RetrievalConfig(
+        time_window_days=7,
+        max_episodes=10,
+    ),
+    user_card=user_card,
 )
 ```
 
 **Pipeline stages**:
-1. **Query Expansion** - Parse temporal refs, extract entities
-2. **Static Context** - Always include active notes + core psyche
-3. **Vector Search** - Semantic similarity with optional date filtering
-4. **Graph Crawl** - Follow relationships from seed nodes
-5. **Format** - XML context for LLM consumption
+1. **Static Context** - Always include active notes + core psyche
+2. **Vector Search** - Semantic similarity with time filtering
+3. **Format** - Prose context with link annotations
 
 ### Provenance Tracking
 
@@ -224,7 +212,7 @@ Every extracted memory includes source tracking:
 
 ## Context Engineering
 
-Research-backed context formatting based on "Lost in the Middle" (Stanford) and StructRAG findings.
+Prose-based context formatting for natural LLM consumption.
 
 ### UserCard
 
@@ -235,33 +223,48 @@ from persona.models.memory import UserCard
 
 card = UserCard(
     user_id="user_123",
-    name="Alex",
-    roles=["software engineer", "parent"],
-    core_values=["work-life balance", "continuous learning"],
-    current_focus=["career transition", "health goals"],
+    timezone="America/Los_Angeles",
+    identity_prose="Alex is a software engineer and parent who values work-life balance and continuous learning. Currently focused on career transition and health goals.",
 )
 ```
 
-### Memory Importance
+### Prose Format
 
-All memories have an `importance` field (0.0-1.0) used for ordering within context:
+Context is rendered as natural language with semantic sections:
 
 ```python
-from persona.models.memory import Episode
+from persona.core.context import format_working_memory_prose
 
-episode = Episode(
-    content="Got promoted to senior engineer",
-    importance=0.9,  # High importance, appears earlier in context
-    ...
+context = format_working_memory_prose(
+    user_card=card,
+    episodes=episodes,
+    psyche=psyche_memories,
+    active_notes=notes,
+    links=memory_links,
 )
+
+# Output:
+# <user>
+# Alex is a software engineer and parent...
+# </user>
+#
+# <recent_context>
+# December 27: Had a great meeting with team (led to project kickoff)
+# December 20: Started the new project
+# </recent_context>
+#
+# <active_context>
+# Trait: Values efficiency. Preference: Morning meetings.
+# Current tasks: Launch MVP. Review documentation.
+# </active_context>
 ```
 
-### Link Scoring
+### Link Prose
 
-Graph traversal scores linked memories based on:
-- Base importance field
-- Entity matches from QueryExpansion (+0.2 per match)
-- Recency bonus for episodes (<7 days: +0.3, <30 days: +0.1)
+Memory links are rendered inline for narrative continuity:
+- "led to X" - causal relationships
+- "caused by Y" - reverse causation
+- "related to Z" - associations
 
 ## Further Reading
 
