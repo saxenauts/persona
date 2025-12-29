@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from persona.services.user_service import UserService
-from persona.services.rag_service import RAGService
-from persona.services.ask_service import AskService
+from persona.services.persona_service import PersonaService
 from persona.core.graph_ops import GraphOps
 from persona.models.schema import AskRequest
 from persona.tools.runner import AgentResult
@@ -13,13 +12,14 @@ def mock_graph_ops():
     mock = AsyncMock(spec=GraphOps)
     mock.__aenter__.return_value = mock
     mock.__aexit__.return_value = None
+    mock.graph_db = MagicMock()
     return mock
 
 
 @pytest.mark.asyncio
 async def test_create_user_success(mock_graph_ops):
     mock_graph_ops.create_user = AsyncMock()
-    mock_graph_ops.user_exists = AsyncMock(return_value=False)  # User doesn't exist
+    mock_graph_ops.user_exists = AsyncMock(return_value=False)
 
     result = await UserService.create_user("test_user", mock_graph_ops)
     assert result["message"] == "User test_user created successfully"
@@ -36,25 +36,8 @@ async def test_delete_user_success(mock_graph_ops):
 
 
 @pytest.mark.asyncio
-async def test_rag_query_success(mock_graph_ops):
-    mock_rag = AsyncMock()
-    mock_rag.query = AsyncMock(return_value="Test response")
-
-    with patch("persona.services.rag_service.RAGInterface") as MockRAGInterface:
-        MockRAGInterface.return_value.__aenter__.return_value = mock_rag
-
-        result = await RAGService.query("test_user", "Test query")
-        assert isinstance(result, str)
-        assert result == "Test response"
-        MockRAGInterface.assert_called_with("test_user")
-
-
-@pytest.mark.asyncio
-async def test_rag_query_with_agent_success():
-    mock_rag = AsyncMock()
-    mock_rag.graph_ops = MagicMock()
-    mock_rag._memory_store = MagicMock()
-    mock_rag._get_user_card = AsyncMock(return_value=None)
+async def test_persona_service_run_agent_success(mock_graph_ops):
+    service = PersonaService(mock_graph_ops)
 
     mock_runner = AsyncMock()
     mock_runner.run = AsyncMock(
@@ -66,42 +49,50 @@ async def test_rag_query_with_agent_success():
         )
     )
 
-    with patch("persona.services.rag_service.RAGInterface") as MockRAGInterface:
-        MockRAGInterface.return_value.__aenter__.return_value = mock_rag
-        MockRAGInterface.return_value.__aexit__.return_value = None
+    with patch.object(service, "_get_user_card", return_value=None):
+        with patch(
+            "persona.services.persona_service.create_memory_tool_registry"
+        ) as mock_registry:
+            mock_registry.return_value = {}
+            with patch("persona.services.persona_service.AgentRunner") as MockRunner:
+                MockRunner.return_value = mock_runner
 
-        with patch("persona.services.rag_service.AgentRunner") as MockAgentRunner:
-            MockAgentRunner.return_value = mock_runner
+                result = await service.run_agent(
+                    user_id="test_user",
+                    query="What do you remember about me?",
+                    include_stats=True,
+                )
 
-            result = await RAGService.query_with_agent(
-                user_id="test_user",
-                query="What do you remember about me?",
-                include_stats=True,
-            )
-
-            assert result["answer"] == "Agent response based on memory"
-            assert result["stats"]["tool_calls_made"] == 1
-            assert result["stats"]["turns"] == 2
+                assert result["answer"] == "Agent response based on memory"
+                assert result["stats"]["tool_calls_made"] == 1
+                assert result["stats"]["turns"] == 2
 
 
 @pytest.mark.asyncio
-async def test_ask_insights_success(mock_graph_ops):
-    test_request = AskRequest(
-        query="What are the preferences?",
-        output_schema={"preferences": ["test"], "summary": "test summary"},
+async def test_persona_service_ask_success(mock_graph_ops):
+    service = PersonaService(mock_graph_ops)
+
+    mock_retriever = AsyncMock()
+    mock_retriever.get_working_memory = AsyncMock(return_value="User likes coffee.")
+
+    mock_llm = AsyncMock()
+    mock_llm.chat = AsyncMock(
+        return_value=MagicMock(content='{"preferences": ["coffee"]}')
     )
 
-    mock_rag = AsyncMock()
-    mock_rag.get_context = AsyncMock(return_value="test context")
-
-    with patch("persona.services.ask_service.RAGInterface") as MockRAGInterface:
-        MockRAGInterface.return_value.__aenter__.return_value = mock_rag
-
+    with patch.object(service, "_get_user_card", return_value=None):
         with patch(
-            "persona.services.ask_service.generate_structured_insights",
-            return_value={"test": "data"},
+            "persona.services.persona_service.Retriever", return_value=mock_retriever
         ):
-            response = await AskService.ask_insights("test_user", test_request)
+            with patch(
+                "persona.services.persona_service.get_chat_client",
+                return_value=mock_llm,
+            ):
+                result = await service.ask(
+                    user_id="test_user",
+                    query="What are user preferences?",
+                    output_schema={"preferences": []},
+                )
 
-    assert response is not None
-    assert hasattr(response, "result")
+                assert "result" in result
+                assert result["result"]["preferences"] == ["coffee"]

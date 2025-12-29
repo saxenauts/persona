@@ -1,5 +1,5 @@
 """
-Memory Ingestion Service for Persona v2.
+Memory Ingestion Service for Persona.
 
 Ingests raw input and extracts memories:
 - Episode (the narrative record)
@@ -270,7 +270,7 @@ class MemoryIngestionService:
                     timeout=EXTRACTION_TIMEOUT_SECONDS,
                 )
 
-                data = json.loads(response.content)
+                data = json.loads(response.content or "{}")
                 result = IngestionOutput(**data)
 
                 memory_count = 1 + len(result.psyche) + len(result.notes)

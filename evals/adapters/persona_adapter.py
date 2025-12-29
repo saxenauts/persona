@@ -24,15 +24,11 @@ def extract_question_for_retrieval(full_query: str) -> str:
 
 
 class PersonaAdapter(MemorySystem):
-    def __init__(self, use_router: bool = None):
+    def __init__(self):
         port = os.environ.get("PERSONA_PORT", "8000")
         self.base_url = f"http://localhost:{port}/api/v1"
         self.last_ingest_stats = None
         self.last_query_stats = None
-        # Allow env var override: PERSONA_USE_ROUTER=true
-        if use_router is None:
-            use_router = os.environ.get("PERSONA_USE_ROUTER", "").lower() == "true"
-        self.use_router = use_router
 
     def add_session(self, user_id: str, session_data: str, date: str):
         # First ensure user exists
@@ -90,22 +86,20 @@ class PersonaAdapter(MemorySystem):
                 self.last_ingest_stats = resp.json()
             except ValueError:
                 self.last_ingest_stats = None
-        except Exception as e:
+        except requests.RequestException as e:
             print(f"[PersonaAdapter] Batch ingest failed: {e}")
-            if hasattr(e, "response") and e.response:
+            if hasattr(e, "response") and e.response is not None:
                 print(f"  Response: {e.response.text}")
-            raise e
+            raise
 
     def query(self, user_id: str, query: str) -> str:
         retrieval_query = extract_question_for_retrieval(query)
 
         response = requests.post(
-            f"{self.base_url}/users/{user_id}/rag/query",
+            f"{self.base_url}/users/{user_id}/persona/query",
             json={
                 "query": query,
-                "retrieval_query": retrieval_query,
                 "include_stats": True,
-                "use_router": self.use_router,
             },
         )
         if response.status_code != 200:
@@ -116,8 +110,8 @@ class PersonaAdapter(MemorySystem):
         if isinstance(data, dict):
             if "answer" in data:
                 self.last_query_stats = data
-                return data.get("answer")
-            return data.get("result") or str(data)
+                return str(data["answer"])
+            return str(data.get("result") or data)
         return str(data)
 
     def reset(self, user_id: str):
