@@ -1,17 +1,13 @@
 from fastapi import APIRouter, HTTPException, status, Path, Depends, Body, Response
 from persona.core.graph_ops import GraphOps
-from persona.core.rag_interface import RAGInterface
-from persona.models.schema import UserCreate, RAGQuery, RAGResponse
-from persona.models.schema import AskRequest, AskResponse
-from persona.models.schema import AgentRAGQuery, AgentRAGResponse
+from persona.models.schema import UserCreate, AskRequest, AskResponse
 from persona.services.user_service import UserService
-from persona.services.rag_service import RAGService
-from persona.services.ask_service import AskService
+from persona.services.persona_service import PersonaService
 from persona.adapters import PersonaAdapter
 from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 import os
 import re
 
@@ -58,9 +54,9 @@ def get_version():
 
 @router.post("/users/{user_id}")
 async def create_user(
+    response: Response,
     user_id: str = Path(..., description="The unique identifier for the user"),
     graph_ops: GraphOps = Depends(get_graph_ops),
-    response: Response = None,
 ):
     try:
         if not is_valid_user_id(user_id):
@@ -260,101 +256,56 @@ async def ingest_batch_data(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-@router.post("/users/{user_id}/rag/query", response_model=RAGResponse)
-async def rag_query(
-    user_id: str = Path(..., description="The unique identifier for the user"),
-    query: RAGQuery = None,
-    graph_ops: GraphOps = Depends(get_graph_ops),
-):
-    try:
-        if not query or not query.query:
-            logger.warning(f"Empty query received for user {user_id}")
-            raise HTTPException(status_code=400, detail="Query is required")
+class PersonaQueryRequest(BaseModel):
+    query: str = Field(..., description="User query")
+    user_timezone: str = Field(default="UTC")
+    session_id: Optional[str] = None
+    max_turns: Optional[int] = None
+    timeout: Optional[float] = None
+    include_stats: bool = False
 
-        # Validate user exists
-        if not await graph_ops.user_exists(user_id):
-            logger.warning(f"RAG query attempted for non-existent user: {user_id}")
-            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
-        # Validate query length (configurable)
-        max_query_chars = int(os.getenv("RAG_QUERY_MAX_CHARS", "0"))
-        if max_query_chars > 0 and len(query.query.strip()) > max_query_chars:
-            logger.warning(
-                f"Query too long for user {user_id}: {len(query.query)} characters"
-            )
-            raise HTTPException(
-                status_code=400,
-                detail=f"Query is too long (max {max_query_chars} characters)",
-            )
-
-        logger.info(f"Processing RAG query for user {user_id}: {query.query[:100]}...")
-        result = await RAGService.query(
-            user_id,
-            query.query,
-            retrieval_query=query.retrieval_query,
-            include_stats=query.include_stats,
-        )
-        logger.info(f"RAG query completed successfully for user {user_id}")
-        if isinstance(result, dict):
-            return RAGResponse(**result)
-        return RAGResponse(answer=result)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in RAG query for user {user_id}: {str(e)}")
-        if "Neo4j" in str(e) or "database" in str(e).lower():
-            raise HTTPException(
-                status_code=503,
-                detail="Database connection error. Please ensure Neo4j is running and accessible.",
-            )
-        if "openai" in str(e).lower() or "api" in str(e).lower():
-            raise HTTPException(
-                status_code=502,
-                detail="External service error. Please try again later.",
-            )
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error occurred while processing query",
-        )
+class PersonaQueryResponse(BaseModel):
+    answer: str
+    status: str
+    stats: Optional[Dict[str, Any]] = None
+    state: Optional[str] = None
 
 
 @router.post(
-    "/users/{user_id}/rag/agent",
-    response_model=AgentRAGResponse,
+    "/users/{user_id}/persona/query",
+    response_model=PersonaQueryResponse,
     status_code=status.HTTP_200_OK,
 )
-async def rag_query_with_agent(
+async def persona_query(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    query: AgentRAGQuery = Body(...),
+    request: PersonaQueryRequest = Body(...),
     graph_ops: GraphOps = Depends(get_graph_ops),
 ):
     try:
-        if not query or not query.query:
-            raise HTTPException(status_code=400, detail="Query is required")
-
         if not await graph_ops.user_exists(user_id):
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
-        logger.info(
-            f"Processing agent RAG query for user {user_id}: {query.query[:100]}..."
-        )
-        result = await RAGService.query_with_agent(
+        logger.info(f"Persona query for user {user_id}: {request.query[:100]}...")
+
+        service = PersonaService(graph_ops)
+        result = await service.run_agent(
             user_id=user_id,
-            query=query.query,
-            include_stats=query.include_stats,
-            user_timezone=query.user_timezone,
-            session_id=query.session_id,
-            max_turns=query.max_turns,
-            timeout=query.timeout,
+            query=request.query,
+            include_stats=request.include_stats,
+            user_timezone=request.user_timezone,
+            session_id=request.session_id,
+            max_turns=request.max_turns,
+            timeout=request.timeout,
         )
-        logger.info(f"Agent RAG query completed for user {user_id}")
-        return AgentRAGResponse(**result)
+
+        logger.info(f"Persona query completed for user {user_id}")
+        return PersonaQueryResponse(**result)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in agent RAG query for user {user_id}: {str(e)}")
+        logger.error(f"Error in persona query for user {user_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail="Internal server error occurred while processing query",
@@ -362,52 +313,36 @@ async def rag_query_with_agent(
 
 
 @router.post(
-    "/users/{user_id}/ask", response_model=AskResponse, status_code=status.HTTP_200_OK
+    "/users/{user_id}/persona/ask",
+    response_model=AskResponse,
+    status_code=status.HTTP_200_OK,
 )
-async def ask_insights(
+async def persona_ask(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    ask_request: AskRequest = None,
+    request: AskRequest = Body(...),
     graph_ops: GraphOps = Depends(get_graph_ops),
 ):
     try:
-        if not ask_request:
-            logger.warning(f"Empty ask request received for user {user_id}")
-            raise HTTPException(status_code=400, detail="Request body is required")
-
-        if not ask_request.query or len(ask_request.query.strip()) == 0:
-            logger.warning(f"Empty query in ask request for user {user_id}")
-            raise HTTPException(status_code=400, detail="Query is required")
-
-        # Validate user exists
         if not await graph_ops.user_exists(user_id):
-            logger.warning(f"Ask insights attempted for non-existent user: {user_id}")
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
-        logger.info(
-            f"Processing ask insights for user {user_id}: {ask_request.query[:100]}..."
+        logger.info(f"Persona ask for user {user_id}: {request.query[:100]}...")
+
+        service = PersonaService(graph_ops)
+        result = await service.ask(
+            user_id=user_id,
+            query=request.query,
+            output_schema=request.output_schema,
         )
-        response = await AskService.ask_insights(user_id, ask_request)
-        logger.info(f"Ask insights completed successfully for user {user_id}")
-        return response
+
+        logger.info(f"Persona ask completed for user {user_id}")
+        return AskResponse(**result)
 
     except HTTPException:
         raise
-    except ValueError as e:
-        logger.warning(f"Invalid ask request format for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Invalid request format: {str(e)}")
     except Exception as e:
-        logger.error(f"Error in ask insights for user {user_id}: {str(e)}")
-        if "Neo4j" in str(e) or "database" in str(e).lower():
-            raise HTTPException(
-                status_code=503,
-                detail="Database connection error. Please try again later.",
-            )
-        if "openai" in str(e).lower() or "api" in str(e).lower():
-            raise HTTPException(
-                status_code=502,
-                detail="External service error. Please try again later.",
-            )
+        logger.error(f"Error in persona ask for user {user_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error occurred while processing insights request",
+            detail="Internal server error occurred while processing ask request",
         )
