@@ -64,9 +64,10 @@ poetry run pytest tests/unit -v    # Local unit tests only
 ## Services Layer
 
 **PersonaService** (`persona/services/persona_service.py`): Primary entry point for memory-augmented dialogue.
-- `query()`: Direct retrieval + generation (no tools)
-- `run_agent()`: Agent loop with recall/record tools, optional structured output
-- `ask()`: Direct retrieval + structured JSON extraction (no agent loop)
+- `run_agent()`: Single retrieval path using agent loop with recall/record/expand/follow tools. Optional `output_schema` for structured JSON output.
+- `ask()`: Thin wrapper that calls `run_agent(output_schema=...)` for structured extraction use cases.
+
+**All retrieval goes through the agent tools.** No separate retrieval paths.
 
 **RAGInterface** (`persona/core/rag_interface.py`): Low-level retrieval interface. Accepts optional `graph_ops` for resource sharing.
 
