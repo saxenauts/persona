@@ -6,8 +6,6 @@ from uuid import uuid4
 
 from persona.core.context import (
     format_working_memory_prose,
-    format_working_memory,
-    ContextFormatter,
     MemoryAdapter,
 )
 from persona.models.memory import (
@@ -176,38 +174,6 @@ class TestFormatWorkingMemoryProse:
         recent_pos = result.find("<recent_context>")
         active_pos = result.find("<active_context>")
         assert user_pos < recent_pos < active_pos
-
-
-class TestContextFormatter:
-    """Test the legacy ContextFormatter wrapper."""
-
-    def test_format_working_memory_dispatches_correctly(self):
-        """Test that ContextFormatter.format_working_memory works."""
-        formatter = ContextFormatter()
-        episode = EpisodeMemory(
-            id=uuid4(),
-            user_id="test",
-            type="episode",
-            title="Test",
-            content="Test content",
-            timestamp=datetime.now(),
-        )
-        result = formatter.format_working_memory([episode])
-        assert "<recent_context>" in result
-        assert "Test content" in result
-
-    def test_format_working_memory_module_function(self):
-        """Test the module-level format_working_memory function."""
-        episode = EpisodeMemory(
-            id=uuid4(),
-            user_id="test",
-            type="episode",
-            title="Test",
-            content="Module test",
-            timestamp=datetime.now(),
-        )
-        result = format_working_memory([episode])
-        assert "Module test" in result
 
 
 class TestMemoryAdapter:

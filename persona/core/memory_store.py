@@ -1,5 +1,5 @@
 """
-Memory Store for Persona v2.
+Memory Store for Persona.
 
 Unified storage for all memory types (episode, psyche, note).
 Handles temporal linking, retrieval, and graph operations.
@@ -144,6 +144,17 @@ class MemoryStore:
             return None
 
         return self._node_to_memory(node_data, user_id)
+
+    async def get_memories_by_ids(
+        self, memory_ids: List[UUID], user_id: str
+    ) -> List[Memory]:
+        """Batch retrieve multiple memories by ID."""
+        if not memory_ids:
+            return []
+
+        id_strs = [str(mid) for mid in memory_ids]
+        nodes = await self.graph_db.get_nodes_by_ids(id_strs, user_id)
+        return [self._node_to_memory(n, user_id) for n in nodes]
 
     async def get_by_type(
         self, memory_type: str, user_id: str, limit: int = 50
@@ -343,37 +354,44 @@ class MemoryStore:
 
         return memories
 
-    async def get_connected(
-        self, memory_id: UUID, user_id: str, relation: Optional[str] = None
-    ) -> List[Memory]:
+    async def get_connected_batch(
+        self, memory_ids: List[UUID], user_id: str, relation: Optional[str] = None
+    ) -> Dict[UUID, List[tuple]]:
         """
-        Get memories connected to this one via relationships.
+        Get all relationships for multiple memories in a single query.
 
-        Args:
-            memory_id: Source memory ID
-            user_id: User ID
-            relation: Filter by relationship type (DERIVED_FROM, NEXT, etc.)
+        Returns a dict mapping source memory ID to list of (target_id, relation) tuples.
         """
-        relationships = await self.graph_db.get_node_relationships(
-            str(memory_id), user_id
+        if not memory_ids:
+            return {}
+
+        id_strs = [str(mid) for mid in memory_ids]
+        id_set = set(id_strs)
+        relationships = await self.graph_db.get_relationships_for_nodes(
+            id_strs, user_id
         )
 
-        connected = []
+        result: Dict[UUID, List[tuple]] = {mid: [] for mid in memory_ids}
         for rel in relationships:
-            # Get the connected node
-            target_name = (
-                rel.get("target")
-                if rel.get("source") == str(memory_id)
-                else rel.get("source")
-            )
-            if relation and rel.get("relation") != relation:
+            source_node = rel.get("source_node")
+            if source_node not in id_set:
                 continue
 
-            node = await self.graph_db.get_node(target_name, user_id)
-            if node:
-                connected.append(self._node_to_memory(node, user_id))
+            rel_type = rel.get("relation", "related_to")
+            if relation and rel_type != relation:
+                continue
 
-        return connected
+            target = (
+                rel.get("target")
+                if rel.get("source") == source_node
+                else rel.get("source")
+            )
+
+            source_uuid = UUID(source_node)
+            if target:
+                result[source_uuid].append((UUID(target), rel_type))
+
+        return result
 
     async def get_note_hierarchy(
         self, user_id: str, root_id: Optional[UUID] = None
@@ -387,9 +405,11 @@ class MemoryStore:
         notes = await self.get_by_type("note", user_id, limit=100)
 
         if root_id:
-            # Get connected notes via PARENT_OF
-            connected = await self.get_connected(root_id, user_id, relation="PARENT_OF")
-            return [n for n in notes if n.id == root_id] + connected
+            connections = await self.get_connected_batch(
+                [root_id], user_id, relation="PARENT_OF"
+            )
+            child_ids = {target_id for target_id, _ in connections.get(root_id, [])}
+            return [n for n in notes if n.id == root_id or n.id in child_ids]
 
         return notes
 

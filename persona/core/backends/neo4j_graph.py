@@ -109,7 +109,6 @@ class Neo4jGraphDatabase(GraphDatabase):
                 await session.run(query, rows=rows, user_id=user_id)
 
     async def get_node(self, node_name: str, user_id: str) -> Optional[Dict[str, Any]]:
-        # Return all node properties as flat dict
         query = """
         MATCH (n:NodeName {name: $node_name, UserId: $user_id})
         RETURN n
@@ -121,6 +120,21 @@ class Neo4jGraphDatabase(GraphDatabase):
                 node = dict(record["n"])
                 return node
             return None
+
+    async def get_nodes_by_ids(
+        self, node_names: List[str], user_id: str
+    ) -> List[Dict[str, Any]]:
+        if not node_names:
+            return []
+        query = """
+        MATCH (n:NodeName {UserId: $user_id})
+        WHERE n.name IN $node_names
+        RETURN n
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, node_names=node_names, user_id=user_id)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
 
     async def get_all_nodes(self, user_id: str) -> List[Dict[str, Any]]:
         # Return all node properties as flat dicts
@@ -219,6 +233,34 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
             return await result.data()
+
+    async def get_relationships_for_nodes(
+        self, node_names: List[str], user_id: str
+    ) -> List[Dict[str, Any]]:
+        if not node_names:
+            return []
+        query = """
+        MATCH (n:NodeName {UserId: $user_id})-[r]-(m:NodeName {UserId: $user_id})
+        WHERE n.name IN $node_names
+        RETURN n.name AS source_node, type(r) AS relation, m.name AS related_node,
+               CASE WHEN startNode(r) = n THEN 'outgoing' ELSE 'incoming' END AS direction
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, node_names=node_names, user_id=user_id)
+            records = await result.data()
+            return [
+                {
+                    "source": record["source_node"]
+                    if record["direction"] == "outgoing"
+                    else record["related_node"],
+                    "target": record["related_node"]
+                    if record["direction"] == "outgoing"
+                    else record["source_node"],
+                    "relation": record["relation"],
+                    "source_node": record["source_node"],
+                }
+                for record in records
+            ]
 
     # User Management
     async def create_user(self, user_id: str) -> None:

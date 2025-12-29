@@ -120,11 +120,19 @@ def _format_notes_prose(notes: List[NoteMemory]) -> str:
     active = [n for n in notes if n.status != "COMPLETED"]
     if not active:
         return ""
-    tasks = [
-        f"{n.title or n.content}"
-        for n in sorted(active, key=lambda x: x.timestamp, reverse=True)
-    ]
-    return "Current tasks: " + ". ".join(tasks) + "."
+
+    grouped: Dict[str, List[NoteMemory]] = {}
+    for note in active:
+        key = note.note_type or "note"
+        grouped.setdefault(key, []).append(note)
+
+    parts = []
+    for note_type, items in grouped.items():
+        items_sorted = sorted(items, key=lambda x: x.timestamp, reverse=True)
+        titles = [n.title or n.content[:50] for n in items_sorted]
+        parts.append(f"{note_type.capitalize()}s: {', '.join(titles)}")
+
+    return " ".join(parts)
 
 
 def format_working_memory_prose(
@@ -161,35 +169,4 @@ def format_working_memory_prose(
     return "\n\n".join(sections)
 
 
-class ContextFormatter:
-    """Legacy formatter for backward compatibility. Use format_working_memory_prose directly."""
-
-    def format_working_memory(
-        self,
-        memories: List[Memory],
-        links: Optional[List[MemoryLink]] = None,
-        user_card: Optional[UserCard] = None,
-    ) -> str:
-        episodes = [m for m in memories if isinstance(m, EpisodeMemory)]
-        psyches = [m for m in memories if isinstance(m, PsycheMemory)]
-        notes = [m for m in memories if isinstance(m, NoteMemory)]
-
-        return format_working_memory_prose(
-            user_card=user_card,
-            episodes=episodes,
-            psyche=psyches,
-            active_notes=notes,
-            links=links,
-        )
-
-
 _adapter = MemoryAdapter()
-_formatter = ContextFormatter()
-
-
-def format_working_memory(
-    memories: List[Memory],
-    links: Optional[List[MemoryLink]] = None,
-    user_card: Optional[UserCard] = None,
-) -> str:
-    return _formatter.format_working_memory(memories, links, user_card=user_card)

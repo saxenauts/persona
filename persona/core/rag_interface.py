@@ -1,12 +1,10 @@
 """RAG Interface for Persona - simplified for agent tool pattern."""
 
-from typing import Dict, Any, Optional, Tuple, Union
+from typing import Dict, Any, Optional
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
-from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
-from persona.core.context import format_working_memory
 from persona.models.memory import UserCard
 from persona.services.user_service import UserCardService
 from persona.llm.llm_graph import (
@@ -19,22 +17,29 @@ logger = get_logger(__name__)
 
 
 class RAGInterface:
-    def __init__(self, user_id: str, user_timezone: str = "UTC"):
+    """Memory retrieval interface. Accepts optional graph_ops for resource sharing."""
+
+    def __init__(
+        self,
+        user_id: str,
+        user_timezone: str = "UTC",
+        graph_ops: Optional[GraphOps] = None,
+    ):
         self.user_id = user_id
         self.user_timezone = user_timezone
-        self.graph_ops: Optional[GraphOps] = None
+        self._owns_graph_ops = graph_ops is None
+        self.graph_ops: Optional[GraphOps] = graph_ops
         self._memory_store: Optional[MemoryStore] = None
         self._retriever: Optional[Retriever] = None
-        self._graph_db: Optional[Neo4jGraphDatabase] = None
         self._user_card: Optional[UserCard] = None
         self._user_card_service: Optional[UserCardService] = None
 
     async def __aenter__(self):
-        self.graph_ops = await GraphOps().__aenter__()
+        if self._owns_graph_ops:
+            self.graph_ops = await GraphOps().__aenter__()
 
-        self._graph_db = Neo4jGraphDatabase()
-        await self._graph_db.initialize()
-        self._memory_store = MemoryStore(self._graph_db)
+        assert self.graph_ops is not None
+        self._memory_store = MemoryStore(self.graph_ops.graph_db)
 
         self._retriever = Retriever(
             user_id=self.user_id, store=self._memory_store, graph_ops=self.graph_ops
@@ -46,30 +51,18 @@ class RAGInterface:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.graph_ops:
+        if self._owns_graph_ops and self.graph_ops:
             await self.graph_ops.__aexit__(exc_type, exc_val, exc_tb)
-        if self._graph_db:
-            await self._graph_db.close()
 
-    async def get_working_memory(
-        self,
-        query: str,
-        top_k: int = 5,
-        hop_depth: int = 1,
-        include_static: bool = True,
-    ) -> str:
+    async def get_working_memory(self) -> str:
         if not self._retriever:
             await self.__aenter__()
         assert self._retriever is not None
 
-        result = await self._retriever.get_working_memory(
-            query=query, top_k=top_k, hop_depth=hop_depth, include_static=include_static
-        )
+        result = await self._retriever.get_working_memory()
         working_memory = result if isinstance(result, str) else result[0]
 
-        logger.info(
-            f"RAGInterface: got {len(working_memory)} chars working memory for query: {query[:50]}..."
-        )
+        logger.info(f"RAGInterface: got {len(working_memory)} chars working memory")
         return working_memory
 
     async def _get_user_card(self) -> Optional[UserCard]:
@@ -90,7 +83,6 @@ class RAGInterface:
     async def query(
         self,
         query: str,
-        retrieval_query: Optional[str] = None,
         include_stats: bool = False,
     ) -> Dict[str, Any]:
         if not self._retriever:
@@ -98,13 +90,11 @@ class RAGInterface:
         assert self._retriever is not None
 
         user_card = await self._get_user_card()
-        search_query = retrieval_query or query
 
         retrieval_stats: Optional[Dict[str, Any]] = None
         retrieval_start = time.time()
         if include_stats:
             result = await self._retriever.get_working_memory(
-                query=search_query,
                 user_card=user_card,
                 user_timezone=self.user_timezone,
                 collect_stats=True,
@@ -112,7 +102,6 @@ class RAGInterface:
             working_memory, retrieval_stats = result  # type: ignore
         else:
             result = await self._retriever.get_working_memory(
-                query=search_query,
                 user_card=user_card,
                 user_timezone=self.user_timezone,
             )

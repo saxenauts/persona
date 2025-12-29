@@ -1,5 +1,5 @@
 """
-Memory Model for Persona v2 Identity Architecture.
+Memory Model for Persona Identity Architecture.
 
 A unified memory type that can represent:
 - Episodes (narrative memory units, what happened)
@@ -20,9 +20,7 @@ class BaseMemory(BaseModel):
     """Base fields for all memory units."""
 
     id: UUID = Field(default_factory=uuid4)
-    type: str = Field(
-        ..., description="The discriminator field (episode, psyche, note)"
-    )
+    # Note: `type` is defined in subclasses as Literal for discriminated union
 
     # Generic content
     title: str = Field(default="", description="Short title for display")
@@ -104,7 +102,7 @@ class UserCard(BaseModel):
     """
     Compact identity anchor for LLM context.
 
-    Updated after every session ingestion via consolidation.
+    #TODO: Updated after every session ingestion via consolidation.
     All fields are prose - no structured lists that assume categories.
 
     Design principles:
@@ -124,10 +122,13 @@ class UserCard(BaseModel):
         2-3 sentences: Who this person is, their context, what matters to them.
         Updated on consolidation after each session. Written for LLM consumption.
         Example: "Alex is a software engineer in Austin who recently started 
-        a fitness journey. They're focused on work-life balance and maintaining
-        connections with family. Currently navigating a career transition."
+        a fitness journey. He is focused on work-life balance and maintaining
+        connections with family. He is currently navigating a career transition.
+        He wants to start a new content business along the way."
         """,
     )
+
+    # TODO: IMPORTANT: Need a better prose.
 
     # === METADATA ===
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -150,9 +151,10 @@ class WorkingMemoryConfig(BaseModel):
         description="How far back to fetch psyche updates",
     )
 
+    # TODO for later evaluation, find the right balance for context window.
     max_episodes: int = Field(default=10)
-    max_psyche: int = Field(default=5)
-    max_active_notes: int = Field(default=5)
+    max_psyche: int = Field(default=10)
+    max_active_notes: int = Field(default=10)
 
 
 DEFAULT_WORKING_MEMORY_CONFIG = WorkingMemoryConfig()

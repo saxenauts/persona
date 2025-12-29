@@ -36,19 +36,13 @@ class Retriever:
 
     async def get_working_memory(
         self,
-        query: str = "",
         config: Optional[WorkingMemoryConfig] = None,
         user_card: Optional[UserCard] = None,
         user_timezone: str = "UTC",
         collect_stats: bool = False,
         **kwargs,
     ) -> str | Tuple[str, Dict[str, Any]]:
-        """
-        Get prose-formatted working memory for a dialog turn.
-
-        No query expansion, no vector search. Time-windowed fetch only.
-        Query parameter kept for backward compatibility but not used for retrieval.
-        """
+        """Get prose-formatted working memory for a dialog turn."""
         cfg = config or DEFAULT_WORKING_MEMORY_CONFIG
         now = datetime.utcnow()
         stats: Dict[str, Any] = {}
@@ -91,13 +85,11 @@ class Retriever:
 
     async def get_working_memory_with_stats(
         self,
-        query: str = "",
         config: Optional[WorkingMemoryConfig] = None,
         user_card: Optional[UserCard] = None,
         user_timezone: str = "UTC",
     ) -> Tuple[str, Dict[str, Any]]:
         result = await self.get_working_memory(
-            query=query,
             config=config,
             user_card=user_card,
             user_timezone=user_timezone,
@@ -155,16 +147,17 @@ class Retriever:
         if not memory_ids:
             return []
         try:
+            connections = await self.store.get_connected_batch(memory_ids, self.user_id)
             all_links = []
-            for mid in memory_ids:
-                linked = await self.store.get_connected(mid, self.user_id)
-                for m in linked:
-                    link = MemoryLink(
-                        source_id=mid,
-                        target_id=m.id,
-                        relation=getattr(m, "_relation", "related_to"),
+            for source_id, targets in connections.items():
+                for target_id, relation in targets:
+                    all_links.append(
+                        MemoryLink(
+                            source_id=source_id,
+                            target_id=target_id,
+                            relation=relation,
+                        )
                     )
-                    all_links.append(link)
             return all_links
         except Exception as e:
             logger.warning(f"Failed to get links: {e}")

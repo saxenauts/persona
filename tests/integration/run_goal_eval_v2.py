@@ -179,7 +179,7 @@ async def run_evaluation():
 
                 # Step 1: Get retrieved context (for logging)
                 try:
-                    retrieved_context = await rag.get_working_memory(q["question"])
+                    retrieved_context = await rag.get_working_memory()
                     print(
                         f"  [Retrieved Context Length: {len(retrieved_context)} chars]"
                     )
