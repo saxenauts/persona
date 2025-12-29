@@ -72,15 +72,19 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 ## Tools Layer
 
-**recall(query)** (`persona/tools/memory.py`): Parses temporal references ("last week", "yesterday"), extracts time windows, fetches memories via vector search, formats as prose context.
+**ToolContext** (`persona/tools/context.py`): Per-request context injected at execution time. Contains user_id, graph_ops, store, timezone, user_card. Not exposed to LLM.
+
+**recall(query, date_start?, date_end?, memory_types?, limit?)** (`persona/tools/memory.py`): Search memories with structured filters. LLM provides dates directly in ISO format.
 
 **record(text)** (`persona/tools/memory.py`): Ingests new memories with automatic type classification (episode/psyche/note).
 
-**expand_neighbors(memory_id, relationship_types?)** (`persona/tools/memory.py`): Graph expansion from a memory node. Returns connected memories via relationships. Use after `recall()` to explore interesting connections.
+**expand_neighbors(memory_id, relationship_types?)** (`persona/tools/memory.py`): Graph expansion from a memory node. Returns connected memories via relationships.
 
-**follow_relationship(source_id, relation_type, limit?)** (`persona/tools/memory.py`): Trace specific relationship chains (LED_TO, CAUSED_BY, NEXT, PREVIOUS). More targeted than `expand_neighbors()`.
+**follow_relationship(source_id, relation_type, limit?)** (`persona/tools/memory.py`): Trace specific relationship chains (LED_TO, CAUSED_BY, NEXT, PREVIOUS).
 
-**AgentRunner** (`persona/tools/runner.py`): Generic tool execution loop for LLM agents with parallel tool calls support.
+**Static Registry** (`persona/tools/runner.py`): Global `REGISTRY` with handlers. Context injected per-request via `execute(tool_call, ctx)`.
+
+**Bounded Execution** (`execute_tools_bounded`): Semaphore-limited concurrency, per-tool timeouts, partial failure capture.
 
 ## Context Engineering Patterns
 
@@ -89,6 +93,17 @@ poetry run pytest tests/unit -v    # Local unit tests only
 **Prose Format** (`persona/core/context.py`): `format_working_memory_prose()` renders memories as natural language with `<user>`, `<recent_context>`, `<active_context>` sections.
 
 **Link Prose**: Memory links rendered inline (e.g., "led to X", "caused by Y") for narrative continuity.
+
+## Memeplex: Index Layer (Interface Only)
+
+**Memeplex** (`persona/core/memeplex.py`): The memory index layer. Named after memetics (Dawkins) - a memeplex is a group of memes that reinforce and propagate together.
+
+The Memeplex routes queries to memory candidates via structured lookups, reducing the search space for vector search. Three index dimensions:
+- **Entity Registry**: WHO/WHAT - people, places, things, concepts
+- **Temporal Timeline**: WHEN - time ranges, sequences, durations  
+- **Topic Cluster**: ABOUT - themes, categories, contexts
+
+Current status: Interface definitions only. Implementation requires entity extraction during ingestion (next phase).
 
 ## Environment Configuration
 
