@@ -85,22 +85,6 @@ def _parse_type_cues(query: str) -> Optional[List[str]]:
     return None
 
 
-def _should_expand(query: str) -> bool:
-    query_lower = query.lower()
-    return any(
-        w in query_lower
-        for w in [
-            "related",
-            "connected",
-            "everything about",
-            "all about",
-            "what else",
-            "more about",
-            "associated with",
-        ]
-    )
-
-
 def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
     content = getattr(memory, "content", "") or ""
     title = getattr(memory, "title", "") or ""
@@ -127,7 +111,6 @@ async def recall(
 ) -> RecallResult:
     time_range = _parse_time_cues(query)
     type_filter = _parse_type_cues(query)
-    should_expand = _should_expand(query)
 
     date_range = None
     if time_range:
@@ -145,7 +128,6 @@ async def recall(
         return RecallResult()
 
     items = []
-    seed_ids = []
 
     for r in results.get("results", []):
         node_id = r.get("nodeName")
@@ -157,23 +139,137 @@ async def recall(
                 if type_filter and mem.type not in type_filter:
                     continue
                 items.append(_memory_to_hit(mem, score=score))
-                seed_ids.append(mem.id)
                 if len(items) >= 10:
                     break
         except Exception as e:
             logger.debug(f"Could not retrieve memory {node_id}: {e}")
 
-    if should_expand and seed_ids:
-        visited = set(seed_ids)
-        for seed_id in seed_ids[:3]:
-            try:
-                connected = await store.get_connected(seed_id, user_id)
-                for cm in connected:
-                    if cm.id not in visited and len(items) < 15:
-                        visited.add(cm.id)
-                        items.append(_memory_to_hit(cm))
-            except Exception as e:
-                logger.debug(f"Failed to expand {seed_id}: {e}")
+    return RecallResult(items=items, count=len(items))
+
+
+@dataclass
+class ExpandResult:
+    """Result from graph expansion."""
+
+    center_id: str
+    neighbors: List[MemoryHit] = field(default_factory=list)
+    relationships: List[Dict[str, str]] = field(default_factory=list)
+    count: int = 0
+
+
+async def expand_neighbors(
+    memory_id: str,
+    user_id: str,
+    store: MemoryStore,
+    relationship_types: Optional[List[str]] = None,
+    max_depth: int = 1,
+) -> ExpandResult:
+    """
+    Expand from a memory node to find connected memories.
+
+    Use after recall() to explore interesting connections from a specific memory.
+    Returns the memory's neighbors via graph relationships.
+
+    Args:
+        memory_id: UUID of the memory to expand from
+        user_id: User ID for access control
+        store: MemoryStore instance
+        relationship_types: Filter by relationship types (e.g., ["LED_TO", "CAUSED_BY"]).
+                           If None, returns all relationships.
+        max_depth: How many hops to traverse (currently supports 1)
+
+    Returns:
+        ExpandResult with neighbors and relationship info
+    """
+    try:
+        source_uuid = UUID(memory_id)
+    except ValueError:
+        logger.warning(f"Invalid memory_id format: {memory_id}")
+        return ExpandResult(center_id=memory_id)
+
+    connections = await store.get_connected_batch([source_uuid], user_id)
+    neighbor_tuples = connections.get(source_uuid, [])
+
+    if relationship_types:
+        relationship_types_lower = [r.lower() for r in relationship_types]
+        neighbor_tuples = [
+            (target_id, rel_type)
+            for target_id, rel_type in neighbor_tuples
+            if rel_type.lower() in relationship_types_lower
+        ]
+
+    if not neighbor_tuples:
+        return ExpandResult(center_id=memory_id)
+
+    neighbor_ids = [target_id for target_id, _ in neighbor_tuples]
+    neighbor_memories = await store.get_memories_by_ids(neighbor_ids, user_id)
+
+    neighbors = []
+    relationships = []
+    id_to_memory = {mem.id: mem for mem in neighbor_memories}
+
+    for target_id, rel_type in neighbor_tuples:
+        mem = id_to_memory.get(target_id)
+        if mem:
+            neighbors.append(_memory_to_hit(mem))
+            relationships.append(
+                {
+                    "source": memory_id,
+                    "target": str(target_id),
+                    "relation": rel_type,
+                }
+            )
+
+    return ExpandResult(
+        center_id=memory_id,
+        neighbors=neighbors,
+        relationships=relationships,
+        count=len(neighbors),
+    )
+
+
+async def follow_relationship(
+    source_id: str,
+    relation_type: str,
+    user_id: str,
+    store: MemoryStore,
+    limit: int = 5,
+) -> RecallResult:
+    """
+    Follow a specific relationship type from a memory.
+
+    Use to trace causal chains or thematic connections.
+    More targeted than expand_neighbors() - focuses on one relationship type.
+
+    Args:
+        source_id: UUID of the starting memory
+        relation_type: The relationship type to follow (e.g., "LED_TO", "CAUSED_BY", "NEXT")
+        user_id: User ID for access control
+        store: MemoryStore instance
+        limit: Maximum number of connected memories to return
+
+    Returns:
+        RecallResult with memories connected by this relationship
+    """
+    try:
+        source_uuid = UUID(source_id)
+    except ValueError:
+        logger.warning(f"Invalid source_id format: {source_id}")
+        return RecallResult()
+
+    connections = await store.get_connected_batch(
+        [source_uuid], user_id, relation=relation_type
+    )
+    neighbor_tuples = connections.get(source_uuid, [])
+
+    if not neighbor_tuples:
+        return RecallResult()
+
+    neighbor_tuples = neighbor_tuples[:limit]
+    neighbor_ids = [target_id for target_id, _ in neighbor_tuples]
+    neighbor_memories = await store.get_memories_by_ids(neighbor_ids, user_id)
+
+    items = [_memory_to_hit(mem) for mem in neighbor_memories]
 
     return RecallResult(items=items, count=len(items))
 

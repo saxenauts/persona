@@ -14,6 +14,7 @@ from persona.llm.providers.base import (
     ToolResult,
 )
 from persona.tools.schemas import MEMORY_TOOLS
+from persona.tools.memory import recall, record, expand_neighbors, follow_relationship
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -21,6 +22,7 @@ logger = get_logger(__name__)
 AgentStatus = Literal["completed", "paused", "max_turns", "timeout", "error"]
 
 
+# TODO this is done in a very basic way as a standard today. CHeck for this and update.
 @dataclass
 class ToolRegistry:
     handlers: Dict[str, Callable[..., Awaitable[Any]]] = field(default_factory=dict)
@@ -80,6 +82,13 @@ class AgentResult:
         return self.status == "completed"
 
 
+# TODO: WHere exactly in this is the agent making new queries better for each retrieval loop. Prompt asks for natural language.
+# HOw does that get converted to querying, like "three months ago, etc." and then the iteration has to mean something.
+# TODO This is a common agent, so it may or may not be used in a conversation, sometimes it may be used as a one off API
+# ex. weekly update on current state of content watching topics etc. That doesnt need a conversation, it needs tool calls in sequence.
+# But what kind of tool calls? We need the agent to be able to smartly fetch content from the graph, based on time, vector queries,
+# and other metrics that make sense, like active, related, etc. it has to be like a smart hybrid of vector and graph crawl
+# with LLM intelligence applied on top for emergence.
 class AgentRunner:
     def __init__(
         self,
@@ -251,8 +260,6 @@ def create_memory_tool_registry(
     user_timezone: str = "UTC",
     session_id: Optional[str] = None,
 ) -> ToolRegistry:
-    from persona.tools.memory import recall, record
-
     registry = ToolRegistry()
 
     async def bound_recall(query: str):
@@ -270,7 +277,33 @@ def create_memory_tool_registry(
             session_id=session_id,
         )
 
+    async def bound_expand_neighbors(
+        memory_id: str,
+        relationship_types: Optional[List[str]] = None,
+    ):
+        return await expand_neighbors(
+            memory_id=memory_id,
+            user_id=user_id,
+            store=store,
+            relationship_types=relationship_types,
+        )
+
+    async def bound_follow_relationship(
+        source_id: str,
+        relation_type: str,
+        limit: int = 5,
+    ):
+        return await follow_relationship(
+            source_id=source_id,
+            relation_type=relation_type,
+            user_id=user_id,
+            store=store,
+            limit=limit,
+        )
+
     registry.register("recall", bound_recall)
     registry.register("record", bound_record)
+    registry.register("expand_neighbors", bound_expand_neighbors)
+    registry.register("follow_relationship", bound_follow_relationship)
 
     return registry
