@@ -16,7 +16,8 @@ POST /users/{user_id}
 
 Response: 201 Created
 {
-    "message": "User {user_id} created successfully"
+    "message": "User {user_id} created successfully",
+    "status": "created"
 }
 ```
 
@@ -44,8 +45,11 @@ Content-Type: application/json
 
 Response: 201 Created
 {
-    "message": "Content ingested successfully",
-    "memories_created": 3
+    "message": "Data ingested successfully",
+    "memories_created": 3,
+    "memories_created_by_type": {"episode": 1, "psyche": 1, "note": 1},
+    "links_created": 2,
+    "timings_ms": {"extract": 150.0, "embed": 50.0, "persist": 30.0, "total": 230.0}
 }
 ```
 
@@ -60,31 +64,24 @@ Content-Type: application/json
         {"content": "Second entry...", "source_type": "conversation"}
     ]
 }
+
+Response: 201 Created
+{
+    "message": "Successfully ingested batch of 2 items",
+    "memories_created": 5,
+    "memories_created_by_type": {"episode": 2, "psyche": 2, "note": 1},
+    "links_created": 3,
+    "timings_ms": {"extract": 300.0, "embed": 100.0, "persist": 60.0, "total": 460.0}
+}
 ```
 
 ## Query Operations
 
-### RAG Query
-```http
-POST /users/{user_id}/rag/query
-Content-Type: application/json
-
-{
-    "query": "What projects am I working on?"
-}
-
-Response: 200 OK
-{
-    "query": "What projects am I working on?",
-    "response": "Based on your memories, you're working on..."
-}
-```
-
-### Agent RAG Query
+### Persona Query (Agent Loop)
 Agentic query with tool-calling loop. The agent autonomously decides when to search memories, read context, or write new information.
 
 ```http
-POST /users/{user_id}/rag/agent
+POST /users/{user_id}/persona/query
 Content-Type: application/json
 
 {
@@ -98,7 +95,7 @@ Content-Type: application/json
 Response: 200 OK
 {
     "answer": "Based on your memories, you set a goal to...",
-    "status": "completed",
+    "status": "success",
     "stats": {
         "tool_calls_made": 3,
         "turns": 2,
@@ -109,6 +106,7 @@ Response: 200 OK
 ```
 
 **Parameters:**
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | query | string | required | The user's question |
@@ -119,14 +117,16 @@ Response: 200 OK
 | timeout | float | null | Max seconds before returning (null = unlimited) |
 
 **Status values:**
-- `completed` - Agent finished naturally
+- `success` - Agent finished naturally
 - `max_turns` - Hit turn limit
 - `timeout` - Hit time limit
 - `error` - LLM call failed
 
-### Ask (Structured Insights)
+### Persona Ask (Structured Output)
+Direct retrieval + structured JSON extraction. No agent loop, no tools.
+
 ```http
-POST /users/{user_id}/ask
+POST /users/{user_id}/persona/ask
 Content-Type: application/json
 
 {
@@ -145,6 +145,13 @@ Response: 200 OK
     }
 }
 ```
+
+**Parameters:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| query | string | The extraction query |
+| output_schema | object | Expected output structure with example values |
 
 ## Error Responses
 

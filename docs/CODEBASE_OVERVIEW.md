@@ -10,7 +10,7 @@ persona/           # Core library
 ├── core/          # Database operations and retrieval
 ├── llm/           # LLM providers and functions
 ├── models/        # Data models
-└── services/      # Business logic
+└── services/      # Business logic (ingestion, persona)
 
 server/            # FastAPI application
 tests/             # Test suite
@@ -24,7 +24,7 @@ docs/              # Documentation
 Persona stores user data as three typed memory classes:
 
 | Type | Purpose | Example |
-|------|---------|---------|
+|------|---------|---------| 
 | **Episode** | What happened | "Had coffee with Sam to discuss his startup" |
 | **Psyche** | Who they are | "Prefers remote work" |
 | **Note** | Structured info | Goals, tasks, facts, contacts, reminders |
@@ -50,36 +50,48 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Returns formatted context for LLM consumption
 
 3. **Tools Layer** (`tools/memory.py`)
-   - `recall(query)`: Parses temporal refs, fetches context
+   - `recall(query)`: Parses temporal refs, fetches via vector search
    - `record(text)`: Ingests new memories with type classification
+   - `expand_neighbors(memory_id)`: Graph expansion from a memory node
+   - `follow_relationship(source_id, relation_type)`: Trace specific relationship chains
 
 4. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories
    - Handles temporal linking between episodes
+   - Batch operations: `get_memories_by_ids()`, `get_nodes_by_ids()`
 
 5. **ContextFormatter** (`core/context.py`)
    - Transforms memories into prose context
    - Renders links inline for narrative continuity
+   - Groups notes by `note_type` (tasks, projects, reminders)
    - Sections: `<user>`, `<recent_context>`, `<active_context>`
+
+6. **RAGInterface** (`core/rag_interface.py`)
+   - Low-level retrieval interface
+   - Accepts optional `graph_ops` for resource sharing
+   - Used internally by PersonaService
 
 ### Services
 
 Business logic layer between API and core:
 
-1. **MemoryIngestionService** (`services/ingestion_service.py`)
+1. **PersonaService** (`services/persona_service.py`) - **PRIMARY ENTRY POINT**
+   - Unified orchestrator for memory-augmented dialogue
+   - `query()`: Direct retrieval + generation (no agent loop)
+   - `run_agent()`: Agent loop with recall/record tools
+   - `ask()`: Direct retrieval + structured JSON extraction
+   - Accepts `graph_ops` via constructor (no duplicate connections)
+
+2. **MemoryIngestionService** (`services/ingestion_service.py`)
    - Extracts memories from raw text using LLM
    - Creates Episode, Psyche, and Note memories
    - Handles temporal linking between episodes
 
-2. **UserCardService** (`services/user_service.py`)
+3. **UserCardService** (`services/user_service.py`)
    - Synthesizes UserCard from Psyche memories + active Notes
    - Uses LLM to generate name, roles, values, current focus
    - Falls back to rule-based extraction on LLM failure
    - Cached per session (lazy generation on first query)
-
-3. **RAGService** (`services/rag_service.py`)
-   - Thin wrapper around RAGInterface for API use
-   - Handles async context management
 
 ## Data Flow
 
@@ -104,6 +116,9 @@ Query → recall() tool → Retriever → Vector Search + Time Filter → format
          Parses:                                                    <user>identity</user>
          - temporal refs                                            <recent_context>episodes</recent_context>
          - time windows                                             <active_context>psyche + notes</active_context>
+
+Graph Exploration (iterative):
+recall() → find interesting memory → expand_neighbors() → explore connections → follow_relationship() → trace chains
 ```
 
 ## Dependency Injection
@@ -111,12 +126,14 @@ Query → recall() tool → Retriever → Vector Search + Time Filter → format
 The application uses FastAPI's dependency injection:
 
 ```python
-@router.post("/users/{user_id}/rag/query")
-async def rag_query(
+@router.post("/users/{user_id}/persona/query")
+async def persona_query(
     user_id: str,
-    query: RAGQuery,
+    request: PersonaQueryRequest,
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
+    service = PersonaService(graph_ops)
+    result = await service.run_agent(user_id=user_id, query=request.query)
     ...
 ```
 
@@ -269,5 +286,4 @@ Memory links are rendered inline for narrative continuity:
 ## Further Reading
 
 - [API Reference](API.md)
-- [LLM Clients Implementation](LLM_CLIENTS_IMPLEMENTATION.md)
 - [Development Guide](DEVELOPMENT.md)

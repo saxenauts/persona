@@ -8,7 +8,7 @@ persona/           # Core library
 ├── core/          # Database operations, retrieval, context formatting
 ├── llm/           # LLM clients, embeddings, prompts
 ├── models/        # Memory types (memory.py) and API schemas (schema.py)
-└── services/      # Business logic (ingestion, RAG, ask)
+└── services/      # Business logic (ingestion, persona)
 
 server/            # FastAPI application
 ├── main.py        # App entry point with lifespan management
@@ -55,16 +55,30 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 1. **Unified Memory Model**: All data stored as `Episode`, `Psyche`, or `Note` types
 2. **PersonaAdapter**: Single entry point for ingestion (extracts, links, persists)
-3. **Retriever**: Time-windowed fetch with vector similarity for context retrieval
-4. **Tools Layer** (`persona/tools/`): `recall(query)` and `record(text)` dialectic tools with internal intelligence
-5. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()`
-6. **Context Engineering**: Prose-based context formatting with UserCard identity anchor
+3. **PersonaService** (`persona/services/persona_service.py`): Unified orchestrator for queries with `query()` and `run_agent()` methods
+4. **Retriever**: Time-windowed fetch with vector similarity for context retrieval
+5. **Tools Layer** (`persona/tools/`): `recall(query)` and `record(text)` dialectic tools with internal intelligence
+6. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()` — no duplicate connections
+7. **Context Engineering**: Prose-based context formatting with UserCard identity anchor
+
+## Services Layer
+
+**PersonaService** (`persona/services/persona_service.py`): Primary entry point for memory-augmented dialogue.
+- `query()`: Direct retrieval + generation (no tools)
+- `run_agent()`: Agent loop with recall/record tools, optional structured output
+- `ask()`: Direct retrieval + structured JSON extraction (no agent loop)
+
+**RAGInterface** (`persona/core/rag_interface.py`): Low-level retrieval interface. Accepts optional `graph_ops` for resource sharing.
 
 ## Tools Layer
 
-**recall(query)** (`persona/tools/memory.py`): Parses temporal references ("last week", "yesterday"), extracts time windows, fetches memories via Retriever, formats as prose context.
+**recall(query)** (`persona/tools/memory.py`): Parses temporal references ("last week", "yesterday"), extracts time windows, fetches memories via vector search, formats as prose context.
 
 **record(text)** (`persona/tools/memory.py`): Ingests new memories with automatic type classification (episode/psyche/note).
+
+**expand_neighbors(memory_id, relationship_types?)** (`persona/tools/memory.py`): Graph expansion from a memory node. Returns connected memories via relationships. Use after `recall()` to explore interesting connections.
+
+**follow_relationship(source_id, relation_type, limit?)** (`persona/tools/memory.py`): Trace specific relationship chains (LED_TO, CAUSED_BY, NEXT, PREVIOUS). More targeted than `expand_neighbors()`.
 
 **AgentRunner** (`persona/tools/runner.py`): Generic tool execution loop for LLM agents with parallel tool calls support.
 
