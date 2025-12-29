@@ -15,7 +15,8 @@ from persona.llm.llm_graph import (
     generate_response_with_context,
     generate_response_with_context_with_stats,
 )
-from persona.tools.runner import AgentRunner, create_memory_tool_registry, ToolRegistry
+from persona.tools.runner import AgentRunner, REGISTRY
+from persona.tools.context import ToolContext
 from persona.tools.schemas import MEMORY_TOOLS
 from server.logging_config import get_logger
 
@@ -53,8 +54,6 @@ Use to follow causal chains (LED_TO), temporal sequences (NEXT/PREVIOUS), or the
 
 
 class PersonaService:
-    _registry_cache: Dict[str, ToolRegistry] = {}
-
     def __init__(self, graph_ops: GraphOps):
         self.graph_ops = graph_ops
         self._memory_store: Optional[MemoryStore] = None
@@ -134,20 +133,18 @@ class PersonaService:
 
         user_card = await self._get_user_card(user_id, user_timezone)
 
-        cache_key = f"{user_id}:{session_id or 'default'}"
-        if cache_key not in PersonaService._registry_cache:
-            PersonaService._registry_cache[cache_key] = create_memory_tool_registry(
-                user_id=user_id,
-                graph_ops=self.graph_ops,
-                store=self.memory_store,
-                user_card=user_card,
-                user_timezone=user_timezone,
-                session_id=session_id,
-            )
-        registry = PersonaService._registry_cache[cache_key]
+        # Create per-request ToolContext (not cached - context is stateless)
+        ctx = ToolContext(
+            user_id=user_id,
+            graph_ops=self.graph_ops,
+            store=self.memory_store,
+            session_id=session_id,
+            user_timezone=user_timezone,
+            user_card=user_card,
+        )
 
         llm = get_chat_client()
-        runner = AgentRunner(llm=llm, tools=MEMORY_TOOLS, registry=registry)
+        runner = AgentRunner(llm=llm, tools=MEMORY_TOOLS, registry=REGISTRY)
 
         messages = [
             ChatMessage(role="system", content=AGENT_SYSTEM_PROMPT),
@@ -156,12 +153,13 @@ class PersonaService:
 
         agent_result = await runner.run(
             messages,
+            ctx=ctx,
             temperature=0.7,
             max_turns=max_turns,
             timeout=timeout,
         )
 
-        if output_schema and agent_result.status == "success":
+        if output_schema and agent_result.status == "completed":
             final_result = await self._finalize_with_schema(
                 conversation=agent_result.content,
                 query=query,

@@ -1,3 +1,9 @@
+"""Tool schemas - the hippocampal index protocol.
+
+LLM provides structured parameters directly (dates, types, filters).
+No natural language parsing on our side - LLM does the translation.
+"""
+
 from typing import List, Dict, Any
 
 
@@ -5,13 +11,30 @@ RECALL_TOOL = {
     "type": "function",
     "function": {
         "name": "recall",
-        "description": "Ask the user's memory in natural language. Call multiple times in parallel for different queries (time slice, topic, related memories).",
+        "description": "Search user's memory with optional filters. Returns matching memories ranked by relevance. Call multiple times in parallel for different slices (time periods, topics, types).",
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Free-form request. Include time/topic/type cues in plain English.",
+                    "description": "Semantic search query. What to look for in memory content.",
+                },
+                "date_start": {
+                    "type": "string",
+                    "description": "Start date filter (ISO 8601: YYYY-MM-DD). Only return memories from this date onward.",
+                },
+                "date_end": {
+                    "type": "string",
+                    "description": "End date filter (ISO 8601: YYYY-MM-DD). Only return memories up to this date.",
+                },
+                "memory_types": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["episode", "psyche", "note"]},
+                    "description": "Filter by memory type. episode=events, psyche=traits/preferences, note=goals/tasks.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results to return. Default: 10.",
                 },
             },
             "required": ["query"],
@@ -23,7 +46,7 @@ RECORD_TOOL = {
     "type": "function",
     "function": {
         "name": "record",
-        "description": "Store information to user's memory. System infers memory type and links automatically.",
+        "description": "Store information to user's memory. System infers memory type and creates links automatically.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -41,7 +64,7 @@ EXPAND_NEIGHBORS_TOOL = {
     "type": "function",
     "function": {
         "name": "expand_neighbors",
-        "description": "Expand from a memory to find connected memories via graph relationships. Use after recall() to explore interesting connections from a specific memory ID.",
+        "description": "Explore graph connections from a memory node. Returns neighbors linked by relationships. Use after recall() to explore interesting connections.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -51,8 +74,21 @@ EXPAND_NEIGHBORS_TOOL = {
                 },
                 "relationship_types": {
                     "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Filter by relationship types (e.g., ['LED_TO', 'CAUSED_BY', 'NEXT']). If omitted, returns all relationships.",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "LED_TO",
+                            "CAUSED_BY",
+                            "NEXT",
+                            "PREVIOUS",
+                            "RELATES_TO",
+                        ],
+                    },
+                    "description": "Filter by relationship types. If omitted, returns all.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum neighbors to return. Default: 10.",
                 },
             },
             "required": ["memory_id"],
@@ -64,7 +100,7 @@ FOLLOW_RELATIONSHIP_TOOL = {
     "type": "function",
     "function": {
         "name": "follow_relationship",
-        "description": "Follow a specific relationship type from a memory to trace causal chains or thematic connections. More targeted than expand_neighbors.",
+        "description": "Trace a specific relationship chain from a memory. More targeted than expand_neighbors - follows one relationship type.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -74,11 +110,12 @@ FOLLOW_RELATIONSHIP_TOOL = {
                 },
                 "relation_type": {
                     "type": "string",
-                    "description": "The relationship type to follow (e.g., 'LED_TO', 'CAUSED_BY', 'NEXT', 'PREVIOUS').",
+                    "enum": ["LED_TO", "CAUSED_BY", "NEXT", "PREVIOUS", "RELATES_TO"],
+                    "description": "The relationship type to follow.",
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of connected memories to return. Default: 5.",
+                    "description": "Maximum connected memories to return. Default: 5.",
                 },
             },
             "required": ["source_id", "relation_type"],

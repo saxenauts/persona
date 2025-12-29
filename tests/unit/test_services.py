@@ -50,22 +50,18 @@ async def test_persona_service_run_agent_success(mock_graph_ops):
     )
 
     with patch.object(service, "_get_user_card", return_value=None):
-        with patch(
-            "persona.services.persona_service.create_memory_tool_registry"
-        ) as mock_registry:
-            mock_registry.return_value = {}
-            with patch("persona.services.persona_service.AgentRunner") as MockRunner:
-                MockRunner.return_value = mock_runner
+        with patch("persona.services.persona_service.AgentRunner") as MockRunner:
+            MockRunner.return_value = mock_runner
 
-                result = await service.run_agent(
-                    user_id="test_user",
-                    query="What do you remember about me?",
-                    include_stats=True,
-                )
+            result = await service.run_agent(
+                user_id="test_user",
+                query="What do you remember about me?",
+                include_stats=True,
+            )
 
-                assert result["answer"] == "Agent response based on memory"
-                assert result["stats"]["tool_calls_made"] == 1
-                assert result["stats"]["turns"] == 2
+            assert result["answer"] == "Agent response based on memory"
+            assert result["stats"]["tool_calls_made"] == 1
+            assert result["stats"]["turns"] == 2
 
 
 @pytest.mark.asyncio

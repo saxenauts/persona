@@ -1,4 +1,4 @@
-"""Agent runner with hybrid termination: model-first + configurable limits + pause/resume."""
+"""Agent runner with static registry, context injection, and bounded parallel execution."""
 
 import json
 import asyncio
@@ -9,12 +9,12 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable, Literal
 from persona.llm.providers.base import (
     BaseLLMClient,
     ChatMessage,
-    ChatResponse,
     ToolCall,
     ToolResult,
 )
 from persona.tools.schemas import MEMORY_TOOLS
-from persona.tools.memory import recall, record, expand_neighbors, follow_relationship
+from persona.tools.context import ToolContext
+from persona.tools.memory import TOOL_HANDLERS
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -22,15 +22,38 @@ logger = get_logger(__name__)
 AgentStatus = Literal["completed", "paused", "max_turns", "timeout", "error"]
 
 
-# TODO this is done in a very basic way as a standard today. CHeck for this and update.
 @dataclass
+class ToolExecutionResult:
+    tool_call_id: str
+    name: str
+    ok: bool
+    output: Any = None
+    error: Optional[str] = None
+    duration_ms: float = 0.0
+
+
+@dataclass
+class BatchExecutionResult:
+    results: List[ToolExecutionResult] = field(default_factory=list)
+    total_ms: float = 0.0
+    succeeded: int = 0
+    failed: int = 0
+
+
 class ToolRegistry:
-    handlers: Dict[str, Callable[..., Awaitable[Any]]] = field(default_factory=dict)
+    """
+    Static tool registry with context injection at execution time.
 
-    def register(self, name: str, handler: Callable[..., Awaitable[Any]]) -> None:
-        self.handlers[name] = handler
+    Tool schemas are static (never change). Context (user_id, store, etc.)
+    is injected per-request via execute(tool_call, ctx).
+    """
 
-    async def execute(self, tool_call: ToolCall) -> ToolResult:
+    def __init__(
+        self, handlers: Optional[Dict[str, Callable[..., Awaitable[Any]]]] = None
+    ):
+        self.handlers = handlers or TOOL_HANDLERS
+
+    async def execute(self, tool_call: ToolCall, ctx: ToolContext) -> ToolResult:
         handler = self.handlers.get(tool_call.name)
         if not handler:
             return ToolResult(
@@ -40,7 +63,8 @@ class ToolRegistry:
 
         try:
             args = json.loads(tool_call.arguments)
-            result = await handler(**args)
+            result = await handler(ctx, **args)
+
             if hasattr(result, "__dict__"):
                 content = json.dumps(result.__dict__, default=str)
             elif isinstance(result, (dict, list)):
@@ -62,6 +86,88 @@ class ToolRegistry:
             )
 
 
+# Global static registry instance
+REGISTRY = ToolRegistry()
+
+
+async def execute_tools_bounded(
+    tool_calls: List[ToolCall],
+    ctx: ToolContext,
+    registry: Optional[ToolRegistry] = None,
+    max_concurrency: int = 8,
+    timeout_s: float = 30.0,
+) -> BatchExecutionResult:
+    """
+    Execute multiple tool calls with bounded concurrency and timeouts.
+
+    - Partial failures are captured, not raised
+    - Each tool gets its own timeout
+    - Concurrency is limited via semaphore
+    - Results include timing for observability
+    """
+    registry = registry or REGISTRY
+    sem = asyncio.Semaphore(max_concurrency)
+    start_time = time.time()
+
+    async def execute_one(call: ToolCall) -> ToolExecutionResult:
+        call_start = time.time()
+        subtask_idx = ctx.track_subtask(call.name, "running")
+
+        async with sem:
+            try:
+                result = await asyncio.wait_for(
+                    registry.execute(call, ctx),
+                    timeout=timeout_s,
+                )
+                duration_ms = (time.time() - call_start) * 1000
+
+                try:
+                    output = json.loads(result.content)
+                    ok = "error" not in output
+                except json.JSONDecodeError:
+                    output = result.content
+                    ok = True
+
+                ctx.complete_subtask(subtask_idx, "done" if ok else "error")
+                return ToolExecutionResult(
+                    tool_call_id=call.id,
+                    name=call.name,
+                    ok=ok,
+                    output=output,
+                    duration_ms=duration_ms,
+                )
+            except asyncio.TimeoutError:
+                duration_ms = (time.time() - call_start) * 1000
+                ctx.complete_subtask(subtask_idx, "timeout")
+                return ToolExecutionResult(
+                    tool_call_id=call.id,
+                    name=call.name,
+                    ok=False,
+                    error=f"Timeout after {timeout_s}s",
+                    duration_ms=duration_ms,
+                )
+            except Exception as e:
+                duration_ms = (time.time() - call_start) * 1000
+                ctx.complete_subtask(subtask_idx, "error")
+                return ToolExecutionResult(
+                    tool_call_id=call.id,
+                    name=call.name,
+                    ok=False,
+                    error=str(e),
+                    duration_ms=duration_ms,
+                )
+
+    results = await asyncio.gather(*(execute_one(c) for c in tool_calls))
+    total_ms = (time.time() - start_time) * 1000
+
+    return BatchExecutionResult(
+        results=list(results),
+        total_ms=total_ms,
+        succeeded=sum(1 for r in results if r.ok),
+        failed=sum(1 for r in results if not r.ok),
+    )
+
+
 @dataclass
 class AgentResult:
     content: str
@@ -70,6 +176,7 @@ class AgentResult:
     turns: int = 0
     usage: Optional[Dict[str, Any]] = None
     state: Optional[str] = None
+    subtask_summary: Optional[Dict[str, int]] = None
 
     @property
     def can_resume(self) -> bool:
@@ -82,14 +189,14 @@ class AgentResult:
         return self.status == "completed"
 
 
-# TODO: WHere exactly in this is the agent making new queries better for each retrieval loop. Prompt asks for natural language.
-# HOw does that get converted to querying, like "three months ago, etc." and then the iteration has to mean something.
-# TODO This is a common agent, so it may or may not be used in a conversation, sometimes it may be used as a one off API
-# ex. weekly update on current state of content watching topics etc. That doesnt need a conversation, it needs tool calls in sequence.
-# But what kind of tool calls? We need the agent to be able to smartly fetch content from the graph, based on time, vector queries,
-# and other metrics that make sense, like active, related, etc. it has to be like a smart hybrid of vector and graph crawl
-# with LLM intelligence applied on top for emergence.
 class AgentRunner:
+    """
+    Agent runner with static registry and context injection.
+
+    Tool schemas are passed once at construction (static).
+    Tool context is passed per-run for user/session-specific data.
+    """
+
     def __init__(
         self,
         llm: BaseLLMClient,
@@ -98,15 +205,18 @@ class AgentRunner:
     ):
         self.llm = llm
         self.tools = tools or MEMORY_TOOLS
-        self.registry = registry or ToolRegistry()
+        self.registry = registry or REGISTRY
 
     async def run(
         self,
         messages: List[ChatMessage],
+        ctx: ToolContext,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         max_turns: Optional[int] = None,
         timeout: Optional[float] = None,
+        tool_timeout: float = 30.0,
+        max_tool_concurrency: int = 8,
     ) -> AgentResult:
         total_tool_calls = 0
         total_usage: Dict[str, int] = {}
@@ -123,6 +233,7 @@ class AgentRunner:
                     turns=turns,
                     usage=total_usage if total_usage else None,
                     state=self._serialize_state(current_messages),
+                    subtask_summary=ctx.subtask_summary,
                 )
 
             if max_turns and turns >= max_turns:
@@ -133,6 +244,7 @@ class AgentRunner:
                     turns=turns,
                     usage=total_usage if total_usage else None,
                     state=self._serialize_state(current_messages),
+                    subtask_summary=ctx.subtask_summary,
                 )
 
             try:
@@ -151,6 +263,7 @@ class AgentRunner:
                     turns=turns,
                     usage=total_usage if total_usage else None,
                     state=self._serialize_state(current_messages),
+                    subtask_summary=ctx.subtask_summary,
                 )
 
             turns += 1
@@ -167,6 +280,7 @@ class AgentRunner:
                     tool_calls_made=total_tool_calls,
                     turns=turns,
                     usage=total_usage if total_usage else None,
+                    subtask_summary=ctx.subtask_summary,
                 )
 
             assistant_msg = ChatMessage(
@@ -176,21 +290,33 @@ class AgentRunner:
             )
             current_messages.append(assistant_msg)
 
-            tool_results = await self._execute_tools_parallel(response.tool_calls)
-            total_tool_calls += len(tool_results)
+            batch_result = await execute_tools_bounded(
+                response.tool_calls,
+                ctx,
+                self.registry,
+                max_concurrency=max_tool_concurrency,
+                timeout_s=tool_timeout,
+            )
+            total_tool_calls += len(batch_result.results)
 
-            for result in tool_results:
+            for exec_result in batch_result.results:
+                content = (
+                    json.dumps(exec_result.output, default=str)
+                    if exec_result.ok
+                    else json.dumps({"error": exec_result.error})
+                )
                 current_messages.append(
                     ChatMessage(
                         role="tool",
-                        content=result.content,
-                        tool_call_id=result.tool_call_id,
+                        content=content,
+                        tool_call_id=exec_result.tool_call_id,
                     )
                 )
 
     async def resume(
         self,
         state: str,
+        ctx: ToolContext,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         max_turns: Optional[int] = None,
@@ -199,17 +325,12 @@ class AgentRunner:
         messages = self._deserialize_state(state)
         return await self.run(
             messages=messages,
+            ctx=ctx,
             temperature=temperature,
             max_tokens=max_tokens,
             max_turns=max_turns,
             timeout=timeout,
         )
-
-    async def _execute_tools_parallel(
-        self, tool_calls: List[ToolCall]
-    ) -> List[ToolResult]:
-        tasks = [self.registry.execute(tc) for tc in tool_calls]
-        return await asyncio.gather(*tasks)
 
     def _serialize_state(self, messages: List[ChatMessage]) -> str:
         serializable = []
@@ -250,60 +371,3 @@ class AgentRunner:
             if msg.role == "assistant" and msg.content:
                 return msg.content
         return ""
-
-
-def create_memory_tool_registry(
-    user_id: str,
-    graph_ops: Any,
-    store: Any,
-    user_card: Optional[Any] = None,
-    user_timezone: str = "UTC",
-    session_id: Optional[str] = None,
-) -> ToolRegistry:
-    registry = ToolRegistry()
-
-    async def bound_recall(query: str):
-        return await recall(
-            user_id=user_id,
-            query=query,
-            graph_ops=graph_ops,
-            store=store,
-        )
-
-    async def bound_record(text: str):
-        return await record(
-            user_id=user_id,
-            text=text,
-            session_id=session_id,
-        )
-
-    async def bound_expand_neighbors(
-        memory_id: str,
-        relationship_types: Optional[List[str]] = None,
-    ):
-        return await expand_neighbors(
-            memory_id=memory_id,
-            user_id=user_id,
-            store=store,
-            relationship_types=relationship_types,
-        )
-
-    async def bound_follow_relationship(
-        source_id: str,
-        relation_type: str,
-        limit: int = 5,
-    ):
-        return await follow_relationship(
-            source_id=source_id,
-            relation_type=relation_type,
-            user_id=user_id,
-            store=store,
-            limit=limit,
-        )
-
-    registry.register("recall", bound_recall)
-    registry.register("record", bound_record)
-    registry.register("expand_neighbors", bound_expand_neighbors)
-    registry.register("follow_relationship", bound_follow_relationship)
-
-    return registry

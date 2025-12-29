@@ -6,17 +6,29 @@ from unittest.mock import AsyncMock, MagicMock
 
 from persona.llm.providers.base import ChatMessage, ChatResponse, ToolCall, ToolResult
 from persona.tools.runner import AgentRunner, ToolRegistry, AgentResult
+from persona.tools.context import ToolContext
+
+
+def make_mock_ctx() -> ToolContext:
+    """Create a mock ToolContext for testing."""
+    mock_graph_ops = MagicMock()
+    mock_store = MagicMock()
+    return ToolContext(
+        user_id="test_user",
+        graph_ops=mock_graph_ops,
+        store=mock_store,
+        user_timezone="UTC",
+    )
 
 
 class TestToolRegistry:
     @pytest.mark.asyncio
     async def test_register_and_execute_tool(self):
-        registry = ToolRegistry()
-
-        async def mock_tool(query: str, limit: int = 10):
+        async def mock_tool(ctx: ToolContext, query: str, limit: int = 10):
             return {"results": [query], "count": limit}
 
-        registry.register("search", mock_tool)
+        registry = ToolRegistry(handlers={"search": mock_tool})
+        ctx = make_mock_ctx()
 
         tool_call = ToolCall(
             id="call_123",
@@ -24,7 +36,7 @@ class TestToolRegistry:
             arguments=json.dumps({"query": "test", "limit": 5}),
         )
 
-        result = await registry.execute(tool_call)
+        result = await registry.execute(tool_call, ctx)
 
         assert result.tool_call_id == "call_123"
         parsed = json.loads(result.content)
@@ -33,7 +45,8 @@ class TestToolRegistry:
 
     @pytest.mark.asyncio
     async def test_execute_unknown_tool_returns_error(self):
-        registry = ToolRegistry()
+        registry = ToolRegistry(handlers={})
+        ctx = make_mock_ctx()
 
         tool_call = ToolCall(
             id="call_456",
@@ -41,7 +54,7 @@ class TestToolRegistry:
             arguments="{}",
         )
 
-        result = await registry.execute(tool_call)
+        result = await registry.execute(tool_call, ctx)
 
         assert result.tool_call_id == "call_456"
         parsed = json.loads(result.content)
@@ -50,12 +63,11 @@ class TestToolRegistry:
 
     @pytest.mark.asyncio
     async def test_execute_with_invalid_json_arguments(self):
-        registry = ToolRegistry()
-
-        async def mock_tool():
+        async def mock_tool(ctx: ToolContext):
             return "ok"
 
-        registry.register("simple", mock_tool)
+        registry = ToolRegistry(handlers={"simple": mock_tool})
+        ctx = make_mock_ctx()
 
         tool_call = ToolCall(
             id="call_789",
@@ -63,7 +75,7 @@ class TestToolRegistry:
             arguments="not valid json",
         )
 
-        result = await registry.execute(tool_call)
+        result = await registry.execute(tool_call, ctx)
 
         parsed = json.loads(result.content)
         assert "error" in parsed
@@ -71,12 +83,11 @@ class TestToolRegistry:
 
     @pytest.mark.asyncio
     async def test_execute_with_exception_returns_error(self):
-        registry = ToolRegistry()
-
-        async def failing_tool():
+        async def failing_tool(ctx: ToolContext):
             raise ValueError("Something went wrong")
 
-        registry.register("failing", failing_tool)
+        registry = ToolRegistry(handlers={"failing": failing_tool})
+        ctx = make_mock_ctx()
 
         tool_call = ToolCall(
             id="call_fail",
@@ -84,7 +95,7 @@ class TestToolRegistry:
             arguments="{}",
         )
 
-        result = await registry.execute(tool_call)
+        result = await registry.execute(tool_call, ctx)
 
         parsed = json.loads(result.content)
         assert "error" in parsed
@@ -104,8 +115,9 @@ class TestAgentRunner:
 
         runner = AgentRunner(llm=mock_llm)
         messages = [ChatMessage(role="user", content="Hi")]
+        ctx = make_mock_ctx()
 
-        result = await runner.run(messages)
+        result = await runner.run(messages, ctx=ctx)
 
         assert result.content == "Hello, world!"
         assert result.status == "completed"
@@ -139,17 +151,16 @@ class TestAgentRunner:
 
         mock_llm.chat.side_effect = [first_response, second_response]
 
-        registry = ToolRegistry()
-
-        async def mock_memory_query(query: str):
+        async def mock_memory_query(ctx: ToolContext, query: str):
             return {"hits": [{"content": "test memory"}]}
 
-        registry.register("memory_query", mock_memory_query)
+        registry = ToolRegistry(handlers={"memory_query": mock_memory_query})
 
         runner = AgentRunner(llm=mock_llm, registry=registry)
         messages = [ChatMessage(role="user", content="What do you remember?")]
+        ctx = make_mock_ctx()
 
-        result = await runner.run(messages)
+        result = await runner.run(messages, ctx=ctx)
 
         assert result.content == "Based on your memory, here is the answer."
         assert result.status == "completed"
@@ -170,17 +181,16 @@ class TestAgentRunner:
 
         mock_llm.chat.return_value = tool_response
 
-        registry = ToolRegistry()
-
-        async def looping_tool():
+        async def looping_tool(ctx: ToolContext):
             return "loop"
 
-        registry.register("looping", looping_tool)
+        registry = ToolRegistry(handlers={"looping": looping_tool})
 
         runner = AgentRunner(llm=mock_llm, registry=registry)
         messages = [ChatMessage(role="user", content="Loop forever")]
+        ctx = make_mock_ctx()
 
-        result = await runner.run(messages, max_turns=5)
+        result = await runner.run(messages, ctx=ctx, max_turns=5)
 
         assert result.status == "max_turns"
         assert result.turns == 5
@@ -207,17 +217,16 @@ class TestAgentRunner:
         )
         mock_llm.chat.side_effect = tool_responses + [final_response]
 
-        registry = ToolRegistry()
-
-        async def work_tool():
+        async def work_tool(ctx: ToolContext):
             return "done"
 
-        registry.register("work", work_tool)
+        registry = ToolRegistry(handlers={"work": work_tool})
 
         runner = AgentRunner(llm=mock_llm, registry=registry)
         messages = [ChatMessage(role="user", content="Do lots of work")]
+        ctx = make_mock_ctx()
 
-        result = await runner.run(messages)
+        result = await runner.run(messages, ctx=ctx)
 
         assert result.status == "completed"
         assert result.turns == 21
@@ -246,29 +255,29 @@ class TestAgentRunner:
 
         mock_llm.chat.side_effect = [first_response, second_response]
 
-        registry = ToolRegistry()
         call_order = []
 
-        async def tool_a():
+        async def tool_a(ctx: ToolContext):
             call_order.append("a")
             return "result_a"
 
-        async def tool_b():
+        async def tool_b(ctx: ToolContext):
             call_order.append("b")
             return "result_b"
 
-        async def tool_c():
+        async def tool_c(ctx: ToolContext):
             call_order.append("c")
             return "result_c"
 
-        registry.register("tool_a", tool_a)
-        registry.register("tool_b", tool_b)
-        registry.register("tool_c", tool_c)
+        registry = ToolRegistry(
+            handlers={"tool_a": tool_a, "tool_b": tool_b, "tool_c": tool_c}
+        )
 
         runner = AgentRunner(llm=mock_llm, registry=registry)
         messages = [ChatMessage(role="user", content="Call all tools")]
+        ctx = make_mock_ctx()
 
-        result = await runner.run(messages)
+        result = await runner.run(messages, ctx=ctx)
 
         assert result.tool_calls_made == 3
         assert len(call_order) == 3
@@ -302,18 +311,18 @@ class TestAgentRunner:
 
         mock_llm.chat.side_effect = responses
 
-        registry = ToolRegistry()
-
-        async def dummy_tool():
+        async def dummy_tool(ctx: ToolContext):
             return "ok"
 
-        registry.register("t", dummy_tool)
+        registry = ToolRegistry(handlers={"t": dummy_tool})
 
         runner = AgentRunner(llm=mock_llm, registry=registry)
         messages = [ChatMessage(role="user", content="test")]
+        ctx = make_mock_ctx()
 
-        result = await runner.run(messages)
+        result = await runner.run(messages, ctx=ctx)
 
+        assert result.usage is not None
         assert result.usage["prompt_tokens"] == 450
         assert result.usage["completion_tokens"] == 225
 
@@ -330,17 +339,16 @@ class TestAgentRunner:
 
         mock_llm.chat.return_value = tool_response
 
-        registry = ToolRegistry()
-
-        async def work_tool():
+        async def work_tool(ctx: ToolContext):
             return "done"
 
-        registry.register("work", work_tool)
+        registry = ToolRegistry(handlers={"work": work_tool})
 
         runner = AgentRunner(llm=mock_llm, registry=registry)
         messages = [ChatMessage(role="user", content="Start work")]
+        ctx = make_mock_ctx()
 
-        result1 = await runner.run(messages, max_turns=2)
+        result1 = await runner.run(messages, ctx=ctx, max_turns=2)
 
         assert result1.status == "max_turns"
         assert result1.can_resume is True
@@ -352,7 +360,8 @@ class TestAgentRunner:
         )
         mock_llm.chat.return_value = final_response
 
-        result2 = await runner.resume(result1.state, max_turns=5)
+        assert result1.state is not None
+        result2 = await runner.resume(result1.state, ctx=ctx, max_turns=5)
 
         assert result2.status == "completed"
         assert result2.content == "All done!"

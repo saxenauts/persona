@@ -1,13 +1,15 @@
-"""Memory Tools: Dialectic memory access for AI agents."""
+"""Memory Tools: Dialectic memory access for AI agents.
+
+Handlers accept ToolContext (injected at runtime) + structured parameters
+(provided by LLM). No natural language parsing - LLM provides dates/types directly.
+"""
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, date
 from uuid import UUID
-import re
 
-from persona.core.graph_ops import GraphOps
-from persona.core.memory_store import MemoryStore
+from persona.tools.context import ToolContext
 from persona.services.ingestion_service import MemoryIngestionService
 from server.logging_config import get_logger
 
@@ -35,54 +37,12 @@ class RecordResult:
     stored: List[Dict[str, str]] = field(default_factory=list)
 
 
-def _parse_time_cues(query: str) -> Optional[tuple[datetime, datetime]]:
-    query_lower = query.lower()
-    now = datetime.utcnow()
-
-    if "today" in query_lower:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return start, now
-    if "yesterday" in query_lower:
-        start = (now - timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        end = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return start, end
-    if "last week" in query_lower or "this week" in query_lower:
-        return now - timedelta(days=7), now
-    if "last month" in query_lower or "this month" in query_lower:
-        return now - timedelta(days=30), now
-
-    date_match = re.search(r"(\d{4}-\d{2}-\d{2})", query)
-    if date_match:
-        try:
-            date = datetime.fromisoformat(date_match.group(1))
-            return date, date + timedelta(days=1)
-        except ValueError:
-            pass
-
-    return None
-
-
-def _parse_type_cues(query: str) -> Optional[List[str]]:
-    query_lower = query.lower()
-
-    if any(
-        w in query_lower
-        for w in ["preference", "like", "dislike", "personality", "trait", "value"]
-    ):
-        return ["psyche"]
-    if any(
-        w in query_lower for w in ["task", "todo", "note", "list", "goal", "remind"]
-    ):
-        return ["note"]
-    if any(
-        w in query_lower
-        for w in ["happened", "did", "went", "event", "meeting", "conversation"]
-    ):
-        return ["episode"]
-
-    return None
+@dataclass
+class ExpandResult:
+    center_id: str
+    neighbors: List[MemoryHit] = field(default_factory=list)
+    relationships: List[Dict[str, str]] = field(default_factory=list)
+    count: int = 0
 
 
 def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
@@ -103,24 +63,41 @@ def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
     )
 
 
-async def recall(
-    user_id: str,
-    query: str,
-    graph_ops: GraphOps,
-    store: MemoryStore,
-) -> RecallResult:
-    time_range = _parse_time_cues(query)
-    type_filter = _parse_type_cues(query)
+def _parse_date(date_str: Optional[str]) -> Optional[date]:
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str).date()
+    except ValueError:
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            logger.warning(f"Invalid date format: {date_str}")
+            return None
 
-    date_range = None
-    if time_range:
-        date_range = (time_range[0].date(), time_range[1].date())
+
+async def recall_handler(
+    ctx: ToolContext,
+    query: str,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    memory_types: Optional[List[str]] = None,
+    limit: int = 10,
+) -> RecallResult:
+    """
+    Search memories with structured filters.
+
+    LLM provides dates directly in ISO format - no parsing of natural language.
+    """
+    start_date = _parse_date(date_start)
+    end_date = _parse_date(date_end)
+    date_range = (start_date, end_date) if start_date or end_date else None
 
     try:
-        results = await graph_ops.text_similarity_search(
+        results = await ctx.graph_ops.text_similarity_search(
             query=query,
-            user_id=user_id,
-            limit=15,
+            user_id=ctx.user_id,
+            limit=limit * 2,
             date_range=date_range,
         )
     except Exception as e:
@@ -128,18 +105,17 @@ async def recall(
         return RecallResult()
 
     items = []
-
     for r in results.get("results", []):
         node_id = r.get("nodeName")
         score = r.get("score", 0.0)
 
         try:
-            mem = await store.get(UUID(node_id), user_id)
+            mem = await ctx.store.get(UUID(node_id), ctx.user_id)
             if mem:
-                if type_filter and mem.type not in type_filter:
+                if memory_types and mem.type not in memory_types:
                     continue
                 items.append(_memory_to_hit(mem, score=score))
-                if len(items) >= 10:
+                if len(items) >= limit:
                     break
         except Exception as e:
             logger.debug(f"Could not retrieve memory {node_id}: {e}")
@@ -147,47 +123,52 @@ async def recall(
     return RecallResult(items=items, count=len(items))
 
 
-@dataclass
-class ExpandResult:
-    """Result from graph expansion."""
+async def record_handler(
+    ctx: ToolContext,
+    text: str,
+) -> RecordResult:
+    """Store new information to memory."""
+    ingestion_service = MemoryIngestionService()
+    stored = []
 
-    center_id: str
-    neighbors: List[MemoryHit] = field(default_factory=list)
-    relationships: List[Dict[str, str]] = field(default_factory=list)
-    count: int = 0
+    if not text.strip():
+        return RecordResult()
+
+    try:
+        result = await ingestion_service.ingest(
+            raw_content=text,
+            user_id=ctx.user_id,
+            session_id=ctx.session_id,
+            source_type="tool",
+            source_ref="record",
+        )
+
+        if result.success:
+            for mem in result.memories:
+                stored.append({"id": str(mem.id), "type": mem.type})
+        else:
+            logger.warning(f"Record failed: {result.error}")
+
+    except Exception as e:
+        logger.error(f"Record failed: {e}")
+
+    return RecordResult(stored=stored)
 
 
-async def expand_neighbors(
+async def expand_neighbors_handler(
+    ctx: ToolContext,
     memory_id: str,
-    user_id: str,
-    store: MemoryStore,
     relationship_types: Optional[List[str]] = None,
-    max_depth: int = 1,
+    limit: int = 10,
 ) -> ExpandResult:
-    """
-    Expand from a memory node to find connected memories.
-
-    Use after recall() to explore interesting connections from a specific memory.
-    Returns the memory's neighbors via graph relationships.
-
-    Args:
-        memory_id: UUID of the memory to expand from
-        user_id: User ID for access control
-        store: MemoryStore instance
-        relationship_types: Filter by relationship types (e.g., ["LED_TO", "CAUSED_BY"]).
-                           If None, returns all relationships.
-        max_depth: How many hops to traverse (currently supports 1)
-
-    Returns:
-        ExpandResult with neighbors and relationship info
-    """
+    """Expand from a memory node to find connected memories."""
     try:
         source_uuid = UUID(memory_id)
     except ValueError:
         logger.warning(f"Invalid memory_id format: {memory_id}")
         return ExpandResult(center_id=memory_id)
 
-    connections = await store.get_connected_batch([source_uuid], user_id)
+    connections = await ctx.store.get_connected_batch([source_uuid], ctx.user_id)
     neighbor_tuples = connections.get(source_uuid, [])
 
     if relationship_types:
@@ -201,8 +182,9 @@ async def expand_neighbors(
     if not neighbor_tuples:
         return ExpandResult(center_id=memory_id)
 
+    neighbor_tuples = neighbor_tuples[:limit]
     neighbor_ids = [target_id for target_id, _ in neighbor_tuples]
-    neighbor_memories = await store.get_memories_by_ids(neighbor_ids, user_id)
+    neighbor_memories = await ctx.store.get_memories_by_ids(neighbor_ids, ctx.user_id)
 
     neighbors = []
     relationships = []
@@ -228,37 +210,21 @@ async def expand_neighbors(
     )
 
 
-async def follow_relationship(
+async def follow_relationship_handler(
+    ctx: ToolContext,
     source_id: str,
     relation_type: str,
-    user_id: str,
-    store: MemoryStore,
     limit: int = 5,
 ) -> RecallResult:
-    """
-    Follow a specific relationship type from a memory.
-
-    Use to trace causal chains or thematic connections.
-    More targeted than expand_neighbors() - focuses on one relationship type.
-
-    Args:
-        source_id: UUID of the starting memory
-        relation_type: The relationship type to follow (e.g., "LED_TO", "CAUSED_BY", "NEXT")
-        user_id: User ID for access control
-        store: MemoryStore instance
-        limit: Maximum number of connected memories to return
-
-    Returns:
-        RecallResult with memories connected by this relationship
-    """
+    """Follow a specific relationship type from a memory."""
     try:
         source_uuid = UUID(source_id)
     except ValueError:
         logger.warning(f"Invalid source_id format: {source_id}")
         return RecallResult()
 
-    connections = await store.get_connected_batch(
-        [source_uuid], user_id, relation=relation_type
+    connections = await ctx.store.get_connected_batch(
+        [source_uuid], ctx.user_id, relation=relation_type
     )
     neighbor_tuples = connections.get(source_uuid, [])
 
@@ -267,45 +233,16 @@ async def follow_relationship(
 
     neighbor_tuples = neighbor_tuples[:limit]
     neighbor_ids = [target_id for target_id, _ in neighbor_tuples]
-    neighbor_memories = await store.get_memories_by_ids(neighbor_ids, user_id)
+    neighbor_memories = await ctx.store.get_memories_by_ids(neighbor_ids, ctx.user_id)
 
     items = [_memory_to_hit(mem) for mem in neighbor_memories]
-
     return RecallResult(items=items, count=len(items))
 
 
-async def record(
-    user_id: str,
-    text: str,
-    session_id: Optional[str] = None,
-) -> RecordResult:
-    ingestion_service = MemoryIngestionService()
-    stored = []
-
-    if not text.strip():
-        return RecordResult()
-
-    try:
-        result = await ingestion_service.ingest(
-            raw_content=text,
-            user_id=user_id,
-            session_id=session_id,
-            source_type="tool",
-            source_ref="record",
-        )
-
-        if result.success:
-            for mem in result.memories:
-                stored.append(
-                    {
-                        "id": str(mem.id),
-                        "type": mem.type,
-                    }
-                )
-        else:
-            logger.warning(f"Record failed: {result.error}")
-
-    except Exception as e:
-        logger.error(f"Record failed: {e}")
-
-    return RecordResult(stored=stored)
+# Static handler registry - maps tool names to handler functions
+TOOL_HANDLERS = {
+    "recall": recall_handler,
+    "record": record_handler,
+    "expand_neighbors": expand_neighbors_handler,
+    "follow_relationship": follow_relationship_handler,
+}

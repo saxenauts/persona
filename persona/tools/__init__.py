@@ -1,13 +1,20 @@
+from persona.tools.context import ToolContext
 from persona.tools.memory import (
-    recall,
-    record,
+    recall_handler,
+    record_handler,
+    expand_neighbors_handler,
+    follow_relationship_handler,
+    TOOL_HANDLERS,
     RecallResult,
-    MemoryHit,
     RecordResult,
+    ExpandResult,
+    MemoryHit,
 )
 from persona.tools.schemas import (
     RECALL_TOOL,
     RECORD_TOOL,
+    EXPAND_NEIGHBORS_TOOL,
+    FOLLOW_RELATIONSHIP_TOOL,
     MEMORY_TOOLS,
     get_tool_by_name,
     get_all_tools,
@@ -16,22 +23,40 @@ from persona.tools.runner import (
     AgentRunner,
     AgentResult,
     ToolRegistry,
-    create_memory_tool_registry,
+    REGISTRY,
+    execute_tools_bounded,
+    ToolExecutionResult,
+    BatchExecutionResult,
 )
 
 __all__ = [
-    "recall",
-    "record",
+    # Context
+    "ToolContext",
+    # Handlers
+    "recall_handler",
+    "record_handler",
+    "expand_neighbors_handler",
+    "follow_relationship_handler",
+    "TOOL_HANDLERS",
+    # Result types
     "RecallResult",
-    "MemoryHit",
     "RecordResult",
+    "ExpandResult",
+    "MemoryHit",
+    # Schemas
     "RECALL_TOOL",
     "RECORD_TOOL",
+    "EXPAND_NEIGHBORS_TOOL",
+    "FOLLOW_RELATIONSHIP_TOOL",
     "MEMORY_TOOLS",
     "get_tool_by_name",
     "get_all_tools",
+    # Runner
     "AgentRunner",
     "AgentResult",
     "ToolRegistry",
-    "create_memory_tool_registry",
+    "REGISTRY",
+    "execute_tools_bounded",
+    "ToolExecutionResult",
+    "BatchExecutionResult",
 ]
