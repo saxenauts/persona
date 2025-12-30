@@ -81,20 +81,113 @@ class PsycheMemory(BaseMemory):
 
 
 class NoteMemory(BaseMemory):
-    """Structured/unstructured notes: tasks, projects, facts, lists, contacts, ideas, reminders."""
+    """Agent commitments: tasks, goals, reminders, ideas, lists, projects (tracking status).
+
+    Notes are created when there's INTENTION or TRIGGER:
+    - "remind me", "I need to", due dates, imperatives
+    - State machine: active → done/cancelled
+
+    NOT for facts (those are Entity attributes).
+    """
 
     type: Literal["note"] = Field(default="note")
     note_type: Optional[str] = Field(
         default=None,
-        description="task, project, fact, list, contact, reminder, idea, goal, etc.",
+        description="task, goal, reminder, idea, list, project (for tracking status)",
     )
     status: str = Field(default="active")
     due_date: Optional[datetime] = None
+    entity_refs: List[UUID] = Field(
+        default_factory=list,
+        description="Entity IDs this note relates to (e.g., reminder about a person)",
+    )
+
+
+# ============================================================================
+# Entity Memory System (4th Pillar)
+# ============================================================================
+
+
+class EntityAttribute(BaseModel):
+    """A structured attribute of an entity with evidence provenance.
+
+    Attributes are facts about entities (birthday, job title, favorite color).
+    Each attribute tracks where the knowledge came from for conflict resolution.
+    """
+
+    key: str = Field(..., description="Attribute name: birthday, job_title, location")
+    value: str = Field(..., description="Attribute value")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    evidence_id: Optional[UUID] = Field(
+        default=None, description="Episode/Note ID that evidences this attribute"
+    )
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class EntityRelation(BaseModel):
+    """A relationship from this entity to another entity.
+
+    Relations are typed connections: works_at, married_to, located_in, part_of.
+    """
+
+    target_entity_id: UUID
+    relation_type: str = Field(..., description="works_at, married_to, friend_of, etc.")
+    properties: Dict[str, Any] = Field(default_factory=dict)
+    evidence_id: Optional[UUID] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class EntityMemory(BaseMemory):
+    """Semantic memory about world referents (people, places, things, concepts).
+
+    Entities answer "What/Who is X?" - they represent things that EXIST in the world.
+    Facts about entities are stored as attributes, not as separate Notes.
+
+    Key distinction from Notes:
+    - Entity = Things that EXIST (nouns: Sarah, Paris, Project Alpha)
+    - Note = Things I INTEND to do (verbs: call Sarah, finish project)
+
+    Update semantics: Upsert with conflict handling (attributes can be updated).
+    """
+
+    type: Literal["entity"] = Field(default="entity")
+    entity_type: str = Field(
+        ..., description="person, place, organization, project, tool, concept"
+    )
+
+    # Identity
+    canonical_name: str = Field(..., description="Primary name: 'Sarah Smith'")
+    aliases: List[str] = Field(
+        default_factory=list,
+        description="Alternative names: ['Sarah', 'my girlfriend']",
+    )
+    description: str = Field(
+        default="", description="LLM-consolidated summary of what we know"
+    )
+
+    # Structured attributes (facts about this entity)
+    attributes: List[EntityAttribute] = Field(
+        default_factory=list,
+        description="Structured facts: [{key: 'birthday', value: 'June 5', ...}]",
+    )
+
+    # Relationships to other entities
+    relationships: List[EntityRelation] = Field(
+        default_factory=list,
+        description="Links to other entities: [{target_id, relation_type: 'works_at'}]",
+    )
+
+    # Back-references (which memories mention this entity)
+    mentioned_in: List[UUID] = Field(
+        default_factory=list,
+        description="Episode/Note IDs that mention this entity",
+    )
 
 
 # The Unified Memory type using Discriminated Union
 Memory = Annotated[
-    Union[EpisodeMemory, PsycheMemory, NoteMemory], Field(discriminator="type")
+    Union[EpisodeMemory, PsycheMemory, NoteMemory, EntityMemory],
+    Field(discriminator="type"),
 ]
 
 
@@ -222,12 +315,35 @@ class PsycheOutput(BaseModel):
 
 
 class NoteOutput(BaseModel):
-    """LLM extraction output for notes (tasks, facts, lists, etc.)."""
+    """LLM extraction output for notes (tasks, goals, reminders, ideas, lists)."""
 
     type: str = Field(default="task")
     title: str
     content: str = Field(default="")
     status: str = Field(default="active")
+    entity_refs: List[str] = Field(
+        default_factory=list,
+        description="Names of entities this note relates to (for linking)",
+    )
+
+
+class EntityAttributeOutput(BaseModel):
+    """LLM extraction output for entity attributes."""
+
+    key: str
+    value: str
+
+
+class EntityOutput(BaseModel):
+    """LLM extraction output for entities (people, places, things, concepts)."""
+
+    entity_type: str = Field(
+        ..., description="person, place, organization, project, tool, concept"
+    )
+    canonical_name: str
+    aliases: List[str] = Field(default_factory=list)
+    description: str = Field(default="")
+    attributes: List[EntityAttributeOutput] = Field(default_factory=list)
 
 
 class IngestionOutput(BaseModel):
@@ -236,3 +352,4 @@ class IngestionOutput(BaseModel):
     episode: EpisodeOutput
     psyche: List[PsycheOutput] = Field(default_factory=list)
     notes: List[NoteOutput] = Field(default_factory=list)
+    entities: List[EntityOutput] = Field(default_factory=list)

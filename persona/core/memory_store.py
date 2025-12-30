@@ -10,7 +10,13 @@ from typing import List, Dict, Any, Optional
 from uuid import UUID
 
 from persona.core.interfaces import GraphDatabase, VectorStore
-from persona.models.memory import Memory, MemoryLink, MemoryQueryResponse
+from persona.models.memory import (
+    Memory,
+    MemoryLink,
+    MemoryQueryResponse,
+    EntityMemory,
+    EntityAttribute,
+)
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -451,3 +457,172 @@ class MemoryStore:
 
         logger.info(f"Updated memory {memory_id}: {list(updates.keys())}")
         return await self.get(memory_id, user_id)
+
+    # ========== Entity-specific Methods ==========
+
+    async def create_entity(self, entity: EntityMemory) -> EntityMemory:
+        node_data = self._memory_to_node_data(entity)
+
+        import json
+
+        if entity.attributes:
+            node_data["attributes"] = json.dumps(
+                [attr.model_dump(mode="json") for attr in entity.attributes]
+            )
+        if entity.relationships:
+            node_data["relationships"] = json.dumps(
+                [rel.model_dump(mode="json") for rel in entity.relationships]
+            )
+        if entity.aliases:
+            node_data["aliases"] = json.dumps(entity.aliases)
+        if entity.mentioned_in:
+            node_data["mentioned_in"] = json.dumps(
+                [str(mid) for mid in entity.mentioned_in]
+            )
+
+        await self.graph_db.create_nodes([node_data], entity.user_id)
+
+        if self.vector_store and entity.embedding:
+            try:
+                await self.vector_store.add_embedding(
+                    node_name=node_data["name"],
+                    embedding=entity.embedding,
+                    user_id=entity.user_id,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to persist entity embedding: {e}")
+
+        logger.info(
+            f"Created entity '{entity.canonical_name}' ({entity.entity_type}) "
+            f"for user {entity.user_id}"
+        )
+        return entity
+
+    async def get_entity_by_name(
+        self, name: str, user_id: str, include_aliases: bool = True
+    ) -> Optional[EntityMemory]:
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        name_lower = name.lower()
+
+        for node in all_nodes:
+            if node.get("type") != "entity":
+                continue
+
+            canonical = str(node.get("canonical_name", "")).lower()
+            if canonical == name_lower:
+                return self._node_to_memory(node, user_id)  # type: ignore
+
+            if include_aliases:
+                import json
+
+                aliases_raw = node.get("aliases", "[]")
+                if isinstance(aliases_raw, str):
+                    try:
+                        aliases = json.loads(aliases_raw)
+                    except json.JSONDecodeError:
+                        aliases = []
+                else:
+                    aliases = aliases_raw
+
+                if any(alias.lower() == name_lower for alias in aliases):
+                    return self._node_to_memory(node, user_id)  # type: ignore
+
+        return None
+
+    async def upsert_entity_attribute(
+        self,
+        entity_id: UUID,
+        user_id: str,
+        key: str,
+        value: str,
+        evidence_id: Optional[UUID] = None,
+        confidence: float = 1.0,
+    ) -> Optional[EntityMemory]:
+        entity = await self.get(entity_id, user_id)
+        if not entity or entity.type != "entity":
+            logger.warning(f"Entity {entity_id} not found for attribute upsert")
+            return None
+
+        entity_mem: EntityMemory = entity  # type: ignore
+        existing_idx = next(
+            (i for i, attr in enumerate(entity_mem.attributes) if attr.key == key),
+            None,
+        )
+
+        new_attr = EntityAttribute(
+            key=key,
+            value=value,
+            confidence=confidence,
+            evidence_id=evidence_id,
+        )
+
+        if existing_idx is not None:
+            entity_mem.attributes[existing_idx] = new_attr
+        else:
+            entity_mem.attributes.append(new_attr)
+
+        import json
+
+        await self.graph_db.create_nodes(
+            [
+                {
+                    "name": str(entity_id),
+                    "type": "entity",
+                    "attributes": json.dumps(
+                        [attr.model_dump(mode="json") for attr in entity_mem.attributes]
+                    ),
+                }
+            ],
+            user_id,
+        )
+
+        logger.info(f"Upserted attribute '{key}' on entity {entity_id}")
+        return await self.get(entity_id, user_id)  # type: ignore
+
+    async def link_memory_to_entity(
+        self, memory_id: UUID, entity_id: UUID, user_id: str
+    ) -> None:
+        entity = await self.get(entity_id, user_id)
+        if not entity or entity.type != "entity":
+            logger.warning(f"Entity {entity_id} not found for linking")
+            return
+
+        entity_mem: EntityMemory = entity  # type: ignore
+        if memory_id not in entity_mem.mentioned_in:
+            entity_mem.mentioned_in.append(memory_id)
+
+            import json
+
+            await self.graph_db.create_nodes(
+                [
+                    {
+                        "name": str(entity_id),
+                        "type": "entity",
+                        "mentioned_in": json.dumps(
+                            [str(mid) for mid in entity_mem.mentioned_in]
+                        ),
+                    }
+                ],
+                user_id,
+            )
+
+        await self.create_link(
+            MemoryLink(source_id=memory_id, target_id=entity_id, relation="MENTIONS"),
+            user_id,
+        )
+        logger.debug(f"Linked memory {memory_id} to entity {entity_id}")
+
+    async def get_entities_by_type(
+        self, entity_type: str, user_id: str, limit: int = 50
+    ) -> List[EntityMemory]:
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+
+        entities = []
+        for node in all_nodes:
+            if node.get("type") != "entity":
+                continue
+            if node.get("entity_type") == entity_type:
+                entities.append(self._node_to_memory(node, user_id))
+
+        entities.sort(key=lambda e: e.timestamp, reverse=True)
+        return entities[:limit]  # type: ignore

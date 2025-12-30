@@ -23,6 +23,8 @@ from persona.models.memory import (
     EpisodeOutput,
     PsycheOutput,
     NoteOutput,
+    EntityOutput,
+    EntityAttributeOutput,
     IngestionOutput,
 )
 from persona.llm.client_factory import get_chat_client, get_embedding_client
@@ -42,39 +44,49 @@ EXTRACTION_RETRY_DELAY_SECONDS = 2
 # Ingestion Prompt
 # ============================================================================
 
-INGESTION_SYSTEM_PROMPT = """You are a memory ingestion system for a personal knowledge assistant. Your job is to process raw input and extract meaningful memories.
+INGESTION_SYSTEM_PROMPT = """You are a memory ingestion system for a personal knowledge assistant. Your job is to process raw input and extract meaningful memories into 4 pillars.
 
-Extract:
-1. **Episode**: A narrative memory of what happened. Write as natural prose. Preserve emotional context.
-2. **Psyche**: Any identity-related content (traits, preferences, values, beliefs) if present.
-3. **Notes**: Any structured items (tasks, facts, reminders, contacts, ideas, lists) if present.
+## The 4 Memory Pillars
+
+1. **Episode**: What happened (narrative evidence). Always extract one.
+2. **Psyche**: Who they are (traits, preferences, values, beliefs). Extract if present.
+3. **Entity**: What/who exists (people, places, things, concepts). Extract referents mentioned.
+4. **Note**: What to do (tasks, goals, reminders). ONLY when intention/trigger is present.
+
+## Entity vs Note (CRITICAL DISTINCTION)
+
+- **Entity** = Things that EXIST (nouns): "Sarah", "Paris", "Project Alpha"
+- **Note** = Things to DO (intentions): "call Sarah", "book trip to Paris"
+- **Facts** = Entity ATTRIBUTES, not Notes: "Sarah's birthday is June 5" → Entity attribute
+
+Create Notes ONLY when you see intention signals:
+- "remind me", "I need to", "I should", "don't forget"
+- Due dates or deadlines
+- Imperatives or action items
 
 ## Guidelines
 
-**For Episodes:**
-- Write as narrative prose, not lists
-- Preserve emotional nuance and context
-- Title should be 2-10 words
+**Episodes:** Write as narrative prose, preserve emotional context. Title 2-10 words.
 
-**For Psyche:**
-- Extract when user reveals preferences, values, beliefs, or traits
-- Be specific: "prefers remote work" not "has work preferences"
-- Types: trait, preference, value, belief
+**Psyche:** Extract preferences, values, beliefs, traits. Types: trait, preference, value, belief.
 
-**For Notes:**
-- Extract concrete action items, facts, contacts, ideas, or lists
-- Types: task, project, reminder, todo, fact, contact, idea, list
-- Status is usually "active" for new items
+**Entities:** Extract people, places, organizations, projects, tools, concepts.
+- Include canonical_name and any aliases mentioned
+- Include attributes (facts) about the entity
+- Types: person, place, organization, project, tool, concept
+
+**Notes:** ONLY for commitments/intentions. Types: task, goal, reminder, idea, list, project.
+- Include entity_refs: names of entities the note relates to
 
 ## Output Format
-Return valid JSON:
 {
   "episode": {"title": "...", "content": "..."},
   "psyche": [{"type": "...", "content": "..."}],
-  "notes": [{"type": "...", "title": "...", "content": "...", "status": "active"}]
+  "entities": [{"entity_type": "...", "canonical_name": "...", "aliases": [], "description": "...", "attributes": [{"key": "...", "value": "..."}]}],
+  "notes": [{"type": "...", "title": "...", "content": "...", "status": "active", "entity_refs": [...]}]
 }
 
-Empty arrays for psyche/notes if none found."""
+Empty arrays if none found for psyche/entities/notes."""
 
 
 INGESTION_USER_TEMPLATE = """Process this input and extract memories:
@@ -210,10 +222,47 @@ class MemoryIngestionService:
                     user_id=user_id,
                 )
                 memories.append(note)
-                # Link note to source episode
                 links.append(
                     MemoryLink(
                         source_id=note.id, target_id=episode_id, relation="derived_from"
+                    )
+                )
+
+            # Create entity memories
+            from persona.models.memory import EntityMemory, EntityAttribute
+
+            for e in extraction.entities:
+                entity = EntityMemory(
+                    id=uuid4(),
+                    entity_type=e.entity_type,
+                    canonical_name=e.canonical_name,
+                    aliases=e.aliases,
+                    description=e.description,
+                    title=e.canonical_name,
+                    content=e.description or f"{e.entity_type}: {e.canonical_name}",
+                    attributes=[
+                        EntityAttribute(
+                            key=attr.key,
+                            value=attr.value,
+                            evidence_id=episode_id,
+                        )
+                        for attr in e.attributes
+                    ],
+                    mentioned_in=[episode_id],
+                    timestamp=timestamp,
+                    created_at=datetime.utcnow(),
+                    day_id=day_id,
+                    session_id=session_id,
+                    source_type=source_type,
+                    extraction_model=extraction_model,
+                    user_id=user_id,
+                )
+                memories.append(entity)
+                links.append(
+                    MemoryLink(
+                        source_id=episode_id,
+                        target_id=entity.id,
+                        relation="MENTIONS",
                     )
                 )
 

@@ -53,13 +53,31 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 ## Key Architecture Patterns
 
-1. **Unified Memory Model**: All data stored as `Episode`, `Psyche`, or `Note` types
+1. **4-Pillar Memory Model**: All data stored as `Episode`, `Psyche`, `Entity`, or `Note` types
+   - **Episode**: What happened (narrative evidence, append-only)
+   - **Psyche**: Who they are (traits, preferences, values, beliefs)
+   - **Entity**: What/who exists (people, places, things, concepts with attributes)
+   - **Note**: What to do (tasks, goals, reminders - only with intention triggers)
 2. **PersonaAdapter**: Single entry point for ingestion (extracts, links, persists)
 3. **PersonaService** (`persona/services/persona_service.py`): Unified orchestrator for queries with `query()` and `run_agent()` methods
 4. **Retriever**: Time-windowed fetch with vector similarity for context retrieval
 5. **Tools Layer** (`persona/tools/`): `recall(query)` and `record(text)` dialectic tools with internal intelligence
 6. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()` — no duplicate connections
 7. **Context Engineering**: Prose-based context formatting with UserCard identity anchor
+
+## 4-Pillar Memory Model
+
+| Pillar | Cognitive Function | Update Semantics | Key Question | What It Stores |
+|--------|-------------------|------------------|--------------|----------------|
+| Episode | Episodic evidence | Append-only | What happened? | Events, experiences, conversations |
+| Psyche | Self-schema | Consolidate/evolve | Who am I? | Traits, preferences, values, beliefs |
+| Entity | Semantic referents | Upsert with conflict handling | What/who is X? | People, places, orgs, projects, tools, concepts |
+| Note | Agent commitments | State machine (active→done) | What should I do? | Tasks, goals, reminders, ideas, lists |
+
+**Entity vs Note (CRITICAL):**
+- Entity = Things that EXIST (nouns): "Sarah", "Paris", "Project Alpha"
+- Note = Things to DO (intentions): "call Sarah", "book trip to Paris"
+- Facts about entities (e.g., "Sarah's birthday is June 5") are **Entity attributes**, not Notes
 
 ## Services Layer
 

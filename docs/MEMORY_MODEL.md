@@ -14,9 +14,9 @@ We're building a memory layer that doesn't just *store* information but *underst
 
 ---
 
-## The Three Pillars of Personal Memory
+## The Four Pillars of Personal Memory
 
-Human memory isn't a filing cabinet. Cognitive science distinguishes several memory systems, each serving different purposes. Persona implements three:
+Human memory isn't a filing cabinet. Cognitive science distinguishes several memory systems, each serving different purposes. Persona implements four:
 
 ### Episodes: What Happened
 
@@ -59,10 +59,39 @@ Note: "Prepare quarterly review presentation"
       Status: active
       Due: 2025-02-01
 
-Note: "Look into meditation apps - Sarah recommended Headspace"
+Note: \"Look into meditation apps - Sarah recommended Headspace\"
       Type: reminder
       Status: active
 ```
+
+### Entities: What Exists
+
+Semantic memory about the world—knowledge about people, places, things, and concepts. When you know \"Sarah's birthday is June 5th\" or \"Project Alpha uses React,\" you're accessing entity knowledge. This isn't about events (episodic) or about yourself (psyche)—it's about referents in your world.
+
+In Persona, **Entity** nodes capture structured knowledge about named things. Each entity has a canonical name, optional aliases, and structured attributes. Facts about entities are stored as attributes on the entity, not as separate Notes.
+
+```
+Entity: "Sarah Smith"
+        Type: person
+        Aliases: ["Sarah", "my girlfriend"]
+        Attributes:
+          - birthday: "June 5"
+          - works_at: "Google"
+          - met_at: "College"
+
+Entity: "Project Alpha"
+        Type: project
+        Attributes:
+          - tech_stack: "React, Node.js"
+          - deadline: "Q2 2025"
+```
+
+**Critical Distinction**: Entity vs Note
+- **Entity** = Things that EXIST (nouns): "Sarah", "Paris", "Project Alpha"
+- **Note** = Things to DO (intentions): "call Sarah", "book trip to Paris"
+- **Facts** = Entity ATTRIBUTES: "Sarah's birthday is June 5" → attribute on the Sarah entity, NOT a Note
+
+Notes are created only when there's an intention signal ("remind me", "I need to", due dates).
 
 ---
 
@@ -80,6 +109,7 @@ Persona uses a **graph structure** because human memory is associative. One memo
 
 | Relation | Meaning | Example |
 |----------|---------|---------|
+| `MENTIONS` | Entity reference | Episode mentions Sarah |
 | `LED_TO` | Causal forward link | Argument with manager → decision to update resume |
 | `CAUSED_BY` | Causal backward link | Burnout caused by three months of crunch |
 | `NEXT` / `PREVIOUS` | Temporal sequence | Monday's meeting → Tuesday's follow-up |
@@ -98,7 +128,7 @@ These relationships enable queries that vector search cannot answer:
 
 When you talk to a Persona-powered assistant, the conversation flows through an ingestion pipeline:
 
-1. **Extraction**: An LLM analyzes the conversation and extracts structured memories—episodes, psyche items, and notes. This isn't keyword extraction; it's semantic understanding of what matters.
+1. **Extraction**: An LLM analyzes the conversation and extracts structured memories—episodes, psyche items, entities, and notes. This isn't keyword extraction; it's semantic understanding of what matters.
 
 2. **Embedding**: Each memory is converted to a vector embedding for similarity search. We use OpenAI's `text-embedding-3-small` by default, but the embedding layer is pluggable.
 
@@ -111,7 +141,7 @@ When you talk to a Persona-powered assistant, the conversation flows through an 
 Each user has an isolated subgraph. Memory nodes contain:
 
 - **Content**: The natural language description
-- **Type**: episode, psyche, or note
+- **Type**: episode, psyche, entity, or note
 - **Temporal anchors**: timestamp, created_at, day_id
 - **Provenance**: source_type, session_id, extraction_model
 - **Retrieval aids**: embedding vector, importance score
@@ -194,7 +224,7 @@ The current design inverts the responsibility:
 
 **recall(query, date_start?, date_end?, memory_types?, limit?)**: Search memories by semantic similarity with optional filters. The LLM provides dates in ISO format, memory types as explicit filters.
 
-**record(text)**: Store new information. The system automatically classifies type (episode/psyche/note) and creates appropriate links.
+**record(text)**: Store new information. The system automatically classifies type (episode/psyche/entity/note) and creates appropriate links.
 
 **expand_neighbors(memory_id, relationship_types?)**: Given a memory, explore its graph connections. Returns neighbors linked by specified relationship types.
 
@@ -261,7 +291,7 @@ The current architecture handles storage, retrieval, and context formatting. Sev
 
 **Contradiction Resolution**: When new information conflicts with existing memories (you changed jobs, moved cities, broke up), the system should update rather than accumulate contradictions.
 
-**Entity Resolution**: "My wife," "Sarah," and "she" might all refer to the same person. An entity layer will resolve coreferences and enable queries like "everything about Sarah."
+**Entity Resolution**: When new information mentions "my wife," "Sarah," or "she," the system resolves these to the same entity. Entities enable queries like "everything about Sarah" and store facts as attributes rather than scattered notes.
 
 **Temporal Reasoning**: Beyond simple date filtering—understanding "before the wedding," "during my time at Google," "last summer."
 
