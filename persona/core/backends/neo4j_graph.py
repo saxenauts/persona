@@ -26,6 +26,7 @@ class Neo4jGraphDatabase(GraphDatabase):
         """Initialize the connection and wait for Neo4j to be ready."""
         await self._connect()
         await self._wait_for_ready()
+        await self._ensure_indexes()
 
     async def _connect(self) -> None:
         self.driver = AsyncGraphDatabase.driver(
@@ -55,6 +56,21 @@ class Neo4jGraphDatabase(GraphDatabase):
                     logger.error(f"Failed to connect to Neo4j after {timeout} seconds.")
                     raise e
                 await asyncio.sleep(2)
+
+    async def _ensure_indexes(self) -> None:
+        """Create indexes for efficient lookups."""
+        indexes = [
+            "CREATE INDEX entity_canonical_name IF NOT EXISTS FOR (n:entity) ON (n.canonical_name)",
+            "CREATE INDEX entity_type IF NOT EXISTS FOR (n:entity) ON (n.entity_type)",
+            "CREATE INDEX node_type IF NOT EXISTS FOR (n:NodeName) ON (n.type)",
+            "CREATE INDEX node_timestamp IF NOT EXISTS FOR (n:NodeName) ON (n.timestamp)",
+        ]
+        async with self.driver.session() as session:
+            for idx_query in indexes:
+                try:
+                    await session.run(idx_query)
+                except Exception as e:
+                    logger.debug(f"Index creation skipped (may exist): {e}")
 
     async def close(self) -> None:
         if self.driver:
