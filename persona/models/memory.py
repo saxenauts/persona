@@ -353,3 +353,113 @@ class IngestionOutput(BaseModel):
     psyche: List[PsycheOutput] = Field(default_factory=list)
     notes: List[NoteOutput] = Field(default_factory=list)
     entities: List[EntityOutput] = Field(default_factory=list)
+
+
+# ============================================================================
+# Memeplex: Per-User Memory Index
+# ============================================================================
+
+
+class ActiveMemory(BaseModel):
+    """A currently active memory (note, entity, or topic cluster).
+
+    Represents what's "in focus" for this user right now.
+    """
+
+    memory_id: UUID
+    memory_type: str = Field(..., description="note, entity, or topic")
+    title: str
+    keywords: List[str] = Field(default_factory=list)
+    last_touched: datetime = Field(default_factory=datetime.utcnow)
+    context_snippet: str = Field(
+        default="", description="1 sentence of why it's active"
+    )
+
+
+class MemoryStats(BaseModel):
+    """Aggregate stats about user's memory for overview."""
+
+    total_memories: int = 0
+    total_episodes: int = 0
+    total_psyche: int = 0
+    total_notes: int = 0
+    total_entities: int = 0
+    active_notes: int = 0
+    earliest_memory: Optional[datetime] = None
+    latest_memory: Optional[datetime] = None
+    session_count: int = 0
+
+
+class Memeplex(BaseModel):
+    """Per-user memory index. Stored as single JSON node in Neo4j.
+
+    The Memeplex is the "table of contents" for a user's memory:
+    - What's currently active (2-5 items typically)
+    - Recent context for continuity
+    - Keywords so LLM knows what's queryable
+    - Overview stats
+
+    Lives in system prompt for immediate LLM access.
+    Updated after ingestion during consolidation.
+    """
+
+    user_id: str
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # What's active right now (2-5 items typically)
+    active_memories: List[ActiveMemory] = Field(default_factory=list)
+
+    # Recent context for continuity
+    last_session_summary: str = Field(
+        default="", description="2-3 sentences summarizing recent sessions"
+    )
+    recent_keywords: List[str] = Field(
+        default_factory=list, description="Top 10-15 terms from recent sessions"
+    )
+
+    # What exists (for LLM to know what's queryable)
+    memory_stats: MemoryStats = Field(default_factory=MemoryStats)
+
+    # Chronological anchor
+    timeline_summary: str = Field(
+        default="",
+        description="e.g. 'Active since Nov 2024, 47 sessions, 312 memories'",
+    )
+
+    def to_system_prompt(self) -> str:
+        """Render Memeplex as system prompt section for LLM consumption."""
+        lines = ["<memeplex>"]
+
+        # Active memories
+        if self.active_memories:
+            lines.append("ACTIVE NOW:")
+            for am in self.active_memories:
+                kw = ", ".join(am.keywords[:5]) if am.keywords else "no keywords"
+                lines.append(f"• {am.title} ({am.memory_type}) - {am.context_snippet}")
+                lines.append(f"  keywords: {kw}")
+        else:
+            lines.append("ACTIVE NOW: None")
+
+        # Recent context
+        if self.last_session_summary:
+            lines.append("")
+            lines.append(f"RECENT: {self.last_session_summary}")
+
+        # Overview
+        lines.append("")
+        stats = self.memory_stats
+        lines.append(
+            f"MEMORY OVERVIEW: {stats.total_memories} memories | "
+            f"{stats.total_entities} entities | {stats.active_notes} active notes"
+        )
+
+        if self.timeline_summary:
+            lines.append(self.timeline_summary)
+
+        lines.append("")
+        lines.append(
+            "Use recall() to search memories. Use record() to save new information."
+        )
+        lines.append("</memeplex>")
+
+        return "\n".join(lines)

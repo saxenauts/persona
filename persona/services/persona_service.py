@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import UserCard
+from persona.models.memory import UserCard, Memeplex
 from persona.services.user_service import UserCardService
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
@@ -21,8 +21,11 @@ AGENT_SYSTEM_PROMPT = """You are a helpful assistant with access to the user's p
 ## Memory Graph Schema
 - **Episode**: Events, conversations, experiences (what happened)
 - **Psyche**: Traits, preferences, values, personality (who they are)
+- **Entity**: People, places, things, concepts (what/who exists)
 - **Note**: Goals, tasks, reminders (what they want to do)
-- **Relationships**: LED_TO, CAUSED_BY, NEXT, PREVIOUS, RELATES_TO
+- **Relationships**: LED_TO, CAUSED_BY, NEXT, PREVIOUS, MENTIONS, RELATES_TO
+
+{memeplex_context}
 
 ## Available Tools
 
@@ -40,7 +43,7 @@ Optional: filter by relationship types like ["LED_TO", "CAUSED_BY"].
 Use to follow causal chains (LED_TO), temporal sequences (NEXT/PREVIOUS), or thematic connections.
 
 ## Strategy
-1. If you have enough context from conversation, answer directly
+1. Check the ACTIVE NOW section - answer directly if relevant context is already visible
 2. For questions about the user, use recall with relevant time/topic cues
 3. For deep exploration, use expand_neighbors or follow_relationship on interesting results
 4. When user shares important facts/preferences/experiences, use record
@@ -81,8 +84,14 @@ class PersonaService:
         start_time = time.time()
 
         user_card = await self._get_user_card(user_id, user_timezone)
+        memeplex = await self._get_memeplex(user_id)
 
-        # Create per-request ToolContext (not cached - context is stateless)
+        memeplex_context = ""
+        if memeplex:
+            memeplex_context = memeplex.to_system_prompt()
+
+        system_prompt = AGENT_SYSTEM_PROMPT.format(memeplex_context=memeplex_context)
+
         ctx = ToolContext(
             user_id=user_id,
             graph_ops=self.graph_ops,
@@ -96,7 +105,7 @@ class PersonaService:
         runner = AgentRunner(llm=llm, tools=MEMORY_TOOLS, registry=REGISTRY)
 
         messages = [
-            ChatMessage(role="system", content=AGENT_SYSTEM_PROMPT),
+            ChatMessage(role="system", content=system_prompt),
             ChatMessage(role="user", content=query),
         ]
 
@@ -151,6 +160,18 @@ class PersonaService:
             return user_card
         except Exception as e:
             logger.warning(f"UserCard generation failed: {e}")
+            return None
+
+    async def _get_memeplex(self, user_id: str) -> Optional[Memeplex]:
+        try:
+            memeplex = await self.memory_store.get_memeplex(user_id)
+            if memeplex:
+                logger.debug(
+                    f"Loaded Memeplex for {user_id}: {len(memeplex.active_memories)} active items"
+                )
+            return memeplex
+        except Exception as e:
+            logger.warning(f"Memeplex load failed: {e}")
             return None
 
     async def ask(

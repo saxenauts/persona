@@ -16,6 +16,9 @@ from persona.models.memory import (
     MemoryQueryResponse,
     EntityMemory,
     EntityAttribute,
+    Memeplex,
+    ActiveMemory,
+    MemoryStats,
 )
 from server.logging_config import get_logger
 
@@ -626,3 +629,144 @@ class MemoryStore:
 
         entities.sort(key=lambda e: e.timestamp, reverse=True)
         return entities[:limit]  # type: ignore
+
+    # ========== Memeplex Methods ==========
+
+    async def get_memeplex(self, user_id: str) -> Optional[Memeplex]:
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+
+        for node in all_nodes:
+            if node.get("type") == "memeplex":
+                return self._node_to_memeplex(node, user_id)
+
+        return None
+
+    async def save_memeplex(self, memeplex: Memeplex) -> Memeplex:
+        import json
+
+        memeplex.updated_at = datetime.utcnow()
+
+        node_data = {
+            "name": f"memeplex_{memeplex.user_id}",
+            "type": "memeplex",
+            "user_id": memeplex.user_id,
+            "updated_at": memeplex.updated_at.isoformat(),
+            "active_memories": json.dumps(
+                [am.model_dump(mode="json") for am in memeplex.active_memories]
+            ),
+            "last_session_summary": memeplex.last_session_summary,
+            "recent_keywords": json.dumps(memeplex.recent_keywords),
+            "memory_stats": json.dumps(memeplex.memory_stats.model_dump()),
+            "timeline_summary": memeplex.timeline_summary,
+        }
+
+        await self.graph_db.create_nodes([node_data], memeplex.user_id)
+        logger.info(f"Saved memeplex for user {memeplex.user_id}")
+        return memeplex
+
+    async def get_or_create_memeplex(self, user_id: str) -> Memeplex:
+        existing = await self.get_memeplex(user_id)
+        if existing:
+            return existing
+
+        memeplex = Memeplex(user_id=user_id)
+        return await self.save_memeplex(memeplex)
+
+    async def compute_memory_stats(self, user_id: str) -> MemoryStats:
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+
+        stats = MemoryStats()
+        timestamps: List[datetime] = []
+        session_ids: set = set()
+
+        for node in all_nodes:
+            node_type = node.get("type")
+            if node_type == "memeplex":
+                continue
+
+            stats.total_memories += 1
+
+            if node_type == "episode":
+                stats.total_episodes += 1
+            elif node_type == "psyche":
+                stats.total_psyche += 1
+            elif node_type == "note":
+                stats.total_notes += 1
+                if node.get("status") == "active":
+                    stats.active_notes += 1
+            elif node_type == "entity":
+                stats.total_entities += 1
+
+            ts_str = node.get("timestamp")
+            if ts_str:
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    timestamps.append(ts)
+                except (ValueError, TypeError):
+                    pass
+
+            session_id = node.get("session_id")
+            if session_id:
+                session_ids.add(session_id)
+
+        if timestamps:
+            stats.earliest_memory = min(timestamps)
+            stats.latest_memory = max(timestamps)
+
+        stats.session_count = len(session_ids)
+        return stats
+
+    def _node_to_memeplex(self, node: Dict[str, Any], user_id: str) -> Memeplex:
+        import json
+
+        props = node.get("properties", {})
+        if not props and "type" in node:
+            props = node
+
+        active_memories_raw = props.get("active_memories", "[]")
+        if isinstance(active_memories_raw, str):
+            try:
+                active_memories_data = json.loads(active_memories_raw)
+            except json.JSONDecodeError:
+                active_memories_data = []
+        else:
+            active_memories_data = active_memories_raw
+
+        recent_keywords_raw = props.get("recent_keywords", "[]")
+        if isinstance(recent_keywords_raw, str):
+            try:
+                recent_keywords = json.loads(recent_keywords_raw)
+            except json.JSONDecodeError:
+                recent_keywords = []
+        else:
+            recent_keywords = recent_keywords_raw
+
+        memory_stats_raw = props.get("memory_stats", "{}")
+        if isinstance(memory_stats_raw, str):
+            try:
+                memory_stats_data = json.loads(memory_stats_raw)
+            except json.JSONDecodeError:
+                memory_stats_data = {}
+        else:
+            memory_stats_data = memory_stats_raw
+
+        updated_at_str = props.get("updated_at")
+        if updated_at_str:
+            try:
+                updated_at = datetime.fromisoformat(
+                    updated_at_str.replace("Z", "+00:00")
+                )
+            except (ValueError, TypeError):
+                updated_at = datetime.utcnow()
+        else:
+            updated_at = datetime.utcnow()
+
+        return Memeplex(
+            user_id=user_id,
+            updated_at=updated_at,
+            active_memories=[ActiveMemory(**am) for am in active_memories_data],
+            last_session_summary=props.get("last_session_summary", ""),
+            recent_keywords=recent_keywords,
+            memory_stats=MemoryStats(**memory_stats_data),
+            timeline_summary=props.get("timeline_summary", ""),
+        )
