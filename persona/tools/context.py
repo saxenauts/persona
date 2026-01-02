@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from persona.core.graph_ops import GraphOps
     from persona.core.memory_store import MemoryStore
     from persona.models.memory import UserCard
+    from persona.adapters.persona_adapter import PersonaAdapter
 
 
 @dataclass
@@ -24,6 +25,7 @@ class ToolContext:
     user_id: str
     graph_ops: "GraphOps"
     store: "MemoryStore"
+    adapter: "PersonaAdapter"  # For ingestion (record tool)
     session_id: Optional[str] = None
     user_timezone: str = "UTC"
     user_card: Optional["UserCard"] = None

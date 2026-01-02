@@ -10,7 +10,6 @@ from datetime import datetime, date
 from uuid import UUID
 
 from persona.tools.context import ToolContext
-from persona.services.ingestion_service import MemoryIngestionService
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -127,20 +126,18 @@ async def record_handler(
     ctx: ToolContext,
     text: str,
 ) -> RecordResult:
-    """Store new information to memory."""
-    ingestion_service = MemoryIngestionService()
+    """Store new information to memory via full ingestion pipeline."""
     stored = []
 
     if not text.strip():
         return RecordResult()
 
     try:
-        result = await ingestion_service.ingest(
-            raw_content=text,
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
+        result = await ctx.adapter.ingest(
+            content=text,
             source_type="tool",
-            source_ref="record",
+            session_id=ctx.session_id,
+            persist=True,
         )
 
         if result.success:

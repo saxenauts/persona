@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
+from persona.adapters.persona_adapter import PersonaAdapter
 from persona.models.memory import UserCard, Memeplex
 from persona.services.user_service import UserCardService
 from persona.llm.client_factory import get_chat_client
@@ -92,10 +93,13 @@ class PersonaService:
 
         system_prompt = AGENT_SYSTEM_PROMPT.format(memeplex_context=memeplex_context)
 
+        adapter = PersonaAdapter(user_id=user_id, graph_ops=self.graph_ops)
+
         ctx = ToolContext(
             user_id=user_id,
             graph_ops=self.graph_ops,
             store=self.memory_store,
+            adapter=adapter,
             session_id=session_id,
             user_timezone=user_timezone,
             user_card=user_card,

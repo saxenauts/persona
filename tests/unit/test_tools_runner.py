@@ -13,10 +13,12 @@ def make_mock_ctx() -> ToolContext:
     """Create a mock ToolContext for testing."""
     mock_graph_ops = MagicMock()
     mock_store = MagicMock()
+    mock_adapter = MagicMock()
     return ToolContext(
         user_id="test_user",
         graph_ops=mock_graph_ops,
         store=mock_store,
+        adapter=mock_adapter,
         user_timezone="UTC",
     )
 

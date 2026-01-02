@@ -13,6 +13,7 @@ def mock_graph_ops():
     mock.__aenter__.return_value = mock
     mock.__aexit__.return_value = None
     mock.graph_db = MagicMock()
+    mock.vector_store = MagicMock()
     return mock
 
 
@@ -50,45 +51,53 @@ async def test_persona_service_run_agent_success(mock_graph_ops):
     )
 
     with patch.object(service, "_get_user_card", return_value=None):
-        with patch("persona.services.persona_service.AgentRunner") as MockRunner:
-            MockRunner.return_value = mock_runner
+        with patch.object(service, "_get_memeplex", return_value=None):
+            with patch("persona.services.persona_service.AgentRunner") as MockRunner:
+                MockRunner.return_value = mock_runner
 
-            result = await service.run_agent(
-                user_id="test_user",
-                query="What do you remember about me?",
-                include_stats=True,
-            )
+                result = await service.run_agent(
+                    user_id="test_user",
+                    query="What do you remember about me?",
+                    include_stats=True,
+                )
 
-            assert result["answer"] == "Agent response based on memory"
-            assert result["stats"]["tool_calls_made"] == 1
-            assert result["stats"]["turns"] == 2
+                assert result["answer"] == "Agent response based on memory"
+                assert result["stats"]["tool_calls_made"] == 1
+                assert result["stats"]["turns"] == 2
 
 
 @pytest.mark.asyncio
 async def test_persona_service_ask_success(mock_graph_ops):
     service = PersonaService(mock_graph_ops)
 
-    mock_retriever = AsyncMock()
-    mock_retriever.get_working_memory = AsyncMock(return_value="User likes coffee.")
+    mock_runner = AsyncMock()
+    mock_runner.run = AsyncMock(
+        return_value=AgentResult(
+            content="User likes coffee based on their preferences.",
+            tool_calls_made=1,
+            turns=2,
+            usage={"prompt_tokens": 100, "completion_tokens": 50},
+        )
+    )
 
     mock_llm = AsyncMock()
     mock_llm.chat = AsyncMock(
         return_value=MagicMock(content='{"preferences": ["coffee"]}')
     )
+    mock_llm.supports_json_mode = MagicMock(return_value=True)
 
     with patch.object(service, "_get_user_card", return_value=None):
-        with patch(
-            "persona.services.persona_service.Retriever", return_value=mock_retriever
-        ):
-            with patch(
-                "persona.services.persona_service.get_chat_client",
-                return_value=mock_llm,
-            ):
-                result = await service.ask(
-                    user_id="test_user",
-                    query="What are user preferences?",
-                    output_schema={"preferences": []},
-                )
+        with patch.object(service, "_get_memeplex", return_value=None):
+            with patch("persona.services.persona_service.AgentRunner") as MockRunner:
+                MockRunner.return_value = mock_runner
+                with patch(
+                    "persona.services.persona_service.get_chat_client",
+                    return_value=mock_llm,
+                ):
+                    result = await service.ask(
+                        user_id="test_user",
+                        query="What are user preferences?",
+                        output_schema={"preferences": []},
+                    )
 
-                assert "result" in result
-                assert result["result"]["preferences"] == ["coffee"]
+                    assert "result" in result

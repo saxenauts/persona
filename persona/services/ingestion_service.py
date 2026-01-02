@@ -78,7 +78,7 @@ Create Notes ONLY when you see intention signals:
 **Notes:** ONLY for commitments/intentions. Types: task, goal, reminder, idea, list, project.
 - Include entity_refs: names of entities the note relates to
 
-## Output Format
+## Output Format (JSON)
 {
   "episode": {"title": "...", "content": "..."},
   "psyche": [{"type": "...", "content": "..."}],
@@ -86,7 +86,7 @@ Create Notes ONLY when you see intention signals:
   "notes": [{"type": "...", "title": "...", "content": "...", "status": "active", "entity_refs": [...]}]
 }
 
-Empty arrays if none found for psyche/entities/notes."""
+Respond with valid JSON only. Empty arrays if none found for psyche/entities/notes."""
 
 
 INGESTION_USER_TEMPLATE = """Process this input and extract memories:
