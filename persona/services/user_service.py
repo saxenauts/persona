@@ -107,7 +107,7 @@ class UserCardService:
             lines.append(f"[{ntype}] {n.title}: {n.content}"[:150])
 
         for e in episodes[:5]:
-            ts = e.timestamp.strftime("%Y-%m-%d") if e.timestamp else ""
+            ts = e.event_time.strftime("%Y-%m-%d") if e.event_time else ""
             lines.append(f"[{ts}] {e.content}"[:150])
 
         return "\n".join(lines)

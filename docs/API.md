@@ -75,33 +75,36 @@ Response: 201 Created
 }
 ```
 
-## Query Operations
+## Chat (Primary Interface)
 
-### Persona Query (Agent Loop)
-Agentic query with tool-calling loop. The agent autonomously decides when to search memories, read context, or write new information.
+Personal AI conversation with agentic tool-calling loop. The agent autonomously decides when to search memories, explore graph connections, or save new information.
 
 ```http
-POST /users/{user_id}/persona/query
+POST /users/{user_id}/chat
 Content-Type: application/json
 
 {
-    "query": "What do you remember about my fitness goals?",
-    "include_stats": true,
+    "messages": [
+        {"role": "user", "content": "What do you remember about my fitness goals?"}
+    ],
     "user_timezone": "America/Los_Angeles",
+    "session_id": "optional-session-id",
     "max_turns": 10,
-    "timeout": 30.0
+    "timeout": 60.0,
+    "include_stats": false
 }
 
 Response: 200 OK
 {
-    "answer": "Based on your memories, you set a goal to...",
-    "status": "success",
+    "response": "Based on your memories, you set a goal to...",
+    "status": "completed",
+    "session_id": "generated-or-provided",
     "stats": {
         "tool_calls_made": 3,
         "turns": 2,
-        "usage": {"prompt_tokens": 500, "completion_tokens": 200},
-        "total_ms": 1234.5
-    }
+        "usage": {"prompt_tokens": 500, "completion_tokens": 200}
+    },
+    "state": null
 }
 ```
 
@@ -109,21 +112,22 @@ Response: 200 OK
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| query | string | required | The user's question |
-| include_stats | bool | false | Include execution statistics |
+| messages | array | required | Conversation history with role/content pairs |
 | user_timezone | string | "UTC" | Timezone for temporal queries |
-| session_id | string | null | Session ID for conversation continuity |
-| max_turns | int | null | Max tool-calling turns (null = unlimited) |
-| timeout | float | null | Max seconds before returning (null = unlimited) |
+| session_id | string | auto | Session ID for conversation continuity |
+| max_turns | int | 10 | Max tool-calling turns |
+| timeout | float | 60.0 | Max seconds before returning |
+| include_stats | bool | false | Include execution statistics |
 
 **Status values:**
-- `success` - Agent finished naturally
-- `max_turns` - Hit turn limit
+- `completed` - Agent finished naturally
+- `max_turns_reached` - Hit turn limit (state available for resumption)
 - `timeout` - Hit time limit
 - `error` - LLM call failed
 
-### Persona Ask (Structured Output)
-Direct retrieval + structured JSON extraction. No agent loop, no tools.
+## Ask (Structured Output)
+
+Direct retrieval + structured JSON extraction via agent loop.
 
 ```http
 POST /users/{user_id}/persona/ask
@@ -157,7 +161,7 @@ Response: 200 OK
 
 | Code | Description |
 |------|-------------|
-| 400 | Bad Request - Invalid input |
+| 400 | Bad Request - Invalid input (empty messages, no user message) |
 | 404 | User not found |
 | 500 | Internal server error |
 | 502 | External service (LLM) error |

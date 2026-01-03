@@ -27,8 +27,8 @@ class BaseMemory(BaseModel):
     content: str = Field(..., description="The memory content in natural language")
 
     # Temporal anchoring
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    event_time: datetime = Field(default_factory=datetime.utcnow)
+    observed_at: datetime = Field(default_factory=datetime.utcnow)
     day_id: Optional[str] = Field(default=None)
 
     # Provenance
@@ -349,6 +349,10 @@ class EntityOutput(BaseModel):
 class IngestionOutput(BaseModel):
     """Complete ingestion output from LLM."""
 
+    event_time: Optional[str] = Field(
+        default=None,
+        description="ISO 8601 timestamp of when the event actually happened",
+    )
     episode: EpisodeOutput
     psyche: List[PsycheOutput] = Field(default_factory=list)
     notes: List[NoteOutput] = Field(default_factory=list)

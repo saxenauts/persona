@@ -12,7 +12,7 @@ Uses LLM structured output for extraction, then generates embeddings.
 import asyncio
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
 from uuid import uuid4
 from pydantic import BaseModel, Field
@@ -64,6 +64,19 @@ Create Notes ONLY when you see intention signals:
 - Due dates or deadlines
 - Imperatives or action items
 
+## Temporal Extraction (CRITICAL)
+
+You MUST extract `event_time` - when the event ACTUALLY happened, not when it was recorded.
+- Use the provided current time and timezone as reference
+- Resolve relative references: "yesterday" → actual date, "last week" → actual date range
+- If ambiguous, use the current timestamp as event_time
+- Format: ISO 8601 (YYYY-MM-DDTHH:MM:SS)
+
+Examples:
+- "I had coffee with Sarah yesterday" (current: 2026-01-02) → event_time: "2026-01-01T12:00:00"
+- "Back in 2020, I quit my job" → event_time: "2020-06-01T00:00:00" (approximate)
+- "Just talked to mom" → event_time: same as current timestamp
+
 ## Guidelines
 
 **Episodes:** Write as narrative prose, preserve emotional context. Title 2-10 words.
@@ -80,6 +93,7 @@ Create Notes ONLY when you see intention signals:
 
 ## Output Format (JSON)
 {
+  "event_time": "YYYY-MM-DDTHH:MM:SS",
   "episode": {"title": "...", "content": "..."},
   "psyche": [{"type": "...", "content": "..."}],
   "entities": [{"entity_type": "...", "canonical_name": "...", "aliases": [], "description": "...", "attributes": [{"key": "...", "value": "..."}]}],
@@ -91,7 +105,8 @@ Respond with valid JSON only. Empty arrays if none found for psyche/entities/not
 
 INGESTION_USER_TEMPLATE = """Process this input and extract memories:
 
-**Timestamp:** {timestamp}
+**Current Time:** {timestamp}
+**Timezone:** {timezone}
 **Source:** {source_type}
 
 **Input:**
@@ -137,6 +152,7 @@ class MemoryIngestionService:
         raw_content: str,
         user_id: str,
         timestamp: Optional[datetime] = None,
+        timezone: str = "UTC",
         session_id: Optional[str] = None,
         source_type: str = "conversation",
         source_ref: Optional[str] = None,
@@ -144,24 +160,35 @@ class MemoryIngestionService:
         """
         Ingest raw content and extract memories.
 
-        Returns IngestionResult with list of Memory objects (episode, psyche, goals).
+        Args:
+            raw_content: The raw text to process
+            user_id: User ID for this memory
+            timestamp: Current time (for context). Defaults to now.
+            timezone: User's timezone (e.g., "America/Los_Angeles"). Used for temporal extraction.
+            session_id: Optional session identifier
+            source_type: Type of source content
+            source_ref: Reference to source
+
+        Returns IngestionResult with list of Memory objects (episode, psyche, notes, entities).
         """
-        timestamp = timestamp or datetime.utcnow()
-        day_id = timestamp.strftime("%Y-%m-%d")
+        observed_at = datetime.utcnow()
+        timestamp = timestamp or observed_at
 
         try:
-            # Extract via LLM
             start_extract = time.time()
-            extraction = await self._extract(raw_content, timestamp, source_type)
+            extraction = await self._extract(
+                raw_content, timestamp, timezone, source_type
+            )
             extract_time_ms = (time.time() - start_extract) * 1000
 
-            # Get extraction model for provenance
+            event_time = self._parse_event_time(extraction.event_time, timestamp)
+            day_id = event_time.strftime("%Y-%m-%d")
+
             extraction_model = config.MACHINE_LEARNING.LLM_SERVICE or "unknown"
 
             memories: List[Memory] = []
             links: List[MemoryLink] = []
 
-            # Create episode memory
             episode_id = uuid4()
             from persona.models.memory import EpisodeMemory, PsycheMemory, NoteMemory
 
@@ -169,8 +196,8 @@ class MemoryIngestionService:
                 id=episode_id,
                 title=extraction.episode.title,
                 content=extraction.episode.content,
-                timestamp=timestamp,
-                created_at=datetime.utcnow(),
+                event_time=event_time,
+                observed_at=observed_at,
                 day_id=day_id,
                 session_id=session_id,
                 source_type=source_type,
@@ -187,8 +214,8 @@ class MemoryIngestionService:
                     psyche_type=p.type,
                     title=p.type,
                     content=p.content,
-                    timestamp=timestamp,
-                    created_at=datetime.utcnow(),
+                    event_time=event_time,
+                    observed_at=observed_at,
                     day_id=day_id,
                     session_id=session_id,
                     source_type=source_type,
@@ -196,7 +223,6 @@ class MemoryIngestionService:
                     user_id=user_id,
                 )
                 memories.append(psyche)
-                # Link psyche to source episode
                 links.append(
                     MemoryLink(
                         source_id=psyche.id,
@@ -205,7 +231,6 @@ class MemoryIngestionService:
                     )
                 )
 
-            # Create note memories
             for n in extraction.notes:
                 note = NoteMemory(
                     id=uuid4(),
@@ -213,8 +238,8 @@ class MemoryIngestionService:
                     title=n.title,
                     content=n.content,
                     status=n.status,
-                    timestamp=timestamp,
-                    created_at=datetime.utcnow(),
+                    event_time=event_time,
+                    observed_at=observed_at,
                     day_id=day_id,
                     session_id=session_id,
                     source_type=source_type,
@@ -228,7 +253,6 @@ class MemoryIngestionService:
                     )
                 )
 
-            # Create entity memories
             from persona.models.memory import EntityMemory, EntityAttribute
 
             for e in extraction.entities:
@@ -249,8 +273,8 @@ class MemoryIngestionService:
                         for attr in e.attributes
                     ],
                     mentioned_in=[episode_id],
-                    timestamp=timestamp,
-                    created_at=datetime.utcnow(),
+                    event_time=event_time,
+                    observed_at=observed_at,
                     day_id=day_id,
                     session_id=session_id,
                     source_type=source_type,
@@ -288,12 +312,13 @@ class MemoryIngestionService:
             return IngestionResult(success=False, error=str(e))
 
     async def _extract(
-        self, raw_content: str, timestamp: datetime, source_type: str
+        self, raw_content: str, timestamp: datetime, timezone: str, source_type: str
     ) -> IngestionOutput:
         """Extract memories via LLM with timeout and retry logic."""
 
         user_prompt = INGESTION_USER_TEMPLATE.format(
-            timestamp=timestamp.strftime("%Y/%m/%d (%a) %H:%M"),
+            timestamp=timestamp.strftime("%Y-%m-%dT%H:%M:%S"),
+            timezone=timezone,
             source_type=source_type,
             raw_content=raw_content,
         )
@@ -361,32 +386,48 @@ class MemoryIngestionService:
             )
         )
 
-        prompt_tokens_est = len(INGESTION_SYSTEM_PROMPT) // 4 + len(user_prompt) // 4
-        logger.debug(
-            f"LLM extraction: ~{prompt_tokens_est} tokens input, {len(raw_content)} chars content"
-        )
+    def _parse_event_time(
+        self, event_time_str: Optional[str], fallback: datetime
+    ) -> datetime:
+        """Parse LLM-extracted event_time with validation guardrails.
 
-        response = await self.chat_client.chat(
-            messages=[
-                ChatMessage(role="system", content=INGESTION_SYSTEM_PROMPT),
-                ChatMessage(role="user", content=user_prompt),
-            ],
-            response_format={"type": "json_object"},
-        )
+        Validates:
+        - Rejects future dates (more than 1 day ahead) - LLM hallucination
+        - Clips extreme past dates (older than 100 years) - unreasonable
+        - Falls back to provided timestamp on any parse failure
+        """
+        if not event_time_str:
+            return fallback
 
         try:
-            data = json.loads(response.content)
-            return IngestionOutput(**data)
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Failed to parse LLM response: {e}")
-            return IngestionOutput(
-                episode=EpisodeOutput(
-                    title=raw_content[:50] + "..."
-                    if len(raw_content) > 50
-                    else raw_content,
-                    content=raw_content,
+            parsed = datetime.fromisoformat(event_time_str.replace("Z", "+00:00"))
+
+            # Make naive datetime timezone-aware for comparison
+            now = datetime.now(parsed.tzinfo) if parsed.tzinfo else datetime.utcnow()
+
+            # Reject future dates (more than 1 day ahead - accounts for timezone drift)
+            max_future = now + timedelta(days=1)
+            if parsed > max_future:
+                logger.warning(
+                    f"Rejected future event_time '{event_time_str}' (>{max_future.isoformat()}), using fallback"
                 )
+                return fallback
+
+            # Clip extreme past dates (older than 100 years)
+            min_past = now - timedelta(days=365 * 100)
+            if parsed < min_past:
+                logger.warning(
+                    f"Rejected ancient event_time '{event_time_str}' (<{min_past.year}), using fallback"
+                )
+                return fallback
+
+            return parsed
+
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                f"Failed to parse event_time '{event_time_str}': {e}, using fallback"
             )
+            return fallback
 
     async def _add_embeddings(self, memories: List[Memory]) -> List[Memory]:
         """Generate embeddings for all memories."""
@@ -412,6 +453,7 @@ async def ingest_memory(
     raw_content: str,
     user_id: str,
     timestamp: Optional[datetime] = None,
+    timezone: str = "UTC",
     session_id: Optional[str] = None,
     source_type: str = "conversation",
     source_ref: Optional[str] = None,
@@ -422,6 +464,7 @@ async def ingest_memory(
         raw_content=raw_content,
         user_id=user_id,
         timestamp=timestamp,
+        timezone=timezone,
         session_id=session_id,
         source_type=source_type,
         source_ref=source_ref,

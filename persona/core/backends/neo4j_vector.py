@@ -152,8 +152,8 @@ class Neo4jVectorStore(VectorStore):
         if filters:
             if "date_range" in filters:
                 start, end = filters["date_range"]
-                where_clauses.append("node.created_at >= $start_date")
-                where_clauses.append("node.created_at <= $end_date")
+                where_clauses.append("node.event_time >= $start_date")
+                where_clauses.append("node.event_time <= $end_date")
                 params["start_date"] = (
                     start.isoformat() if hasattr(start, "isoformat") else start
                 )

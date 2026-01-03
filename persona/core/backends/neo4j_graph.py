@@ -63,7 +63,7 @@ class Neo4jGraphDatabase(GraphDatabase):
             "CREATE INDEX entity_canonical_name IF NOT EXISTS FOR (n:entity) ON (n.canonical_name)",
             "CREATE INDEX entity_type IF NOT EXISTS FOR (n:entity) ON (n.entity_type)",
             "CREATE INDEX node_type IF NOT EXISTS FOR (n:NodeName) ON (n.type)",
-            "CREATE INDEX node_timestamp IF NOT EXISTS FOR (n:NodeName) ON (n.timestamp)",
+            "CREATE INDEX node_event_time IF NOT EXISTS FOR (n:NodeName) ON (n.event_time)",
         ]
         async with self.driver.session() as session:
             for idx_query in indexes:

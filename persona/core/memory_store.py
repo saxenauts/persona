@@ -6,7 +6,7 @@ Handles temporal linking, retrieval, and graph operations.
 """
 
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from uuid import UUID
 
 from persona.core.interfaces import GraphDatabase, VectorStore
@@ -42,7 +42,7 @@ class MemoryStore:
     def _memory_to_node_data(self, memory: Memory) -> Dict[str, Any]:
         # Set day_id if not provided
         if not memory.day_id:
-            memory.day_id = memory.timestamp.strftime("%Y-%m-%d")
+            memory.day_id = memory.event_time.strftime("%Y-%m-%d")
 
         node_data = memory.model_dump(exclude={"properties"})
         node_data["name"] = str(memory.id)
@@ -56,7 +56,7 @@ class MemoryStore:
         if hasattr(memory, "properties") and memory.properties:
             node_data.update(memory.properties)
 
-        for field in ["timestamp", "created_at", "due_date", "last_accessed"]:
+        for field in ["event_time", "observed_at", "due_date", "last_accessed"]:
             if field in node_data and isinstance(node_data[field], datetime):
                 node_data[field] = node_data[field].isoformat()
 
@@ -178,7 +178,7 @@ class MemoryStore:
         ]
 
         # Sort by timestamp descending (most recent first)
-        memories.sort(key=lambda m: m.timestamp, reverse=True)
+        memories.sort(key=lambda m: m.event_time, reverse=True)
         return memories[:limit]
 
     async def get_by_day(self, day_id: str, user_id: str) -> List[Memory]:
@@ -191,7 +191,7 @@ class MemoryStore:
             if props.get("day_id") == day_id:
                 memories.append(self._node_to_memory(node, user_id))
 
-        memories.sort(key=lambda m: m.timestamp)
+        memories.sort(key=lambda m: m.event_time)
         return memories
 
     async def get_recent(
@@ -206,7 +206,7 @@ class MemoryStore:
                 continue
             memories.append(self._node_to_memory(node, user_id))
 
-        memories.sort(key=lambda m: m.timestamp, reverse=True)
+        memories.sort(key=lambda m: m.event_time, reverse=True)
         return memories[:limit]
 
     async def get_most_recent_episode(self, user_id: str) -> Optional[Memory]:
@@ -582,81 +582,6 @@ class MemoryStore:
         logger.info(f"Upserted attribute '{key}' on entity {entity_id}")
         return await self.get(entity_id, user_id)  # type: ignore
 
-    async def upsert_entity(
-        self, entity: EntityMemory, episode_id: Optional[UUID] = None
-    ) -> Tuple[EntityMemory, bool]:
-        """
-        Create or update an entity (deduplication).
-
-        If an entity with the same canonical_name or alias exists:
-        - Merge new attributes (keep existing if conflict)
-        - Add episode_id to mentioned_in
-        - Update aliases (union)
-
-        Returns:
-            Tuple of (entity, is_new) where is_new=True if created, False if merged.
-        """
-        import json
-
-        existing = await self.get_entity_by_name(
-            entity.canonical_name, entity.user_id, include_aliases=True
-        )
-
-        if existing:
-            # Merge into existing entity
-            logger.debug(
-                f"Entity '{entity.canonical_name}' exists as {existing.id}, merging"
-            )
-
-            # Merge aliases (union)
-            merged_aliases = list(set(existing.aliases) | set(entity.aliases))
-
-            # Merge attributes (existing wins on key conflict)
-            existing_keys = {attr.key for attr in existing.attributes}
-            for new_attr in entity.attributes:
-                if new_attr.key not in existing_keys:
-                    existing.attributes.append(new_attr)
-
-            # Add to mentioned_in
-            if episode_id and episode_id not in existing.mentioned_in:
-                existing.mentioned_in.append(episode_id)
-
-            # Persist merged entity
-            await self.graph_db.create_nodes(
-                [
-                    {
-                        "name": str(existing.id),
-                        "type": "entity",
-                        "aliases": json.dumps(merged_aliases),
-                        "attributes": json.dumps(
-                            [
-                                attr.model_dump(mode="json")
-                                for attr in existing.attributes
-                            ]
-                        ),
-                        "mentioned_in": json.dumps(
-                            [str(mid) for mid in existing.mentioned_in]
-                        ),
-                    }
-                ],
-                existing.user_id,
-            )
-
-            existing.aliases = merged_aliases
-            logger.info(
-                f"Merged entity '{entity.canonical_name}' into existing {existing.id}"
-            )
-            return existing, False
-
-        else:
-            # Create new entity
-            if episode_id and episode_id not in entity.mentioned_in:
-                entity.mentioned_in.append(episode_id)
-
-            await self.create_entity(entity)
-            logger.info(f"Created new entity '{entity.canonical_name}' as {entity.id}")
-            return entity, True
-
     async def link_memory_to_entity(
         self, memory_id: UUID, entity_id: UUID, user_id: str
     ) -> None:
@@ -702,7 +627,7 @@ class MemoryStore:
             if node.get("entity_type") == entity_type:
                 entities.append(self._node_to_memory(node, user_id))
 
-        entities.sort(key=lambda e: e.timestamp, reverse=True)
+        entities.sort(key=lambda e: e.event_time, reverse=True)
         return entities[:limit]  # type: ignore
 
     # ========== Memeplex Methods ==========
@@ -772,7 +697,7 @@ class MemoryStore:
             elif node_type == "entity":
                 stats.total_entities += 1
 
-            ts_str = node.get("timestamp")
+            ts_str = node.get("event_time")
             if ts_str:
                 try:
                     ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))

@@ -8,6 +8,7 @@ from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List, Any
+from uuid import uuid4
 import os
 import re
 
@@ -256,59 +257,85 @@ async def ingest_batch_data(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-class PersonaQueryRequest(BaseModel):
-    query: str = Field(..., description="User query")
+class ChatMessageInput(BaseModel):
+    role: str = Field(..., description="Message role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessageInput] = Field(..., description="Conversation history")
     user_timezone: str = Field(default="UTC")
-    session_id: Optional[str] = None
-    max_turns: Optional[int] = None
-    timeout: Optional[float] = None
-    include_stats: bool = False
+    session_id: Optional[str] = Field(
+        default=None, description="Session ID for continuity"
+    )
+    max_turns: Optional[int] = Field(default=None, description="Max agent turns")
+    timeout: Optional[float] = Field(default=None, description="Timeout in seconds")
+    include_stats: bool = Field(default=False, description="Include execution stats")
 
 
-class PersonaQueryResponse(BaseModel):
-    answer: str
-    status: str
-    stats: Optional[Dict[str, Any]] = None
-    state: Optional[str] = None
+class ChatResponse(BaseModel):
+    response: str = Field(..., description="Assistant response")
+    status: str = Field(..., description="Execution status")
+    session_id: str = Field(..., description="Session ID for continuity")
+    stats: Optional[Dict[str, Any]] = Field(default=None, description="Execution stats")
+    state: Optional[str] = Field(default=None, description="Resumable state")
 
 
 @router.post(
-    "/users/{user_id}/persona/query",
-    response_model=PersonaQueryResponse,
+    "/users/{user_id}/chat",
+    response_model=ChatResponse,
     status_code=status.HTTP_200_OK,
 )
-async def persona_query(
+async def chat(
     user_id: str = Path(..., description="The unique identifier for the user"),
-    request: PersonaQueryRequest = Body(...),
+    request: ChatRequest = Body(...),
     graph_ops: GraphOps = Depends(get_graph_ops),
 ):
     try:
         if not await graph_ops.user_exists(user_id):
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
-        logger.info(f"Persona query for user {user_id}: {request.query[:100]}...")
+        if not request.messages:
+            raise HTTPException(status_code=400, detail="Messages cannot be empty")
+
+        session_id = request.session_id or str(uuid4())
+
+        last_user_msg = next(
+            (m.content for m in reversed(request.messages) if m.role == "user"), ""
+        )
+
+        if not last_user_msg:
+            raise HTTPException(status_code=400, detail="No user message found")
+
+        logger.info(f"Chat for user {user_id}: {last_user_msg[:100]}...")
 
         service = PersonaService(graph_ops)
         result = await service.run_agent(
             user_id=user_id,
-            query=request.query,
+            query=last_user_msg,
             include_stats=request.include_stats,
             user_timezone=request.user_timezone,
-            session_id=request.session_id,
+            session_id=session_id,
             max_turns=request.max_turns,
             timeout=request.timeout,
         )
 
-        logger.info(f"Persona query completed for user {user_id}")
-        return PersonaQueryResponse(**result)
+        logger.info(f"Chat completed for user {user_id}")
+        return ChatResponse(
+            response=result["answer"],
+            status=result["status"],
+            session_id=session_id,
+            stats=result.get("stats"),
+            state=result.get("state"),
+        )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in persona query for user {user_id}: {str(e)}")
+        logger.error(f"Error in chat for user {user_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error occurred while processing query",
+            detail="Internal server error occurred while processing chat",
         )
 
 

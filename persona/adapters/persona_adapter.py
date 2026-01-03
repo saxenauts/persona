@@ -12,12 +12,12 @@ Usage:
 """
 
 from datetime import datetime
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Any, Tuple
 from uuid import UUID
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import Memory, MemoryLink, EntityMemory
+from persona.models.memory import Memory, MemoryLink
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
 from server.logging_config import get_logger
 
@@ -48,6 +48,7 @@ class PersonaAdapter:
         content: str,
         source_type: str = "conversation",
         timestamp: Optional[datetime] = None,
+        timezone: str = "UTC",
         session_id: Optional[str] = None,
         persist: bool = True,
     ) -> IngestionResult:
@@ -57,7 +58,8 @@ class PersonaAdapter:
         Args:
             content: Raw text content (e.g., a conversation transcript).
             source_type: Descriptor for extraction hints ("conversation", "notes", etc.).
-            timestamp: When this content was created. Defaults to now.
+            timestamp: Current time for context. Defaults to now.
+            timezone: User's timezone (e.g., "America/Los_Angeles").
             session_id: Optional session identifier for grouping.
             persist: If False, only extract (for dry-run/preview).
 
@@ -73,12 +75,12 @@ class PersonaAdapter:
 
         start_total = time.time()
 
-        # Step 1: Extract memories (in-memory)
         result = await self.ingestion_service.ingest(
             raw_content=content,
             user_id=self.user_id,
             session_id=session_id,
             timestamp=timestamp,
+            timezone=timezone,
             source_type=source_type,
         )
 
@@ -90,24 +92,18 @@ class PersonaAdapter:
             f"Extracted {len(result.memories)} memories, {len(result.links)} links"
         )
 
-        # Step 2: Resolve entities (deduplication)
-        episode_id = self._get_episode_id(result.memories)
-        resolved_entities, entity_id_map = await self._resolve_entities(
-            result.memories, episode_id
-        )
-        result.memories = self._replace_entities(result.memories, resolved_entities)
-        result.links = self._update_entity_links(result.links, entity_id_map)
-
-        # Step 3: Persist (unless dry-run)
+        # Step 2: Persist
         persist_time_ms = 0.0
         if persist:
             persist_start = time.time()
             previous_episode = await self.store.get_most_recent_episode(self.user_id)
 
-            non_entity_memories = [m for m in result.memories if m.type != "entity"]
-            for memory in non_entity_memories:
+            for memory in result.memories:
                 memory_links = [l for l in result.links if l.source_id == memory.id]
-                await self.store.create(memory, links=memory_links)
+                if memory.type == "entity":
+                    await self.store.create_entity(memory)  # type: ignore
+                else:
+                    await self.store.create(memory, links=memory_links)
 
             episode = next((m for m in result.memories if m.type == "episode"), None)
             if episode and previous_episode and previous_episode.id != episode.id:
@@ -254,52 +250,3 @@ class PersonaAdapter:
 
         logger.info(f"Batch ingestion complete: {len(final_results)} results")
         return final_results
-
-    def _get_episode_id(self, memories: List[Memory]) -> Optional[UUID]:
-        episode = next((m for m in memories if m.type == "episode"), None)
-        return episode.id if episode else None
-
-    async def _resolve_entities(
-        self, memories: List[Memory], episode_id: Optional[UUID]
-    ) -> Tuple[List[EntityMemory], dict[UUID, UUID]]:
-        entities = [m for m in memories if m.type == "entity"]
-        resolved: List[EntityMemory] = []
-        id_map: dict[UUID, UUID] = {}
-
-        for entity in entities:
-            entity_mem: EntityMemory = entity  # type: ignore
-            original_id = entity_mem.id
-            resolved_entity, is_new = await self.store.upsert_entity(
-                entity_mem, episode_id
-            )
-            resolved.append(resolved_entity)
-            if not is_new:
-                id_map[original_id] = resolved_entity.id
-
-        return resolved, id_map
-
-    def _replace_entities(
-        self, memories: List[Memory], resolved_entities: List[EntityMemory]
-    ) -> List[Memory]:
-        non_entities = [m for m in memories if m.type != "entity"]
-        return non_entities + list(resolved_entities)
-
-    def _update_entity_links(
-        self, links: List[MemoryLink], entity_id_map: dict[UUID, UUID]
-    ) -> List[MemoryLink]:
-        if not entity_id_map:
-            return links
-
-        updated: List[MemoryLink] = []
-        for link in links:
-            new_source = entity_id_map.get(link.source_id, link.source_id)
-            new_target = entity_id_map.get(link.target_id, link.target_id)
-            updated.append(
-                MemoryLink(
-                    source_id=new_source,
-                    target_id=new_target,
-                    relation=link.relation,
-                    properties=link.properties,
-                )
-            )
-        return updated

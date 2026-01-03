@@ -30,7 +30,7 @@ class TestFormatWorkingMemoryProse:
                 type="episode",
                 title="Recent Episode",
                 content="Had a great meeting with the team",
-                timestamp=now,
+                event_time=now,
             ),
             EpisodeMemory(
                 id=uuid4(),
@@ -38,7 +38,7 @@ class TestFormatWorkingMemoryProse:
                 type="episode",
                 title="Older Episode",
                 content="Started the project",
-                timestamp=now - timedelta(days=7),
+                event_time=now - timedelta(days=7),
             ),
         ]
 
@@ -240,7 +240,7 @@ class TestLinkProseFormatting:
                 type="episode",
                 title="First event",
                 content="Something happened",
-                timestamp=datetime.now(),
+                event_time=datetime.now(),
             ),
             EpisodeMemory(
                 id=ep2_id,
@@ -248,7 +248,7 @@ class TestLinkProseFormatting:
                 type="episode",
                 title="Second event",
                 content="Follow-up",
-                timestamp=datetime.now() - timedelta(hours=1),
+                event_time=datetime.now() - timedelta(hours=1),
             ),
         ]
         links = [

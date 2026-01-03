@@ -74,18 +74,20 @@ class PersonaAdapter(MemorySystem):
 
     def query(self, user_id: str, query: str) -> str:
         response = requests.post(
-            f"{self.base_url}/users/{user_id}/persona/query",
+            f"{self.base_url}/users/{user_id}/chat",
             json={
-                "query": query,
+                "messages": [{"role": "user", "content": query}],
                 "include_stats": True,
             },
         )
         if response.status_code != 200:
-            print(f"Persona Query Error: {response.status_code} - {response.text}")
+            print(f"Persona Chat Error: {response.status_code} - {response.text}")
         response.raise_for_status()
-        # Expecting {"answer": "..."} or similar
         data = response.json()
         if isinstance(data, dict):
+            if "response" in data:
+                self.last_query_stats = data
+                return str(data["response"])
             if "answer" in data:
                 self.last_query_stats = data
                 return str(data["answer"])

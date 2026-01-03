@@ -94,8 +94,8 @@ def _format_episodes_prose(
     link_map: Dict[UUID, str],
 ) -> str:
     lines = []
-    for ep in sorted(episodes, key=lambda e: e.timestamp, reverse=True):
-        date_str = ep.timestamp.strftime("%B %d") if ep.timestamp else "Recently"
+    for ep in sorted(episodes, key=lambda e: e.event_time, reverse=True):
+        date_str = ep.event_time.strftime("%B %d") if ep.event_time else "Recently"
         content = ep.content or ep.summary or ep.title or ""
         line = f"{date_str}: {content}"
         if ep.id in link_map:
@@ -108,7 +108,7 @@ def _format_psyche_prose(psyche: List[PsycheMemory]) -> str:
     if not psyche:
         return ""
     parts = []
-    for p in sorted(psyche, key=lambda x: x.timestamp, reverse=True):
+    for p in sorted(psyche, key=lambda x: x.event_time, reverse=True):
         ptype = p.psyche_type or "trait"
         parts.append(f"{ptype.capitalize()}: {p.content}")
     return " ".join(parts)
@@ -128,7 +128,7 @@ def _format_notes_prose(notes: List[NoteMemory]) -> str:
 
     parts = []
     for note_type, items in grouped.items():
-        items_sorted = sorted(items, key=lambda x: x.timestamp, reverse=True)
+        items_sorted = sorted(items, key=lambda x: x.event_time, reverse=True)
         titles = [n.title or n.content[:50] for n in items_sorted]
         parts.append(f"{note_type.capitalize()}s: {', '.join(titles)}")
 

@@ -83,12 +83,12 @@ class TestMemoryModel:
             type="episode",
             title="Old memory",
             content="From last year",
-            timestamp=old_time,
+            event_time=old_time,
             user_id="test-user",
         )
 
-        assert memory.timestamp == old_time
-        assert memory.created_at > old_time  # created_at is now
+        assert memory.event_time == old_time
+        assert memory.observed_at > old_time
 
 
 class TestMemoryLink:

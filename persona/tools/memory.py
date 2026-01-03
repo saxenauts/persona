@@ -21,7 +21,7 @@ class MemoryHit:
     type: str
     title: str
     snippet: str
-    timestamp: str
+    event_time: str
     score: float = 0.0
 
 
@@ -49,7 +49,7 @@ def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
     title = getattr(memory, "title", "") or ""
     snippet = content[:200] + "..." if len(content) > 200 else content
 
-    ts = getattr(memory, "timestamp", None)
+    ts = getattr(memory, "event_time", None)
     timestamp_str = ts.isoformat() if ts else ""
 
     return MemoryHit(
@@ -57,7 +57,7 @@ def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
         type=memory.type,
         title=title,
         snippet=snippet,
-        timestamp=timestamp_str,
+        event_time=timestamp_str,
         score=score,
     )
 

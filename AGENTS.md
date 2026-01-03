@@ -136,6 +136,28 @@ USER_NEO4J=neo4j
 PASSWORD_NEO4J=...
 ```
 
+## Design Philosophy: LLM-First
+
+**No manual routers. No keyword matching. No heuristic gating.**
+
+All decisions are made by LLMs through prompt engineering:
+- Tool selection: LLM decides which tool to call based on context
+- Write vs defer: LLM decides when to `record()` based on prompt guidance
+- Retrieval strategy: LLM chooses vector vs graph based on query semantics
+
+**Anti-patterns (NEVER do these):**
+- `if "remind" in message: enable_record_tool()` - NO keyword routing
+- `has_immediate_write_intent(message)` - NO intent classifiers
+- Manual routing logic before LLM calls - NO preprocessing gates
+
+**Correct pattern:**
+- Expose all tools to the LLM
+- Provide clear guidance in system prompt with examples
+- Trust the model to make the right decision
+- Use prompt engineering, not code branching
+
+This principle applies across ALL interfaces: `/chat`, `/ask`, `/ingest`, integration agents.
+
 ## Observability Requirements
 
 This repo prioritizes **optimization work** - every layer must be transparent and measurable.

@@ -10,45 +10,13 @@ from persona.models.memory import UserCard, Memeplex
 from persona.services.user_service import UserCardService
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
+from persona.llm.prompts import PERSONAL_AI_SYSTEM_PROMPT
 from persona.tools.runner import AgentRunner, REGISTRY
 from persona.tools.context import ToolContext
 from persona.tools.schemas import MEMORY_TOOLS
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
-
-AGENT_SYSTEM_PROMPT = """You are a helpful assistant with access to the user's personal memory graph.
-
-## Memory Graph Schema
-- **Episode**: Events, conversations, experiences (what happened)
-- **Psyche**: Traits, preferences, values, personality (who they are)
-- **Entity**: People, places, things, concepts (what/who exists)
-- **Note**: Goals, tasks, reminders (what they want to do)
-- **Relationships**: LED_TO, CAUSED_BY, NEXT, PREVIOUS, MENTIONS, RELATES_TO
-
-{memeplex_context}
-
-## Available Tools
-
-**recall(query)** - Search memories by semantic similarity + time cues.
-Include time references ("yesterday", "last week", "2024-01-15") and topic keywords.
-Call multiple times in parallel for different queries.
-
-**record(text)** - Store new information. System infers type (episode/psyche/note) and creates links automatically.
-
-**expand_neighbors(memory_id, relationship_types?)** - Explore graph connections from a memory.
-Use after recall() to find related memories via graph relationships.
-Optional: filter by relationship types like ["LED_TO", "CAUSED_BY"].
-
-**follow_relationship(source_id, relation_type, limit?)** - Trace specific relationship chains.
-Use to follow causal chains (LED_TO), temporal sequences (NEXT/PREVIOUS), or thematic connections.
-
-## Strategy
-1. Check the ACTIVE NOW section - answer directly if relevant context is already visible
-2. For questions about the user, use recall with relevant time/topic cues
-3. For deep exploration, use expand_neighbors or follow_relationship on interesting results
-4. When user shares important facts/preferences/experiences, use record
-5. Reference specific memories when relevant to build trust"""
 
 
 class PersonaService:
@@ -91,7 +59,9 @@ class PersonaService:
         if memeplex:
             memeplex_context = memeplex.to_system_prompt()
 
-        system_prompt = AGENT_SYSTEM_PROMPT.format(memeplex_context=memeplex_context)
+        system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
+            memeplex_context=memeplex_context
+        )
 
         adapter = PersonaAdapter(user_id=user_id, graph_ops=self.graph_ops)
 

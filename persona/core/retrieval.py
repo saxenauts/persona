@@ -105,8 +105,8 @@ class Retriever:
             memories = await self.store.get_by_type(
                 "episode", self.user_id, limit=cfg.max_episodes
             )
-            recent = [m for m in memories if m.timestamp and m.timestamp >= since]
-            recent.sort(key=lambda m: m.timestamp, reverse=True)
+            recent = [m for m in memories if m.event_time and m.event_time >= since]
+            recent.sort(key=lambda m: m.event_time, reverse=True)
             return [
                 m for m in recent[: cfg.max_episodes] if isinstance(m, EpisodeMemory)
             ]
@@ -122,8 +122,8 @@ class Retriever:
             memories = await self.store.get_by_type(
                 "psyche", self.user_id, limit=cfg.max_psyche
             )
-            recent = [m for m in memories if m.timestamp and m.timestamp >= since]
-            recent.sort(key=lambda m: m.timestamp, reverse=True)
+            recent = [m for m in memories if m.event_time and m.event_time >= since]
+            recent.sort(key=lambda m: m.event_time, reverse=True)
             return [m for m in recent[: cfg.max_psyche] if isinstance(m, PsycheMemory)]
         except Exception as e:
             logger.warning(f"Failed to get psyche: {e}")
@@ -135,7 +135,7 @@ class Retriever:
                 "note", self.user_id, limit=cfg.max_active_notes * 2
             )
             active = [n for n in notes if getattr(n, "status", "active") != "COMPLETED"]
-            active.sort(key=lambda n: n.timestamp, reverse=True)
+            active.sort(key=lambda n: n.event_time, reverse=True)
             return [
                 n for n in active[: cfg.max_active_notes] if isinstance(n, NoteMemory)
             ]
