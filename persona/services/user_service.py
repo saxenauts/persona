@@ -88,7 +88,7 @@ class UserCardService:
         ]
 
         response = await self.chat_client.chat(messages)
-        return response.content.strip()
+        return (response.content or "").strip()
 
     def _format_memories(
         self,

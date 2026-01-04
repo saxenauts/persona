@@ -1,7 +1,7 @@
 """Context Formatting: Memory -> LLM Working Memory (Prose format with links)."""
 
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Sequence
 from uuid import UUID
 from pydantic import BaseModel, TypeAdapter
 from persona.models.memory import (
@@ -72,7 +72,7 @@ def _link_to_prose(relation: str, target: Memory) -> str:
 
 
 def _build_link_context_map(
-    memories: List[Memory],
+    memories: Sequence[Memory],
     links: List[MemoryLink],
 ) -> Dict[UUID, str]:
     memory_map = {m.id: m for m in memories}
@@ -143,7 +143,7 @@ def format_working_memory_prose(
     links: Optional[List[MemoryLink]] = None,
 ) -> str:
     sections = []
-    all_memories: List[Memory] = list(episodes) + list(psyche) + list(active_notes)
+    all_memories: Sequence[Memory] = [*episodes, *psyche, *active_notes]
     link_map = _build_link_context_map(all_memories, links or [])
 
     if user_card and user_card.identity_prose:
