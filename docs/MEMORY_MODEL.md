@@ -309,13 +309,13 @@ from persona.core.graph_ops import GraphOps
 async with GraphOps() as graph_ops:
     service = PersonaService(graph_ops)
     
-    # Query with memory context (no tools, direct retrieval)
-    result = await service.query(
+    # Use the agent loop with tools
+    result = await service.run_agent(
         user_id="user_123",
         query="What have I been working on lately?",
     )
     
-    # Or use the agent loop with tools
+    # Or for structured output
     result = await service.run_agent(
         user_id="user_123",
         query="Find everything about my career transition and summarize",

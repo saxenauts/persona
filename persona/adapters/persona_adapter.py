@@ -2,7 +2,7 @@
 PersonaAdapter: The unified ingestion interface for Persona.
 
 This adapter handles the complete lifecycle of ingesting raw content into Persona:
-1. Extraction: Converts raw text into typed Memory objects (Episode, Psyche, Goal).
+1. Extraction: Converts raw text into typed Memory objects (Episode, Psyche, Entity, Note).
 2. Persistence: Saves memories to the graph database via MemoryStore.
 3. Linking: Automatically chains episodes in temporal order.
 
@@ -12,12 +12,12 @@ Usage:
 """
 
 from datetime import datetime
-from typing import Optional, List, Any, Tuple
-from uuid import UUID, uuid4
+from typing import Optional, List, Tuple, Any
+from uuid import uuid4
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import Memory, MemoryLink, EpisodeMemory
+from persona.models.memory import EpisodeMemory
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
 from persona.utils.session import get_session_id
 from server.logging_config import get_logger
@@ -164,9 +164,9 @@ class PersonaAdapter:
             """Extract memories for one session (no DB writes)."""
             async with sem:
                 timestamp = item.get("timestamp") or datetime.utcnow()
-                session_id = (
-                    item.get("session_id")
-                    or f"session_{timestamp.strftime('%Y%m%d_%H%M%S')}_{idx}"
+                source_type = item.get("source_type", "conversation")
+                session_id = item.get("session_id") or get_session_id(
+                    source_type, f"batch_{timestamp.strftime('%Y%m%d_%H%M%S')}_{idx}"
                 )
 
                 logger.info(f"[Parallel] Extracting session {idx + 1}/{len(items)}")
@@ -252,20 +252,14 @@ class PersonaAdapter:
 
             final_results.append(result)
 
-        if final_results:
-            for res in final_results:
-                if res.extract_time_ms is None:
-                    res.extract_time_ms = 0.0
-                if res.embed_time_ms is None:
-                    res.embed_time_ms = 0.0
-                if res.persist_time_ms is None:
-                    res.persist_time_ms = 0.0
-                if res.total_time_ms is None:
-                    res.total_time_ms = (
-                        (res.extract_time_ms or 0.0)
-                        + (res.embed_time_ms or 0.0)
-                        + (res.persist_time_ms or 0.0)
-                    )
+        for res in final_results:
+            res.extract_time_ms = res.extract_time_ms or 0.0
+            res.embed_time_ms = res.embed_time_ms or 0.0
+            res.persist_time_ms = res.persist_time_ms or 0.0
+            if res.total_time_ms is None:
+                res.total_time_ms = (
+                    res.extract_time_ms + res.embed_time_ms + res.persist_time_ms
+                )
 
         logger.info(f"Batch ingestion complete: {len(final_results)} results")
         return final_results

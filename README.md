@@ -33,7 +33,7 @@ But true intelligence requires more than storage. It requires a dynamic, living 
 ## Features
 
 - **Dynamic Knowledge Graph**: Automatically builds a graph from unstructured text.
-- **Typed Memory System**: distinct `Episode`, `Psyche`, and `Goal` nodes.
+- **Typed Memory System**: distinct `Episode`, `Psyche`, `Entity`, and `Note` nodes.
 - **Temporal Chaining**: Narrative continuity for life-logging and long-term companions.
 - **Smart Retrieval**: Hybrid RAG combining vector similarity with graph traversal.
 - **Structured Insights**: Ask questions and get JSON data, not just text.

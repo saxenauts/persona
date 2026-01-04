@@ -40,7 +40,9 @@ Content-Type: application/json
 
 {
     "content": "Had a great meeting with Sarah about the Q4 roadmap...",
-    "source_type": "conversation"
+    "source_type": "conversation",
+    "provider_session_id": "conv_abc123",
+    "store_transcript": false
 }
 
 Response: 201 Created
@@ -52,6 +54,16 @@ Response: 201 Created
     "timings_ms": {"extract": 150.0, "embed": 50.0, "persist": 30.0, "total": 230.0}
 }
 ```
+
+**Parameters:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| content | string | required | Raw text content to ingest |
+| source_type | string | "conversation" | Provider/source: "persona", "claude", "chatgpt", "slack", etc. |
+| provider_session_id | string | null | Provider's original session/conversation ID for provenance |
+| store_transcript | bool | false | Store raw content as transcript Episode for replay/debug |
+| metadata | object | null | Optional key-value metadata |
 
 ### Batch Ingest
 ```http

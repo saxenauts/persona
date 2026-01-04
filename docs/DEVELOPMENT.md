@@ -54,7 +54,6 @@ tests/
 
 2. **PersonaService** (`services/persona_service.py`)
    - Primary entry point for memory-augmented dialogue
-   - `query()`: Direct retrieval + generation
    - `run_agent()`: Agent loop with recall/record tools
    - `ask()`: Structured JSON extraction
 
@@ -142,10 +141,10 @@ curl -X POST "http://localhost:8000/api/v1/users/my_user/ingest" \
   -H "Content-Type: application/json" \
   -d '{"content": "I love Python programming"}'
 
-# Query with agent loop
-curl -X POST "http://localhost:8000/api/v1/users/my_user/persona/query" \
+# Chat with agent loop
+curl -X POST "http://localhost:8000/api/v1/users/my_user/chat" \
   -H "Content-Type: application/json" \
-  -d '{"query": "What do I like?"}'
+  -d '{"messages": [{"role": "user", "content": "What do I like?"}]}'
 
 # Get structured output
 curl -X POST "http://localhost:8000/api/v1/users/my_user/persona/ask" \

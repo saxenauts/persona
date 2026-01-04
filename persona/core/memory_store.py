@@ -13,7 +13,6 @@ from persona.core.interfaces import GraphDatabase, VectorStore
 from persona.models.memory import (
     Memory,
     MemoryLink,
-    MemoryQueryResponse,
     EntityMemory,
     EntityAttribute,
     Memeplex,

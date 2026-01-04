@@ -5,7 +5,7 @@ Just time-windowed fetch of recent memories with links, formatted as prose.
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Sequence
 from uuid import UUID
 
 from persona.core.graph_ops import GraphOps
@@ -41,7 +41,7 @@ class Retriever:
         user_timezone: str = "UTC",
         collect_stats: bool = False,
         **kwargs,
-    ) -> str | Tuple[str, Dict[str, Any]]:
+    ) -> str | tuple[str, Dict[str, Any]]:
         """Get prose-formatted working memory for a dialog turn."""
         cfg = config or DEFAULT_WORKING_MEMORY_CONFIG
         now = datetime.utcnow()
@@ -51,7 +51,7 @@ class Retriever:
         psyche = await self._get_recent_psyche(now, cfg)
         active_notes = await self._get_active_notes(cfg)
 
-        all_memories: List[Memory] = list(episodes) + list(psyche) + list(active_notes)
+        all_memories: Sequence[Memory] = [*episodes, *psyche, *active_notes]
         memory_ids = [m.id for m in all_memories]
         links = await self._get_links_for_memories(memory_ids)
 
@@ -88,7 +88,7 @@ class Retriever:
         config: Optional[WorkingMemoryConfig] = None,
         user_card: Optional[UserCard] = None,
         user_timezone: str = "UTC",
-    ) -> Tuple[str, Dict[str, Any]]:
+    ) -> tuple[str, Dict[str, Any]]:
         result = await self.get_working_memory(
             config=config,
             user_card=user_card,
@@ -99,7 +99,7 @@ class Retriever:
 
     async def _get_recent_episodes(
         self, now: datetime, cfg: WorkingMemoryConfig
-    ) -> List[EpisodeMemory]:
+    ) -> list[EpisodeMemory]:
         since = now - cfg.episode_window
         try:
             memories = await self.store.get_by_type(
@@ -116,7 +116,7 @@ class Retriever:
 
     async def _get_recent_psyche(
         self, now: datetime, cfg: WorkingMemoryConfig
-    ) -> List[PsycheMemory]:
+    ) -> list[PsycheMemory]:
         since = now - cfg.psyche_window
         try:
             memories = await self.store.get_by_type(
@@ -129,12 +129,16 @@ class Retriever:
             logger.warning(f"Failed to get psyche: {e}")
             return []
 
-    async def _get_active_notes(self, cfg: WorkingMemoryConfig) -> List[NoteMemory]:
+    async def _get_active_notes(self, cfg: WorkingMemoryConfig) -> list[NoteMemory]:
         try:
             notes = await self.store.get_by_type(
                 "note", self.user_id, limit=cfg.max_active_notes * 2
             )
-            active = [n for n in notes if getattr(n, "status", "active") != "COMPLETED"]
+            active = [
+                n
+                for n in notes
+                if getattr(n, "status", "active").lower() != "completed"
+            ]
             active.sort(key=lambda n: n.event_time, reverse=True)
             return [
                 n for n in active[: cfg.max_active_notes] if isinstance(n, NoteMemory)
@@ -143,7 +147,7 @@ class Retriever:
             logger.warning(f"Failed to get notes: {e}")
             return []
 
-    async def _get_links_for_memories(self, memory_ids: List[UUID]) -> List[MemoryLink]:
+    async def _get_links_for_memories(self, memory_ids: list[UUID]) -> list[MemoryLink]:
         if not memory_ids:
             return []
         try:

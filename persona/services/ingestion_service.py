@@ -4,7 +4,7 @@ Memory Ingestion Service for Persona.
 Ingests raw input and extracts memories:
 - Episode (the narrative record)
 - Psyche (traits, values, preferences)
-- Notes (tasks, projects, todos, facts, reminders, etc.)
+- Notes (tasks, goals, reminders)
 
 Uses LLM structured output for extraction, then generates embeddings.
 """
@@ -13,7 +13,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from uuid import uuid4
 from pydantic import BaseModel, Field
 
@@ -24,7 +24,6 @@ from persona.models.memory import (
     PsycheOutput,
     NoteOutput,
     EntityOutput,
-    EntityAttributeOutput,
     IngestionOutput,
 )
 from persona.llm.client_factory import get_chat_client, get_embedding_client
