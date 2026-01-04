@@ -4,6 +4,7 @@ from persona.models.schema import UserCreate, AskRequest, AskResponse
 from persona.services.user_service import UserService
 from persona.services.persona_service import PersonaService
 from persona.adapters import PersonaAdapter
+from persona.utils.session import get_session_id
 from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
 from pydantic import BaseModel, Field
@@ -23,7 +24,15 @@ class IngestRequest(BaseModel):
     content: str = Field(..., description="Raw text content to ingest.")
     source_type: str = Field(
         default="conversation",
-        description="Type of content (conversation, notes, etc.)",
+        description="Provider/source type: 'persona', 'claude', 'chatgpt', 'slack', etc.",
+    )
+    provider_session_id: Optional[str] = Field(
+        default=None,
+        description="Provider's original session/conversation ID for provenance tracking.",
+    )
+    store_transcript: bool = Field(
+        default=False,
+        description="Store raw content as transcript Episode for replay/debug.",
     )
     metadata: Optional[Dict[str, str]] = Field(
         default=None, description="Optional metadata."
@@ -140,10 +149,16 @@ async def ingest_data(
             logger.warning(f"Empty content provided for user {user_id}")
             raise HTTPException(status_code=400, detail="Content cannot be empty")
 
+        # Generate canonical session_id
+        session_id = get_session_id(data.source_type, data.provider_session_id)
+
         # Use PersonaAdapter for ingestion
         adapter = PersonaAdapter(user_id, graph_ops)
         result = await adapter.ingest(
-            content=data.content, source_type=data.source_type
+            content=data.content,
+            source_type=data.source_type,
+            session_id=session_id,
+            store_transcript=data.store_transcript,
         )
 
         if not result.success:
@@ -298,7 +313,7 @@ async def chat(
         if not request.messages:
             raise HTTPException(status_code=400, detail="Messages cannot be empty")
 
-        session_id = request.session_id or str(uuid4())
+        session_id = get_session_id("persona", request.session_id)
 
         last_user_msg = next(
             (m.content for m in reversed(request.messages) if m.role == "user"), ""

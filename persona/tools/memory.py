@@ -82,6 +82,7 @@ async def recall_handler(
     date_end: Optional[str] = None,
     memory_types: Optional[List[str]] = None,
     limit: int = 10,
+    exclude_transcripts: bool = True,
 ) -> RecallResult:
     """
     Search memories with structured filters.
@@ -111,6 +112,11 @@ async def recall_handler(
         try:
             mem = await ctx.store.get(UUID(node_id), ctx.user_id)
             if mem:
+                if (
+                    exclude_transcripts
+                    and getattr(mem, "source_type", None) == "transcript"
+                ):
+                    continue
                 if memory_types and mem.type not in memory_types:
                     continue
                 items.append(_memory_to_hit(mem, score=score))

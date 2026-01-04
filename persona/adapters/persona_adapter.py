@@ -13,12 +13,13 @@ Usage:
 
 from datetime import datetime
 from typing import Optional, List, Any, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import Memory, MemoryLink
+from persona.models.memory import Memory, MemoryLink, EpisodeMemory
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
+from persona.utils.session import get_session_id
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -50,6 +51,7 @@ class PersonaAdapter:
         timestamp: Optional[datetime] = None,
         timezone: str = "UTC",
         session_id: Optional[str] = None,
+        store_transcript: bool = False,
         persist: bool = True,
     ) -> IngestionResult:
         """
@@ -57,23 +59,40 @@ class PersonaAdapter:
 
         Args:
             content: Raw text content (e.g., a conversation transcript).
-            source_type: Descriptor for extraction hints ("conversation", "notes", etc.).
+            source_type: Provider name ("persona", "claude", "slack", etc.).
             timestamp: Current time for context. Defaults to now.
             timezone: User's timezone (e.g., "America/Los_Angeles").
-            session_id: Optional session identifier for grouping.
+            session_id: Canonical session ID (e.g., "claude:conv_xyz"). Auto-generated if not provided.
+            store_transcript: If True, store raw content as transcript Episode for replay/debug.
             persist: If False, only extract (for dry-run/preview).
 
         Returns:
             IngestionResult containing the extracted memories and links.
         """
         timestamp = timestamp or datetime.utcnow()
-        session_id = session_id or f"session_{timestamp.strftime('%Y%m%d_%H%M%S')}"
+        session_id = session_id or get_session_id(source_type)
 
         logger.info(
-            f"PersonaAdapter.ingest: user={self.user_id}, source={source_type}, persist={persist}"
+            f"PersonaAdapter.ingest: user={self.user_id}, source={source_type}, session={session_id}, persist={persist}"
         )
 
         start_total = time.time()
+
+        # Store transcript Episode if requested (before extraction)
+        if store_transcript and persist:
+            transcript_episode = EpisodeMemory(
+                id=uuid4(),
+                title=f"Transcript: {source_type}",
+                content=content,
+                event_time=timestamp,
+                observed_at=datetime.utcnow(),
+                day_id=timestamp.strftime("%Y-%m-%d"),
+                session_id=session_id,
+                source_type="transcript",
+                user_id=self.user_id,
+            )
+            await self.store.create(transcript_episode, links=[])
+            logger.info(f"Stored transcript Episode for session {session_id}")
 
         result = await self.ingestion_service.ingest(
             raw_content=content,

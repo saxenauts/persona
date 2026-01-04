@@ -84,7 +84,7 @@ class TestChatEndpoint:
             )
 
             assert response.status_code == 200
-            assert response.json()["session_id"] == provided_session_id
+            assert response.json()["session_id"] == f"persona:{provided_session_id}"
 
     def test_chat_passes_parameters_to_service(self, client, mock_graph_ops):
         with patch("server.routers.graph_api.PersonaService") as MockService:
