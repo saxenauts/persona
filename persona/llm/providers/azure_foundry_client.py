@@ -24,7 +24,7 @@ from tenacity import (
     AsyncRetrying,
     before_sleep_log,
 )
-from .base import BaseLLMClient, ChatMessage, ChatResponse
+from .base import BaseLLMClient, ChatMessage, ChatResponse, ToolCall
 from server.logging_config import get_logger
 from persona.llm.rate_limiter import get_rate_limiter_registry, TokenBucketLimiter
 
@@ -144,12 +144,13 @@ class AzureFoundryClient(BaseLLMClient):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, str]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
         **kwargs,
     ) -> ChatResponse:
-        """Generate chat completion with rate limiting."""
+        """Generate chat completion with rate limiting and tool support."""
 
         # Estimate tokens for rate limiting (prompt + max_completion)
-        prompt_text = " ".join(m.content for m in messages)
+        prompt_text = " ".join(m.content or "" for m in messages)
         estimated_tokens = len(prompt_text) // 4 + (max_tokens or 1000)
 
         # Acquire rate limit capacity
@@ -171,14 +172,32 @@ class AzureFoundryClient(BaseLLMClient):
         ):
             with attempt:
                 try:
-                    openai_messages = [
-                        {"role": msg.role, "content": msg.content} for msg in messages
-                    ]
-                    request_params = {
+                    # Build OpenAI-compatible messages with tool call support
+                    openai_messages = []
+                    for msg in messages:
+                        oai_msg: Dict[str, Any] = {"role": msg.role}
+                        if msg.content is not None:
+                            oai_msg["content"] = msg.content
+                        if msg.tool_calls:
+                            oai_msg["tool_calls"] = [
+                                {
+                                    "id": tc.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.name,
+                                        "arguments": tc.arguments,
+                                    },
+                                }
+                                for tc in msg.tool_calls
+                            ]
+                        if msg.tool_call_id:
+                            oai_msg["tool_call_id"] = msg.tool_call_id
+                        openai_messages.append(oai_msg)
+
+                    request_params: Dict[str, Any] = {
                         "model": self.chat_deployment,
                         "messages": openai_messages,
                         "temperature": temperature,
-                        **kwargs,
                     }
 
                     # Handle token parameter based on model type
@@ -191,13 +210,45 @@ class AzureFoundryClient(BaseLLMClient):
                     if response_format:
                         request_params["response_format"] = response_format
 
+                    if tools:
+                        request_params["tools"] = tools
+
+                    # Add any extra kwargs (but not ones we've already handled)
+                    for k, v in kwargs.items():
+                        if k not in request_params:
+                            request_params[k] = v
+
                     client = self._get_client()
                     response = await client.chat.completions.create(**request_params)
 
+                    choice = response.choices[0]
+                    message = choice.message
+
+                    # Parse tool calls if present
+                    parsed_tool_calls = None
+                    if message.tool_calls:
+                        parsed_tool_calls = [
+                            ToolCall(
+                                id=tc.id,
+                                name=tc.function.name,
+                                arguments=tc.function.arguments,
+                            )
+                            for tc in message.tool_calls
+                        ]
+
+                    # Determine stop reason
+                    stop_reason: str = "end_turn"
+                    if choice.finish_reason == "tool_calls":
+                        stop_reason = "tool_use"
+                    elif choice.finish_reason == "length":
+                        stop_reason = "max_tokens"
+
                     return ChatResponse(
-                        content=response.choices[0].message.content,
+                        content=message.content,
                         model=f"foundry/{self.chat_deployment}",
                         usage=response.usage.model_dump() if response.usage else None,
+                        tool_calls=parsed_tool_calls,
+                        stop_reason=stop_reason,
                     )
 
                 except openai.BadRequestError as e:
@@ -211,6 +262,9 @@ class AzureFoundryClient(BaseLLMClient):
                             usage={},
                         )
                     raise
+
+        # Should never reach here due to reraise=True, but satisfy type checker
+        raise RuntimeError("Chat completion failed after all retries")
 
     async def embeddings(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings with rate limiting."""
@@ -250,6 +304,8 @@ class AzureFoundryClient(BaseLLMClient):
                     ) or "ResponsibleAIPolicyViolation" in str(e):
                         return [[0.0] * 1536 for _ in texts]
                     raise
+
+        raise RuntimeError("Embeddings failed after all retries")
 
     def get_provider_name(self) -> str:
         return "foundry"
