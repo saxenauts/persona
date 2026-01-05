@@ -19,6 +19,7 @@ from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
 from persona.models.memory import EpisodeMemory
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
+from persona.services.integration_agent import run_integration_agent
 from persona.utils.session import get_session_id
 from server.logging_config import get_logger
 
@@ -53,22 +54,8 @@ class PersonaAdapter:
         session_id: Optional[str] = None,
         store_transcript: bool = False,
         persist: bool = True,
+        finalize_session: bool = False,
     ) -> IngestionResult:
-        """
-        Complete ingestion: Extract + Persist + Link.
-
-        Args:
-            content: Raw text content (e.g., a conversation transcript).
-            source_type: Provider name ("persona", "claude", "slack", etc.).
-            timestamp: Current time for context. Defaults to now.
-            timezone: User's timezone (e.g., "America/Los_Angeles").
-            session_id: Canonical session ID (e.g., "claude:conv_xyz"). Auto-generated if not provided.
-            store_transcript: If True, store raw content as transcript Episode for replay/debug.
-            persist: If False, only extract (for dry-run/preview).
-
-        Returns:
-            IngestionResult containing the extracted memories and links.
-        """
         timestamp = timestamp or datetime.utcnow()
         session_id = session_id or get_session_id(source_type)
 
@@ -136,7 +123,20 @@ class PersonaAdapter:
         result.persist_time_ms = persist_time_ms
         result.total_time_ms = (time.time() - start_total) * 1000
 
+        if finalize_session and persist and result.memories:
+            await self.close_session(session_id)
+
         return result
+
+    async def close_session(self, session_id: str) -> None:
+        """Close a session: run integration on its memories, then consolidation."""
+        logger.info(f"Closing session {session_id} for user {self.user_id}")
+        await run_integration_agent(
+            user_id=self.user_id,
+            trigger_ids=[],
+            session_id=session_id,
+            graph_ops=self.graph_ops,
+        )
 
     async def ingest_batch(
         self, items: list[dict], persist: bool = True

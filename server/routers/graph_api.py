@@ -3,6 +3,7 @@ from persona.core.graph_ops import GraphOps
 from persona.models.schema import UserCreate, AskRequest, AskResponse
 from persona.services.user_service import UserService
 from persona.services.persona_service import PersonaService
+from persona.services.integration_agent import run_integration_agent
 from persona.adapters import PersonaAdapter
 from persona.utils.session import get_session_id
 from server.dependencies import get_graph_ops
@@ -18,24 +19,15 @@ logger = get_logger(__name__)
 
 # --- Request Models (replacing legacy UnstructuredData) ---
 class IngestRequest(BaseModel):
-    """Request body for ingesting content."""
-
     content: str = Field(..., description="Raw text content to ingest.")
-    source_type: str = Field(
-        default="conversation",
-        description="Provider/source type: 'persona', 'claude', 'chatgpt', 'slack', etc.",
-    )
-    provider_session_id: Optional[str] = Field(
-        default=None,
-        description="Provider's original session/conversation ID for provenance tracking.",
-    )
-    store_transcript: bool = Field(
+    source_type: str = Field(default="conversation")
+    provider_session_id: Optional[str] = Field(default=None)
+    store_transcript: bool = Field(default=False)
+    finalize_session: bool = Field(
         default=False,
-        description="Store raw content as transcript Episode for replay/debug.",
+        description="If true, run integration after ingest (use for last message in session).",
     )
-    metadata: Optional[Dict[str, str]] = Field(
-        default=None, description="Optional metadata."
-    )
+    metadata: Optional[Dict[str, str]] = Field(default=None)
 
 
 class IngestBatchRequest(BaseModel):
@@ -151,13 +143,13 @@ async def ingest_data(
         # Generate canonical session_id
         session_id = get_session_id(data.source_type, data.provider_session_id)
 
-        # Use PersonaAdapter for ingestion
         adapter = PersonaAdapter(user_id, graph_ops)
         result = await adapter.ingest(
             content=data.content,
             source_type=data.source_type,
             session_id=session_id,
             store_transcript=data.store_transcript,
+            finalize_session=data.finalize_session,
         )
 
         if not result.success:
@@ -386,4 +378,101 @@ async def persona_ask(
         raise HTTPException(
             status_code=500,
             detail="Internal server error occurred while processing ask request",
+        )
+
+
+class IntegrateRequest(BaseModel):
+    memory_ids: Optional[List[str]] = Field(default=None)
+
+
+class IntegrateResponse(BaseModel):
+    status: str
+    links_created: int = 0
+    merges_applied: int = 0
+    derived_created: int = 0
+    conflicts_flagged: int = 0
+    errors: List[str] = Field(default_factory=list)
+
+
+@router.post(
+    "/users/{user_id}/integrate",
+    response_model=IntegrateResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def trigger_integration(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    request: Optional[IntegrateRequest] = Body(default=None),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        trigger_ids = request.memory_ids if request and request.memory_ids else []
+
+        logger.info(f"Triggering integration for user {user_id}")
+        result = await run_integration_agent(
+            user_id=user_id,
+            trigger_ids=trigger_ids,
+            graph_ops=graph_ops,
+            session_id=None,  # Full user scope
+        )
+
+        return IntegrateResponse(
+            status="success" if result.success else "failed",
+            links_created=result.links_created,
+            merges_applied=result.merges_performed,
+            derived_created=0,
+            conflicts_flagged=result.flags_raised,
+            errors=result.errors,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in integration for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error occurred while processing integration",
+        )
+
+
+@router.post(
+    "/users/{user_id}/sessions/{session_id}/close",
+    response_model=IntegrateResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def close_session(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    session_id: str = Path(..., description="The session ID to close and integrate"),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        logger.info(f"Closing session {session_id} for user {user_id}")
+        result = await run_integration_agent(
+            user_id=user_id,
+            trigger_ids=[],
+            graph_ops=graph_ops,
+            session_id=session_id,
+        )
+
+        return IntegrateResponse(
+            status="success" if result.success else "failed",
+            links_created=result.links_created,
+            merges_applied=result.merges_performed,
+            derived_created=0,
+            conflicts_flagged=result.flags_raised,
+            errors=result.errors,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error closing session {session_id} for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error occurred while closing session",
         )

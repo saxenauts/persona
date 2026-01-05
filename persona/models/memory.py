@@ -60,6 +60,10 @@ class BaseMemory(BaseModel):
         description="Memory importance score 0-1. Used for ordering and pruning.",
     )
 
+    # Integration tracking
+    integrated_at: Optional[datetime] = Field(default=None)
+    integrated_by: Optional[str] = Field(default=None)
+
     # Catch-all for forward compatibility
     properties: Dict[str, Any] = Field(default_factory=dict)
 
