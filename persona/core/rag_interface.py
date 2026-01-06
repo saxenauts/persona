@@ -6,7 +6,7 @@ from persona.core.graph_ops import GraphOps
 from persona.core.retrieval import Retriever
 from persona.core.memory_store import MemoryStore
 from persona.models.memory import UserCard
-from persona.services.user_service import UserCardService
+from persona.services.consolidation_service import get_or_generate_usercard
 from persona.llm.llm_graph import (
     generate_response_with_context,
     generate_response_with_context_with_stats,
@@ -32,7 +32,6 @@ class RAGInterface:
         self._memory_store: Optional[MemoryStore] = None
         self._retriever: Optional[Retriever] = None
         self._user_card: Optional[UserCard] = None
-        self._user_card_service: Optional[UserCardService] = None
 
     async def __aenter__(self):
         if self._owns_graph_ops:
@@ -43,9 +42,6 @@ class RAGInterface:
 
         self._retriever = Retriever(
             user_id=self.user_id, store=self._memory_store, graph_ops=self.graph_ops
-        )
-        self._user_card_service = UserCardService(
-            self._memory_store, graph_ops=self.graph_ops
         )
 
         return self
@@ -68,16 +64,19 @@ class RAGInterface:
     async def _get_user_card(self) -> Optional[UserCard]:
         if self._user_card:
             return self._user_card
-        if self._user_card_service:
+        if self.graph_ops:
             try:
-                self._user_card = await self._user_card_service.generate(
-                    self.user_id, timezone=self.user_timezone
+                self._user_card = await get_or_generate_usercard(
+                    user_id=self.user_id,
+                    graph_ops=self.graph_ops,
+                    user_timezone=self.user_timezone,
                 )
-                logger.info(
-                    f"Generated UserCard for {self.user_id}: {self._user_card.identity_prose[:50] if self._user_card.identity_prose else 'empty'}"
-                )
+                if self._user_card:
+                    logger.info(
+                        f"UserCard for {self.user_id}: {self._user_card.identity_prose[:50] if self._user_card.identity_prose else 'empty'}"
+                    )
             except Exception as e:
-                logger.warning(f"UserCard generation failed: {e}")
+                logger.warning(f"UserCard fetch failed: {e}")
         return self._user_card
 
     async def query(

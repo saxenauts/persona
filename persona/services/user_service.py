@@ -13,12 +13,12 @@ from server.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-USERCARD_SYSTEM_PROMPT = """Synthesize a 2-3 sentence identity summary from the user's memories.
+USERCARD_SYSTEM_PROMPT = """Synthesize a 2-4 sentence identity summary from the user's memories.
 
-Write in third person, present tense. Focus on:
+Write in third person, present tense. Include:
 - Who they are (role, context)
-- What matters to them (values, priorities)
-- Current life threads (projects, goals, themes)
+- What matters to them (values, priorities)  
+- Current life threads (what they're actively working on or thinking about)
 
 Be concise and natural. Write prose, not lists."""
 
@@ -43,7 +43,11 @@ class UserCardService:
         self.graph_ops = graph_ops
         self.chat_client = get_chat_client()
 
-    async def generate(self, user_id: str, timezone: Optional[str] = None) -> UserCard:
+    async def generate(
+        self,
+        user_id: str,
+        timezone: Optional[str] = None,
+    ) -> UserCard:
         psyche = await self.store.get_by_type("psyche", user_id, limit=15)
         notes = await self.store.get_by_type("note", user_id, limit=10)
         episodes = await self.store.get_by_type("episode", user_id, limit=10)

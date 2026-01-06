@@ -7,7 +7,7 @@ from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
 from persona.adapters.persona_adapter import PersonaAdapter
 from persona.models.memory import UserCard, Memeplex
-from persona.services.user_service import UserCardService
+from persona.services.consolidation_service import get_or_generate_usercard
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
 from persona.llm.prompts import PERSONAL_AI_SYSTEM_PROMPT
@@ -23,21 +23,12 @@ class PersonaService:
     def __init__(self, graph_ops: GraphOps):
         self.graph_ops = graph_ops
         self._memory_store: Optional[MemoryStore] = None
-        self._user_card_service: Optional[UserCardService] = None
 
     @property
     def memory_store(self) -> MemoryStore:
         if self._memory_store is None:
             self._memory_store = MemoryStore(self.graph_ops.graph_db)
         return self._memory_store
-
-    @property
-    def user_card_service(self) -> UserCardService:
-        if self._user_card_service is None:
-            self._user_card_service = UserCardService(
-                self.memory_store, graph_ops=self.graph_ops
-            )
-        return self._user_card_service
 
     async def run_agent(
         self,
@@ -125,15 +116,18 @@ class PersonaService:
         self, user_id: str, user_timezone: str
     ) -> Optional[UserCard]:
         try:
-            user_card = await self.user_card_service.generate(
-                user_id, timezone=user_timezone
+            user_card = await get_or_generate_usercard(
+                user_id=user_id,
+                graph_ops=self.graph_ops,
+                user_timezone=user_timezone,
             )
-            logger.info(
-                f"Generated UserCard for {user_id}: {user_card.identity_prose[:50] if user_card.identity_prose else 'empty'}"
-            )
+            if user_card:
+                logger.info(
+                    f"UserCard for {user_id}: {user_card.identity_prose[:50] if user_card.identity_prose else 'empty'}"
+                )
             return user_card
         except Exception as e:
-            logger.warning(f"UserCard generation failed: {e}")
+            logger.warning(f"UserCard fetch failed: {e}")
             return None
 
     async def _get_memeplex(self, user_id: str) -> Optional[Memeplex]:

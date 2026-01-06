@@ -34,5 +34,12 @@ analysis/
 .opencode/*.md
 AGENTS.md
 
+# Research clones
+honcho_repo/
+letta_repo/
+autogen/
+semantic-kernel/
+sentry_repo/
+
 mintlify-docs
 
