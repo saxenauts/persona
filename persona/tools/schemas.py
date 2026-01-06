@@ -82,6 +82,7 @@ EXPAND_NEIGHBORS_TOOL = {
                             "NEXT",
                             "PREVIOUS",
                             "RELATES_TO",
+                            "MENTIONS",
                         ],
                     },
                     "description": "Filter by relationship types. If omitted, returns all.",
@@ -110,7 +111,14 @@ FOLLOW_RELATIONSHIP_TOOL = {
                 },
                 "relation_type": {
                     "type": "string",
-                    "enum": ["LED_TO", "CAUSED_BY", "NEXT", "PREVIOUS", "RELATES_TO"],
+                    "enum": [
+                        "LED_TO",
+                        "CAUSED_BY",
+                        "NEXT",
+                        "PREVIOUS",
+                        "RELATES_TO",
+                        "MENTIONS",
+                    ],
                     "description": "The relationship type to follow.",
                 },
                 "limit": {

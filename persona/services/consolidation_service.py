@@ -6,15 +6,18 @@ No intermediate theme extraction - "current threads" are folded into the UserCar
 Runs after integration to refresh the cached UserCard.
 """
 
+import json
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import UserCard
+from persona.models.memory import UserCard, TemporalContext, Memory
 from persona.services.user_service import UserCardService
+from persona.llm.client_factory import get_chat_client
+from persona.llm.providers.base import ChatMessage
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -22,10 +25,26 @@ logger = get_logger(__name__)
 USERCARD_TTL_HOURS = 1.0
 
 
+TEMPORAL_CONTEXT_PROMPT = """Summarize recent activity from these memories into temporal context.
+
+Return JSON with:
+- week_summary: 2-3 sentences on what's happening THIS WEEK (key events, themes, people)
+- month_summary: 2-3 sentences on THIS MONTH's major themes
+- upcoming: array of up to 3 upcoming events/deadlines mentioned
+
+Be concise. Focus on what's most relevant for context.
+
+Memories:
+{memories}
+
+Return only valid JSON."""
+
+
 @dataclass
 class ConsolidationResult:
     success: bool
     user_card_updated: bool = False
+    temporal_context_updated: bool = False
     duration_ms: float = 0.0
     reason: str = ""
     errors: List[str] = field(default_factory=list)
@@ -36,17 +55,13 @@ async def run_consolidation(
     graph_ops: Optional[GraphOps] = None,
     force: bool = False,
 ) -> ConsolidationResult:
-    """Distill user identity into cached UserCard.
+    """Distill user identity into cached UserCard and temporal context.
 
     Pipeline:
     1. Check if cached UserCard is fresh (skip if < TTL hours old)
     2. Generate new UserCard via single LLM call
-    3. Persist to graph for caching
-
-    Args:
-        user_id: User to consolidate
-        graph_ops: Optional GraphOps (creates one if not provided)
-        force: Force refresh even if recently updated
+    3. Generate temporal context (week/month summaries)
+    4. Persist both to graph for caching
     """
     start_time = time.time()
     result = ConsolidationResult(success=True)
@@ -83,6 +98,12 @@ async def run_consolidation(
             )
         else:
             result.reason = "no_memories"
+
+        temporal_ctx = await generate_temporal_context(user_id, graph_ops)
+        if temporal_ctx and (temporal_ctx.week_summary or temporal_ctx.month_summary):
+            await persist_temporal_context(graph_ops, user_id, temporal_ctx)
+            result.temporal_context_updated = True
+            logger.info(f"Updated temporal context for {user_id}")
 
         result.duration_ms = (time.time() - start_time) * 1000
 
@@ -140,6 +161,54 @@ async def persist_usercard(graph_ops: GraphOps, user_id: str, card: UserCard) ->
     )
 
 
+async def persist_temporal_context(
+    graph_ops: GraphOps, user_id: str, ctx: TemporalContext
+) -> None:
+    now = datetime.now(timezone.utc)
+    await graph_ops.graph_db.create_nodes(
+        [
+            {
+                "name": f"temporal_context_{user_id}",
+                "type": "temporal_context",
+                "current_date": ctx.current_date,
+                "week_summary": ctx.week_summary,
+                "week_start": ctx.week_start,
+                "month_summary": ctx.month_summary,
+                "month_name": ctx.month_name,
+                "upcoming": json.dumps(ctx.upcoming),
+                "updated_at": now.isoformat(),
+            }
+        ],
+        user_id,
+    )
+
+
+async def get_cached_temporal_context(
+    graph_ops: GraphOps, user_id: str
+) -> Optional[TemporalContext]:
+    try:
+        nodes = await graph_ops.graph_db.get_all_nodes(user_id)
+        for node in nodes:
+            if node.get("type") == "temporal_context":
+                upcoming_raw = node.get("upcoming", "[]")
+                try:
+                    upcoming = json.loads(upcoming_raw) if upcoming_raw else []
+                except json.JSONDecodeError:
+                    upcoming = []
+
+                return TemporalContext(
+                    current_date=node.get("current_date", ""),
+                    week_summary=node.get("week_summary", ""),
+                    week_start=node.get("week_start", ""),
+                    month_summary=node.get("month_summary", ""),
+                    month_name=node.get("month_name", ""),
+                    upcoming=upcoming,
+                )
+    except Exception as e:
+        logger.warning(f"Failed to read cached temporal context: {e}")
+    return None
+
+
 def _card_age_hours(card: UserCard) -> float:
     """Calculate age of UserCard in hours."""
     if not card.updated_at:
@@ -152,6 +221,75 @@ def _card_age_hours(card: UserCard) -> float:
 
     delta = now - card_time
     return delta.total_seconds() / 3600
+
+
+async def generate_temporal_context(
+    user_id: str,
+    graph_ops: GraphOps,
+) -> Optional[TemporalContext]:
+    """Generate week/month summaries from recent memories."""
+    store = MemoryStore(graph_ops.graph_db)
+    now = datetime.now(timezone.utc)
+
+    week_start = now - timedelta(days=now.weekday())
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    episodes = await store.get_by_type("episode", user_id, limit=20)
+
+    week_episodes = [
+        e
+        for e in episodes
+        if e.event_time and e.event_time >= week_start.replace(tzinfo=None)
+    ]
+    month_episodes = [
+        e
+        for e in episodes
+        if e.event_time and e.event_time >= month_start.replace(tzinfo=None)
+    ]
+
+    if not month_episodes:
+        return TemporalContext(
+            current_date=now.strftime("%A, %B %d, %Y"),
+            week_start=week_start.strftime("%Y-%m-%d"),
+            month_name=now.strftime("%B %Y"),
+        )
+
+    memory_text = "\n".join(
+        [
+            f"[{e.event_time.strftime('%Y-%m-%d') if e.event_time else ''}] {e.content[:150]}"
+            for e in month_episodes[:15]
+        ]
+    )
+
+    try:
+        chat_client = get_chat_client()
+        response = await chat_client.chat(
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content=TEMPORAL_CONTEXT_PROMPT.format(memories=memory_text),
+                )
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        data = json.loads(response.content or "{}")
+
+        return TemporalContext(
+            current_date=now.strftime("%A, %B %d, %Y"),
+            week_summary=data.get("week_summary", ""),
+            week_start=week_start.strftime("%Y-%m-%d"),
+            month_summary=data.get("month_summary", ""),
+            month_name=now.strftime("%B %Y"),
+            upcoming=data.get("upcoming", [])[:3],
+        )
+    except Exception as e:
+        logger.warning(f"Temporal context generation failed: {e}")
+        return TemporalContext(
+            current_date=now.strftime("%A, %B %d, %Y"),
+            week_start=week_start.strftime("%Y-%m-%d"),
+            month_name=now.strftime("%B %Y"),
+        )
 
 
 async def maybe_run_consolidation(

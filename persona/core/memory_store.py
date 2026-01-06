@@ -18,6 +18,7 @@ from persona.models.memory import (
     Memeplex,
     ActiveMemory,
     MemoryStats,
+    TemporalContext,
 )
 from server.logging_config import get_logger
 
@@ -634,9 +635,22 @@ class MemoryStore:
     async def get_memeplex(self, user_id: str) -> Optional[Memeplex]:
         all_nodes = await self.graph_db.get_all_nodes(user_id)
 
+        memeplex_node = None
+        temporal_node = None
+
         for node in all_nodes:
             if node.get("type") == "memeplex":
-                return self._node_to_memeplex(node, user_id)
+                memeplex_node = node
+            elif node.get("type") == "temporal_context":
+                temporal_node = node
+
+        if memeplex_node:
+            memeplex = self._node_to_memeplex(memeplex_node, user_id)
+            if temporal_node:
+                memeplex.temporal_context = self._node_to_temporal_context(
+                    temporal_node
+                )
+            return memeplex
 
         return None
 
@@ -768,4 +782,29 @@ class MemoryStore:
             recent_keywords=recent_keywords,
             memory_stats=MemoryStats(**memory_stats_data),
             timeline_summary=props.get("timeline_summary", ""),
+        )
+
+    def _node_to_temporal_context(self, node: Dict[str, Any]) -> TemporalContext:
+        import json
+
+        props = node.get("properties", {})
+        if not props and "type" in node:
+            props = node
+
+        upcoming_raw = props.get("upcoming", "[]")
+        if isinstance(upcoming_raw, str):
+            try:
+                upcoming = json.loads(upcoming_raw)
+            except json.JSONDecodeError:
+                upcoming = []
+        else:
+            upcoming = upcoming_raw if upcoming_raw else []
+
+        return TemporalContext(
+            current_date=props.get("current_date", ""),
+            week_summary=props.get("week_summary", ""),
+            week_start=props.get("week_start", ""),
+            month_summary=props.get("month_summary", ""),
+            month_name=props.get("month_name", ""),
+            upcoming=upcoming,
         )

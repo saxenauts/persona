@@ -398,11 +398,41 @@ class MemoryStats(BaseModel):
     session_count: int = 0
 
 
+class TemporalContext(BaseModel):
+    """Temporal grounding for the user's memory.
+
+    Provides week/month summaries that update with consolidation.
+    Helps LLM understand temporal context without needing to query.
+    """
+
+    current_date: str = Field(default="", description="Today's date for reference")
+
+    # This week's context
+    week_summary: str = Field(
+        default="",
+        description="2-3 sentences: What's been happening this week. Key events, themes, people.",
+    )
+    week_start: str = Field(default="", description="ISO date of week start (Monday)")
+
+    # This month's context
+    month_summary: str = Field(
+        default="", description="2-3 sentences: Major themes and events this month."
+    )
+    month_name: str = Field(default="", description="e.g., 'January 2026'")
+
+    # Key dates the user cares about (extracted from memories)
+    upcoming: List[str] = Field(
+        default_factory=list,
+        description="Up to 3 upcoming events/deadlines mentioned in memories",
+    )
+
+
 class Memeplex(BaseModel):
     """Per-user memory index. Stored as single JSON node in Neo4j.
 
     The Memeplex is the "table of contents" for a user's memory:
     - What's currently active (2-5 items typically)
+    - Temporal context (this week, this month)
     - Recent context for continuity
     - Keywords so LLM knows what's queryable
     - Overview stats
@@ -413,6 +443,9 @@ class Memeplex(BaseModel):
 
     user_id: str
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Temporal grounding
+    temporal_context: Optional[TemporalContext] = Field(default=None)
 
     # What's active right now (2-5 items typically)
     active_memories: List[ActiveMemory] = Field(default_factory=list)
@@ -437,6 +470,19 @@ class Memeplex(BaseModel):
     def to_system_prompt(self) -> str:
         """Render Memeplex as system prompt section for LLM consumption."""
         lines = ["<memeplex>"]
+
+        # Temporal context first (recency/primacy)
+        if self.temporal_context:
+            tc = self.temporal_context
+            if tc.current_date:
+                lines.append(f"TODAY: {tc.current_date}")
+            if tc.week_summary:
+                lines.append(f"THIS WEEK ({tc.week_start}): {tc.week_summary}")
+            if tc.month_summary:
+                lines.append(f"THIS MONTH ({tc.month_name}): {tc.month_summary}")
+            if tc.upcoming:
+                lines.append(f"UPCOMING: {', '.join(tc.upcoming[:3])}")
+            lines.append("")
 
         # Active memories
         if self.active_memories:
