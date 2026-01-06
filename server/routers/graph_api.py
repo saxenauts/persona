@@ -53,6 +53,40 @@ def get_version():
     return {"version": "1.0.0"}
 
 
+class RateLimiterStats(BaseModel):
+    name: str
+    bucket_tokens: int
+    bucket_requests: float
+    total_requests: int
+    total_tokens: int
+    wait_time_ms: int
+    retries_429: int
+
+
+class StatsResponse(BaseModel):
+    rate_limiters: List[RateLimiterStats]
+    uptime_seconds: float
+
+
+import time as _time
+
+_server_start_time = _time.time()
+
+
+@router.get("/stats", response_model=StatsResponse)
+async def get_stats():
+    """Get real-time rate limiter statistics for monitoring bandwidth/quota utilization."""
+    from persona.llm.rate_limiter import get_rate_limiter_registry
+
+    registry = get_rate_limiter_registry()
+    stats = registry.get_all_stats()
+
+    return StatsResponse(
+        rate_limiters=[RateLimiterStats(**s) for s in stats],
+        uptime_seconds=_time.time() - _server_start_time,
+    )
+
+
 @router.post("/users/{user_id}")
 async def create_user(
     response: Response,

@@ -107,7 +107,7 @@ class Neo4jGraphDatabase(GraphDatabase):
                     if any(isinstance(item, (dict, list)) for item in v):
                         is_complex = True
 
-                props[k] = json.dumps(v) if is_complex else v
+                props[k] = json.dumps(v, default=str) if is_complex else v
 
             grouped_rows.setdefault(labels, []).append(
                 {"name": node["name"], "props": props}

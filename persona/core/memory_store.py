@@ -40,25 +40,20 @@ class MemoryStore:
         self.vector_store = vector_store
 
     def _memory_to_node_data(self, memory: Memory) -> Dict[str, Any]:
-        # Set day_id if not provided
         if not memory.day_id:
             memory.day_id = memory.event_time.strftime("%Y-%m-%d")
 
-        node_data = memory.model_dump(exclude={"properties"})
+        node_data = memory.model_dump(mode="json", exclude={"properties"})
         node_data["name"] = str(memory.id)
 
-        for k, v in node_data.items():
-            if isinstance(v, UUID):
-                node_data[k] = str(v)
-            elif isinstance(v, datetime):
-                node_data[k] = v.isoformat()
-
         if hasattr(memory, "properties") and memory.properties:
-            node_data.update(memory.properties)
-
-        for field in ["event_time", "observed_at", "due_date", "last_accessed"]:
-            if field in node_data and isinstance(node_data[field], datetime):
-                node_data[field] = node_data[field].isoformat()
+            for k, v in memory.properties.items():
+                if isinstance(v, UUID):
+                    node_data[k] = str(v)
+                elif isinstance(v, datetime):
+                    node_data[k] = v.isoformat()
+                else:
+                    node_data[k] = v
 
         return node_data
 
