@@ -126,9 +126,20 @@ Current status: Interface definitions only. Implementation requires entity extra
 
 Required in `.env`:
 ```env
-LLM_SERVICE=openai/gpt-4o-mini
-EMBEDDING_SERVICE=openai/text-embedding-3-small
-OPENAI_API_KEY=sk-...
+# LLM providers: openai or foundry
+LLM_SERVICE=foundry/gpt-5.2
+EMBEDDING_SERVICE=foundry/text-embedding-3-small
+
+# For OpenAI provider
+# OPENAI_API_KEY=sk-...
+
+# For Foundry provider
+AZURE_API_KEY=...
+AZURE_API_BASE=https://...
+AZURE_CHAT_DEPLOYMENT=gpt-5.2
+AZURE_EMBEDDING_DEPLOYMENT=text-embedding-3-small
+
+# Graph Database
 URI_NEO4J=bolt://neo4j:7687
 USER_NEO4J=neo4j
 PASSWORD_NEO4J=...
