@@ -190,29 +190,33 @@ class AsyncExecutor:
         """Get rate limiter for a provider/adapter."""
         return self._rate_limiters.get(name) or self._rate_limiters.get("default")
 
+    def _format_query_with_options(self, test_case: TestCase) -> str:
+        query = test_case.query
+        if test_case.options and test_case.correct_option:
+            options_text = "\n".join(
+                f"({k}) {v}" for k, v in sorted(test_case.options.items())
+            )
+            query = f"{query}\n\nWhich response is most appropriate based on what you know about me?\n{options_text}\n\nRespond with just the letter (a, b, c, or d)."
+        return query
+
     async def execute_query(
         self,
         adapter: MemorySystemAdapter,
         test_case: TestCase,
     ) -> QueryResult:
-        """
-        Execute a single query with rate limiting and retry.
-
-        Flow: acquire semaphore → rate limit → retry wrapper → adapter call
-        """
         limiter = self.get_limiter(adapter.name)
+        formatted_query = self._format_query_with_options(test_case)
 
         async with self._semaphore:
-            # Apply rate limiting if configured
             if limiter:
                 await limiter.acquire()
 
             async def do_query():
                 if adapter.capabilities.supports_async:
-                    return await adapter.aquery(test_case.user_id, test_case.query)
+                    return await adapter.aquery(test_case.user_id, formatted_query)
                 else:
                     return await asyncio.to_thread(
-                        adapter.query, test_case.user_id, test_case.query
+                        adapter.query, test_case.user_id, formatted_query
                     )
 
             try:

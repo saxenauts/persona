@@ -129,7 +129,18 @@ class PersonaAdapter:
         return result
 
     async def close_session(self, session_id: str) -> None:
-        """Close a session: run integration on its memories, then consolidation."""
+        import os
+
+        skip_integration = os.getenv("SKIP_INTEGRATION", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if skip_integration:
+            logger.info(
+                f"Skipping integration for session {session_id} (SKIP_INTEGRATION=true)"
+            )
+            return
         logger.info(f"Closing session {session_id} for user {self.user_id}")
         await run_integration_agent(
             user_id=self.user_id,
@@ -263,7 +274,12 @@ class PersonaAdapter:
 
         logger.info(f"Batch ingestion complete: {len(final_results)} results")
 
-        if persist and any(r.success for r in final_results):
+        skip_integration = os.getenv("SKIP_INTEGRATION", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if persist and any(r.success for r in final_results) and not skip_integration:
             all_memory_ids = []
             for r in final_results:
                 if r.success:
@@ -278,5 +294,7 @@ class PersonaAdapter:
                     trigger_ids=all_memory_ids,
                     graph_ops=self.graph_ops,
                 )
+        elif skip_integration:
+            logger.info("Skipping integration agent (SKIP_INTEGRATION=true)")
 
         return final_results
