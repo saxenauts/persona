@@ -45,12 +45,28 @@ class ExpandResult:
 
 
 def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
-    content = getattr(memory, "content", "") or ""
     title = getattr(memory, "title", "") or ""
-    snippet = content[:200] + "..." if len(content) > 200 else content
-
     ts = getattr(memory, "event_time", None)
     timestamp_str = ts.isoformat() if ts else ""
+
+    if memory.type == "entity":
+        parts = [
+            f"{getattr(memory, 'entity_type', 'entity')}: {getattr(memory, 'canonical_name', title)}"
+        ]
+        aliases = getattr(memory, "aliases", [])
+        if aliases:
+            parts.append(f"(aliases: {', '.join(aliases)})")
+        desc = getattr(memory, "description", "")
+        if desc:
+            parts.append(desc)
+        attrs = getattr(memory, "attributes", [])
+        if attrs:
+            attr_strs = [f"{a.key}: {a.value}" for a in attrs[:10]]
+            parts.append("Facts: " + "; ".join(attr_strs))
+        snippet = " | ".join(parts)
+    else:
+        content = getattr(memory, "content", "") or ""
+        snippet = content[:200] + "..." if len(content) > 200 else content
 
     return MemoryHit(
         id=str(memory.id),

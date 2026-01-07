@@ -255,6 +255,17 @@ class MemoryIngestionService:
             from persona.models.memory import EntityMemory, EntityAttribute
 
             for e in extraction.entities:
+                # Build rich content that includes attributes for better vector search
+                content_parts = [f"{e.entity_type}: {e.canonical_name}"]
+                if e.aliases:
+                    content_parts.append(f"(also known as: {', '.join(e.aliases)})")
+                if e.description:
+                    content_parts.append(e.description)
+                if e.attributes:
+                    attr_strs = [f"{a.key}: {a.value}" for a in e.attributes]
+                    content_parts.append("Facts: " + "; ".join(attr_strs))
+                entity_content = " | ".join(content_parts)
+
                 entity = EntityMemory(
                     id=uuid4(),
                     entity_type=e.entity_type,
@@ -262,7 +273,7 @@ class MemoryIngestionService:
                     aliases=e.aliases,
                     description=e.description,
                     title=e.canonical_name,
-                    content=e.description or f"{e.entity_type}: {e.canonical_name}",
+                    content=entity_content,
                     attributes=[
                         EntityAttribute(
                             key=attr.key,
