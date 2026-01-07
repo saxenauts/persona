@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from ..core.models import TestCase, QueryResult, EvalResult, MetricResult
+from ..core.models import TestCase, QueryResult, EvalResult, MetricResult, Session
 from ..core.interfaces import MemorySystemAdapter, Metric, AdapterCapabilities
 
 
@@ -440,18 +440,187 @@ class AsyncExecutor:
                 on_progress(completed, total, result)
             return result
 
-        # Use TaskGroup for structured concurrency (Python 3.11+)
+        tasks: list[asyncio.Task[EvalResult]] = []
         try:
             async with asyncio.TaskGroup() as tg:
                 tasks = [tg.create_task(run_one(tc)) for tc in test_cases]
             results = [t.result() for t in tasks]
         except ExceptionGroup as eg:
-            # Handle partial failures
             for exc in eg.exceptions:
                 print(f"Task failed: {exc}")
-            # Collect successful results
             results = [
                 t.result() for t in tasks if not t.cancelled() and t.exception() is None
             ]
 
         return results
+
+    async def run_query_only(
+        self,
+        adapter: MemorySystemAdapter,
+        test_case: TestCase,
+        metrics: Sequence[Metric],
+        resources: Mapping[str, Any],
+        run_id: str,
+    ) -> EvalResult:
+        """
+        Run query and metrics only (skip reset/ingest).
+
+        Used when sessions are pre-ingested via run_cases_grouped().
+        """
+        started = datetime.utcnow()
+
+        # Execute query
+        query_result = await self.execute_query(adapter, test_case)
+
+        # Evaluate metrics
+        metric_results = await self.evaluate_metrics(
+            test_case, query_result, metrics, resources, adapter.capabilities
+        )
+
+        # Determine overall pass/fail
+        passed = all(m.passed for m in metric_results) if metric_results else False
+
+        finished = datetime.utcnow()
+
+        return EvalResult(
+            run_id=run_id,
+            adapter=adapter.name,
+            benchmark=test_case.benchmark,
+            test_case_id=test_case.id,
+            question_type=test_case.question_type,
+            query_result=query_result,
+            metric_results=tuple(metric_results),
+            passed=passed,
+            started_at=started,
+            finished_at=finished,
+        )
+
+    async def run_cases_grouped(
+        self,
+        adapter: MemorySystemAdapter,
+        test_cases: Sequence[TestCase],
+        metrics: Sequence[Metric],
+        resources: Mapping[str, Any],
+        run_id: str,
+        *,
+        on_progress: Optional[Callable[[int, int, EvalResult], None]] = None,
+    ) -> Sequence[EvalResult]:
+        """
+        Run evaluation with pre-ingestion optimization.
+
+        Groups test cases by user_id, ingests each user's sessions ONCE,
+        then runs all queries for that user against pre-ingested data.
+
+        Optimization: Reduces ingestion from O(n) to O(unique_users).
+        For PersonaMem with ~16 questions per shared context, this is ~16x faster.
+
+        Args:
+            adapter: Memory system to evaluate
+            test_cases: Test cases to run
+            metrics: Metrics to evaluate
+            resources: Shared resources (LLM clients, etc.)
+            run_id: Unique run identifier
+            on_progress: Optional callback(completed, total, result) for progress
+
+        Returns:
+            Sequence of EvalResults
+        """
+        from collections import defaultdict
+
+        # Group test cases by user_id
+        by_user: dict[str, list[TestCase]] = defaultdict(list)
+        for tc in test_cases:
+            by_user[tc.user_id].append(tc)
+
+        total = len(test_cases)
+        completed = 0
+        all_results: list[EvalResult] = []
+
+        # Process each user group sequentially (but queries within group run parallel)
+        for user_id, user_cases in by_user.items():
+            # Get sessions from first test case that has them
+            sessions = None
+            for tc in user_cases:
+                if tc.sessions:
+                    sessions = tc.sessions
+                    break
+
+            # Reset adapter for this user
+            try:
+                if adapter.capabilities.supports_async:
+                    await adapter.areset(user_id)
+                else:
+                    await asyncio.to_thread(adapter.reset, user_id)
+            except Exception as e:
+                # Mark all cases for this user as failed
+                for tc in user_cases:
+                    err_result = EvalResult(
+                        run_id=run_id,
+                        adapter=adapter.name,
+                        benchmark=tc.benchmark,
+                        test_case_id=tc.id,
+                        question_type=tc.question_type,
+                        query_result=QueryResult(answer="", error=f"Reset failed: {e}"),
+                        passed=False,
+                        started_at=datetime.utcnow(),
+                        finished_at=datetime.utcnow(),
+                    )
+                    all_results.append(err_result)
+                    completed += 1
+                    if on_progress:
+                        on_progress(completed, total, err_result)
+                continue
+
+            # Ingest sessions ONCE for this user
+            if sessions:
+                ingest_error = await self.execute_ingestion(adapter, user_id, sessions)
+                if ingest_error:
+                    # Mark all cases for this user as failed
+                    for tc in user_cases:
+                        err_result = EvalResult(
+                            run_id=run_id,
+                            adapter=adapter.name,
+                            benchmark=tc.benchmark,
+                            test_case_id=tc.id,
+                            question_type=tc.question_type,
+                            query_result=QueryResult(
+                                answer="", error=f"Ingestion failed: {ingest_error}"
+                            ),
+                            passed=False,
+                            started_at=datetime.utcnow(),
+                            finished_at=datetime.utcnow(),
+                        )
+                        all_results.append(err_result)
+                        completed += 1
+                        if on_progress:
+                            on_progress(completed, total, err_result)
+                    continue
+
+            # Run all queries for this user in parallel (no more ingestion)
+            async def run_query(tc: TestCase) -> EvalResult:
+                nonlocal completed
+                result = await self.run_query_only(
+                    adapter, tc, metrics, resources, run_id
+                )
+                completed += 1
+                if on_progress:
+                    on_progress(completed, total, result)
+                return result
+
+            tasks: list[asyncio.Task[EvalResult]] = []
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    tasks = [tg.create_task(run_query(tc)) for tc in user_cases]
+                user_results = [t.result() for t in tasks]
+            except ExceptionGroup as eg:
+                for exc in eg.exceptions:
+                    print(f"Query task failed: {exc}")
+                user_results = [
+                    t.result()
+                    for t in tasks
+                    if not t.cancelled() and t.exception() is None
+                ]
+
+            all_results.extend(user_results)
+
+        return all_results

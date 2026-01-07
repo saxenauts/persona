@@ -40,19 +40,18 @@ from .executor import AsyncExecutor, ExecutorConfig, TokenBucket
 class EngineConfig:
     """Configuration for the evaluation engine."""
 
-    # Execution settings
     concurrency: int = 10
     rate_limit_rpm: Optional[int] = None
     timeout_seconds: float = 300.0
     retry_max_attempts: int = 5
 
-    # Sampling (for quick runs)
     sample_sizes: Optional[Mapping[str, int]] = None
     sample_seed: Optional[int] = None
 
-    # Output settings
     verbose: bool = False
     progress_callback: Optional[Callable[[int, int, EvalResult], None]] = None
+
+    group_by_user: bool = True
 
 
 @dataclass
@@ -233,7 +232,6 @@ class Engine:
         if self.config.verbose:
             print(f"Loaded {len(test_cases)} test cases from {benchmark.name}")
 
-        # Get metrics
         metrics = []
         for name in metric_names:
             metric = self.get_metric(name)
@@ -241,15 +239,24 @@ class Engine:
                 raise ValueError(f"Unknown metric: {name}. Register it first.")
             metrics.append(metric)
 
-        # Run evaluation
-        results = await self.executor.run_cases(
-            adapter=adapter,
-            test_cases=test_cases,
-            metrics=metrics,
-            resources=resources,
-            run_id=run_id,
-            on_progress=self.config.progress_callback,
-        )
+        if self.config.group_by_user:
+            results = await self.executor.run_cases_grouped(
+                adapter=adapter,
+                test_cases=test_cases,
+                metrics=metrics,
+                resources=resources,
+                run_id=run_id,
+                on_progress=self.config.progress_callback,
+            )
+        else:
+            results = await self.executor.run_cases(
+                adapter=adapter,
+                test_cases=test_cases,
+                metrics=metrics,
+                resources=resources,
+                run_id=run_id,
+                on_progress=self.config.progress_callback,
+            )
 
         finished_at = datetime.utcnow()
 
