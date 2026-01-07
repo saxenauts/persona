@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
@@ -88,14 +89,12 @@ class PersonaMemBenchmark:
                 id=question_id,
                 benchmark=self.name,
                 user_id=f"user_{context_id or i}",
-                query=q.get("question", ""),
+                query=q.get("user_question_or_message") or q.get("question", ""),
                 sessions=tuple(sessions),
                 reference_answer=q.get("correct_answer", ""),
-                question_type=q.get("category", "unknown"),
-                options=q.get("options", {}),
-                correct_option=q.get("correct_answer", "").lower()
-                if q.get("correct_answer") in "abcdABCD"
-                else None,
+                question_type=q.get("question_type", "unknown"),
+                options=self._parse_options(q),
+                correct_option=self._parse_correct_option(q),
                 metadata={
                     "shared_context_id": context_id,
                     "variant": variant,
@@ -107,13 +106,43 @@ class PersonaMemBenchmark:
         return test_cases
 
     def _turns_to_content(self, turns: list) -> str:
-        """Convert conversation turns to session content."""
         parts = []
         for turn in turns:
             role = turn.get("role", "user").capitalize()
             content = turn.get("content", "")
             parts.append(f"{role}: {content}")
         return "\n".join(parts)
+
+    def _parse_options(self, q: dict) -> dict[str, str]:
+        raw = q.get("all_options") or q.get("options")
+        if not raw:
+            return {}
+        if isinstance(raw, dict):
+            return {str(k).lower(): str(v) for k, v in raw.items()}
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                return {}
+        if not isinstance(raw, list):
+            return {}
+        options: dict[str, str] = {}
+        for idx, opt in enumerate(raw):
+            text = str(opt)
+            match = re.match(r"\s*\(?([a-dA-D])\)?\s*[:\).\- ]*\s*(.*)", text)
+            if match:
+                letter = match.group(1).lower()
+                options[letter] = match.group(2).strip()
+            elif idx < 4:
+                options["abcd"[idx]] = text.strip()
+        return options
+
+    def _parse_correct_option(self, q: dict) -> Optional[str]:
+        raw = q.get("correct_answer", "")
+        if not raw:
+            return None
+        match = re.search(r"[a-dA-D]", str(raw))
+        return match.group(0).lower() if match else None
 
     def default_metrics(self) -> Sequence[str]:
         """Default metrics for PersonaMem."""
