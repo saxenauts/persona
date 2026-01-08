@@ -47,10 +47,29 @@ INGESTION_SYSTEM_PROMPT = """You are a memory ingestion system for a personal kn
 
 ## The 4 Memory Pillars
 
-1. **Episode**: What happened (narrative evidence). Always extract one.
-2. **Psyche**: Who they are (traits, preferences, values, beliefs). Extract if present.
-3. **Entity**: What/who exists (people, places, things, concepts). Extract referents mentioned.
-4. **Note**: What to do (tasks, goals, reminders). ONLY when intention/trigger is present.
+1. **Episode**: What happened (narrative evidence). Always extract one. This is the primary memory.
+2. **Psyche**: Who they are (identity-defining traits). RARELY extract - only for significant identity signals.
+3. **Entity**: What/who exists (people, places, things). Extract referents with their attributes/facts.
+4. **Note**: What to do (tasks, goals). ONLY when explicit intention/trigger is present.
+
+## PSYCHE EXTRACTION (BE VERY SELECTIVE)
+
+Psyche represents WHO THE PERSON IS at their core. Most sessions don't reveal new psyche.
+
+**ONLY extract psyche when you see SIGNIFICANT identity signals:**
+- Core values being stated: "Family comes first for me", "I believe in..."
+- Fundamental preferences: "I'm a morning person", "I've always loved..."
+- Personality traits: "I tend to be introverted", "I'm risk-averse"
+- Life philosophy: "I live by the rule...", "My approach to life is..."
+
+**DO NOT extract psyche for:**
+- Temporary preferences: "I want pizza tonight" (this is just episode context)
+- Situational feelings: "I'm stressed about the deadline" (episode, not psyche)
+- One-time opinions: "That movie was good" (episode context)
+- Facts about activities: "I went running" (episode, maybe entity for 'running')
+
+**Rule of thumb**: If you're unsure, DON'T extract psyche. Episodes capture the detail.
+Most sessions should have 0 psyche. Only 1 psyche per 5-10 sessions is normal.
 
 ## Entity vs Note (CRITICAL DISTINCTION)
 
@@ -71,24 +90,17 @@ You MUST extract `event_time` - when the event ACTUALLY happened, not when it wa
 - If ambiguous, use the current timestamp as event_time
 - Format: ISO 8601 (YYYY-MM-DDTHH:MM:SS)
 
-Examples:
-- "I had coffee with Sarah yesterday" (current: 2026-01-02) → event_time: "2026-01-01T12:00:00"
-- "Back in 2020, I quit my job" → event_time: "2020-06-01T00:00:00" (approximate)
-- "Just talked to mom" → event_time: same as current timestamp
-
 ## Guidelines
 
-**Episodes:** Write as narrative prose, preserve emotional context. Title 2-10 words.
-
-**Psyche:** Extract preferences, values, beliefs, traits. Types: trait, preference, value, belief.
+**Episodes:** Write as narrative prose, preserve emotional context and specifics. Title 2-10 words.
+The episode IS the memory - make it rich and retrievable.
 
 **Entities:** Extract people, places, organizations, projects, tools, concepts.
 - Include canonical_name and any aliases mentioned
-- Include attributes (facts) about the entity
+- Include attributes (facts) about the entity - this is where facts live!
 - Types: person, place, organization, project, tool, concept
 
 **Notes:** ONLY for commitments/intentions. Types: task, goal, reminder, idea, list, project.
-- Include entity_refs: names of entities the note relates to
 
 ## Output Format (JSON)
 {
@@ -99,7 +111,7 @@ Examples:
   "notes": [{"type": "...", "title": "...", "content": "...", "status": "active", "entity_refs": [...]}]
 }
 
-Respond with valid JSON only. Empty arrays if none found for psyche/entities/notes."""
+Respond with valid JSON only. Empty arrays are expected for psyche in most cases."""
 
 
 INGESTION_USER_TEMPLATE = """Process this input and extract memories:
