@@ -120,10 +120,16 @@ class PersonaMemBenchmark:
         if isinstance(raw, dict):
             return {str(k).lower(): str(v) for k, v in raw.items()}
         if isinstance(raw, str):
+            # Try JSON first (double quotes), then Python literal (single quotes)
             try:
                 raw = json.loads(raw)
             except json.JSONDecodeError:
-                return {}
+                import ast
+
+                try:
+                    raw = ast.literal_eval(raw)
+                except (ValueError, SyntaxError):
+                    return {}
         if not isinstance(raw, list):
             return {}
         options: dict[str, str] = {}
