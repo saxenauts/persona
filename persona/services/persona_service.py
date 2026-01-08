@@ -46,13 +46,8 @@ class PersonaService:
         user_card = await self._get_user_card(user_id, user_timezone)
         memeplex = await self._get_memeplex(user_id)
 
-        memeplex_context = ""
-        if memeplex:
-            memeplex_context = memeplex.to_system_prompt()
-
-        system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
-            memeplex_context=memeplex_context
-        )
+        user_context = self._build_user_context(user_card, memeplex)
+        system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(user_context=user_context)
 
         adapter = PersonaAdapter(user_id=user_id, graph_ops=self.graph_ops)
 
@@ -141,6 +136,21 @@ class PersonaService:
         except Exception as e:
             logger.warning(f"Memeplex load failed: {e}")
             return None
+
+    def _build_user_context(
+        self, user_card: Optional[UserCard], memeplex: Optional[Memeplex]
+    ) -> str:
+        parts = []
+
+        if user_card and user_card.identity_prose:
+            parts.append(f"## Who They Are\n\n{user_card.identity_prose}")
+
+        if memeplex:
+            memeplex_str = memeplex.to_system_prompt()
+            if memeplex_str:
+                parts.append(memeplex_str)
+
+        return "\n\n".join(parts) if parts else ""
 
     async def ask(
         self,

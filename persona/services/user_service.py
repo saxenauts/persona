@@ -13,14 +13,16 @@ from server.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-USERCARD_SYSTEM_PROMPT = """Synthesize a 2-4 sentence identity summary from the user's memories.
+USERCARD_SYSTEM_PROMPT = """Synthesize a 5-8 sentence identity summary from the user's memories.
 
 Write in third person, present tense. Include:
-- Who they are (role, context)
-- What matters to them (values, priorities)  
+- Who they are (role, context, background)
+- What they do (hobbies, creative pursuits, tools they use)
+- What matters to them (values, priorities, preferences)
 - Current life threads (what they're actively working on or thinking about)
 
-Be concise and natural. Write prose, not lists."""
+Preserve specific details: tool names, activity types, genres, techniques.
+Be natural prose, not lists. Every detail might matter for future personalization."""
 
 
 class UserService:
@@ -48,9 +50,9 @@ class UserCardService:
         user_id: str,
         timezone: Optional[str] = None,
     ) -> UserCard:
-        psyche = await self.store.get_by_type("psyche", user_id, limit=15)
+        psyche = await self.store.get_by_type("psyche", user_id, limit=20)
         notes = await self.store.get_by_type("note", user_id, limit=10)
-        episodes = await self.store.get_by_type("episode", user_id, limit=10)
+        episodes = await self.store.get_by_type("episode", user_id, limit=15)
 
         active_notes = [
             n for n in notes if getattr(n, "status", "active") != "COMPLETED"
@@ -102,17 +104,17 @@ class UserCardService:
     ) -> str:
         lines = []
 
-        for m in psyche[:10]:
+        for m in psyche[:15]:
             ptype = getattr(m, "psyche_type", "trait")
             lines.append(f"[{ptype}] {m.content}")
 
         for n in notes[:5]:
             ntype = getattr(n, "note_type", "task")
-            lines.append(f"[{ntype}] {n.title}: {n.content}"[:150])
+            lines.append(f"[{ntype}] {n.title}: {n.content}"[:200])
 
-        for e in episodes[:5]:
+        for e in episodes[:8]:
             ts = e.event_time.strftime("%Y-%m-%d") if e.event_time else ""
-            lines.append(f"[{ts}] {e.content}"[:150])
+            lines.append(f"[{ts}] {e.content}"[:200])
 
         return "\n".join(lines)
 

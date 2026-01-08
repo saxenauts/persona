@@ -12,17 +12,17 @@ class TestPersonalAIPrompt:
         assert "expand_neighbors" in PERSONAL_AI_SYSTEM_PROMPT
         assert "follow_relationship" in PERSONAL_AI_SYSTEM_PROMPT
 
-    def test_contains_memeplex_placeholder(self):
-        assert "{memeplex_context}" in PERSONAL_AI_SYSTEM_PROMPT
+    def test_contains_user_context_placeholder(self):
+        assert "{user_context}" in PERSONAL_AI_SYSTEM_PROMPT
 
-    def test_formats_with_memeplex_context(self):
-        test_context = "## ACTIVE NOW\n- Test memory item"
-        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(memeplex_context=test_context)
+    def test_formats_with_user_context(self):
+        test_context = "## Who They Are\n- Test user identity"
+        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(user_context=test_context)
         assert test_context in formatted
-        assert "{memeplex_context}" not in formatted
+        assert "{user_context}" not in formatted
 
     def test_formats_with_empty_context(self):
-        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(memeplex_context="")
+        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(user_context="")
         assert "Personal AI" in formatted
 
     def test_contains_context_edge_messaging(self):
