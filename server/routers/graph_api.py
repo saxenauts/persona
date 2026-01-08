@@ -1,5 +1,15 @@
-from fastapi import APIRouter, HTTPException, status, Path, Depends, Body, Response
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    status,
+    Path,
+    Depends,
+    Body,
+    Response,
+    Query,
+)
 from persona.core.graph_ops import GraphOps
+from persona.core.memory_store import MemoryStore
 from persona.models.schema import UserCreate, AskRequest, AskResponse
 from persona.services.user_service import UserService
 from persona.services.persona_service import PersonaService
@@ -510,3 +520,237 @@ async def close_session(
             status_code=500,
             detail="Internal server error occurred while closing session",
         )
+
+
+class MemoryItem(BaseModel):
+    id: str
+    type: str
+    title: str
+    snippet: str
+    event_time: Optional[str] = None
+
+
+class MemoriesResponse(BaseModel):
+    user_id: str
+    total: int
+    by_type: Dict[str, int]
+    memories: List[MemoryItem]
+
+
+@router.get(
+    "/users/{user_id}/memories",
+    response_model=MemoriesResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["debug"],
+)
+async def list_memories(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    memory_type: Optional[str] = Query(
+        None, description="Filter by type: episode, psyche, entity, note"
+    ),
+    limit: int = Query(50, ge=1, le=500, description="Max memories to return"),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    """
+    List all stored memories for a user.
+
+    Debug endpoint for inspecting what was ingested.
+    """
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        store = MemoryStore(graph_ops.graph_db, graph_ops.vector_store)
+
+        if memory_type:
+            memories = await store.get_by_type(memory_type, user_id, limit=limit)
+        else:
+            memories = await store.get_recent(user_id, limit=limit)
+
+        type_counts: Dict[str, int] = {}
+        items = []
+        for mem in memories:
+            mem_type = mem.type
+            type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
+
+            if mem_type == "entity":
+                parts = [
+                    f"{getattr(mem, 'entity_type', 'entity')}: {getattr(mem, 'canonical_name', mem.title)}"
+                ]
+                desc = getattr(mem, "description", "")
+                if desc:
+                    parts.append(desc[:100])
+                attrs = getattr(mem, "attributes", [])
+                if attrs:
+                    attr_strs = [f"{a.key}: {a.value}" for a in attrs[:5]]
+                    parts.append("Facts: " + "; ".join(attr_strs))
+                snippet = " | ".join(parts)
+            else:
+                content = getattr(mem, "content", "") or ""
+                snippet = content[:200] + "..." if len(content) > 200 else content
+
+            items.append(
+                MemoryItem(
+                    id=str(mem.id),
+                    type=mem_type,
+                    title=mem.title or "",
+                    snippet=snippet,
+                    event_time=mem.event_time.isoformat() if mem.event_time else None,
+                )
+            )
+
+        return MemoriesResponse(
+            user_id=user_id,
+            total=len(items),
+            by_type=type_counts,
+            memories=items,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing memories for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RecallRequest(BaseModel):
+    query: str = Field(..., description="Search query")
+    memory_types: Optional[List[str]] = Field(
+        None, description="Filter by types: episode, psyche, entity, note"
+    )
+    limit: int = Field(10, ge=1, le=50, description="Max results")
+
+
+class RecallHit(BaseModel):
+    id: str
+    type: str
+    title: str
+    snippet: str
+    score: float
+    event_time: Optional[str] = None
+
+
+class RecallResponse(BaseModel):
+    query: str
+    count: int
+    hits: List[RecallHit]
+
+
+@router.post(
+    "/users/{user_id}/recall",
+    response_model=RecallResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["debug"],
+)
+async def test_recall(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    request: RecallRequest = Body(...),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    """
+    Test the recall tool directly.
+
+    Debug endpoint for verifying what memories are retrieved for a query.
+    """
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        from uuid import UUID
+        from persona.tools.memory import _memory_to_hit
+
+        store = MemoryStore(graph_ops.graph_db, graph_ops.vector_store)
+
+        results = await graph_ops.text_similarity_search(
+            query=request.query,
+            user_id=user_id,
+            limit=request.limit * 2,
+        )
+
+        hits = []
+        for r in results.get("results", []):
+            node_id = r.get("nodeName")
+            score = r.get("score", 0.0)
+
+            try:
+                mem = await store.get(UUID(node_id), user_id)
+                if mem:
+                    if request.memory_types and mem.type not in request.memory_types:
+                        continue
+
+                    hit = _memory_to_hit(mem, score=score)
+                    hits.append(
+                        RecallHit(
+                            id=hit.id,
+                            type=hit.type,
+                            title=hit.title,
+                            snippet=hit.snippet,
+                            score=hit.score,
+                            event_time=hit.event_time,
+                        )
+                    )
+                    if len(hits) >= request.limit:
+                        break
+            except Exception as e:
+                logger.debug(f"Could not retrieve memory {node_id}: {e}")
+
+        return RecallResponse(
+            query=request.query,
+            count=len(hits),
+            hits=hits,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in recall for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MemoryStatsResponse(BaseModel):
+    user_id: str
+    total_memories: int
+    by_type: Dict[str, int]
+    recent_titles: List[str]
+
+
+@router.get(
+    "/users/{user_id}/memories/stats",
+    response_model=MemoryStatsResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["debug"],
+)
+async def get_memory_stats(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    """
+    Get quick stats about stored memories.
+
+    Debug endpoint for verifying ingestion worked.
+    """
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        store = MemoryStore(graph_ops.graph_db, graph_ops.vector_store)
+        all_memories = await store.get_recent(user_id, limit=500)
+
+        type_counts: Dict[str, int] = {}
+        for mem in all_memories:
+            type_counts[mem.type] = type_counts.get(mem.type, 0) + 1
+
+        recent_titles = [mem.title or "(untitled)" for mem in all_memories[:10]]
+
+        return MemoryStatsResponse(
+            user_id=user_id,
+            total_memories=len(all_memories),
+            by_type=type_counts,
+            recent_titles=recent_titles,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting stats for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
