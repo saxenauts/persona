@@ -2,7 +2,9 @@
 
 This document provides a high-level orientation for contributors.
 
-## Architecture
+> **For the full architecture vision and philosophy, see [ARCHITECTURE.md](architecture/ARCHITECTURE.md)**
+
+## Project Structure
 
 ```
 persona/           # Core library
