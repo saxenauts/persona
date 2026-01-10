@@ -87,19 +87,24 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 ## Tools Layer
 
-**ToolContext** (`persona/tools/context.py`): Per-request context injected at execution time. Contains user_id, graph_ops, store, timezone, user_card. Not exposed to LLM.
+**Agent-Native Architecture**: Tools are treated as atomic primitives. Complex features are outcomes achieved by an agent operating in a dialectic loop. For example, answering "what happened after my wedding?" involves recalling "wedding" to find its date, then browsing for memories in the following time range. No complex date-parsing or multi-step routing logic exists in code; the LLM reasons with these primitives.
 
-**recall(query, date_start?, date_end?, memory_types?, limit?)** (`persona/tools/memory.py`): Search memories with structured filters. LLM provides dates directly in ISO format.
+**ToolContext** (`persona/tools/context.py`): Per-request context injected at execution time. Contains `user_id`, `graph_ops`, `store`, `timezone`, and `user_card`. Injected automatically; not exposed to the LLM.
 
-**record(text)** (`persona/tools/memory.py`): Ingests new memories with automatic type classification (episode/psyche/note).
+**Read Tools** (`persona/tools/memory.py`):
+**recall(query, date_start?, date_end?, memory_types?, limit?)**: Semantic search with structured filters. Returns memory snippets ranked by similarity.
+**browse(date_start?, date_end?, memory_types?, limit?, order?)**: Time-ordered listing of memories (order: "desc" default, "asc"). Used for chronological exploration and "what happened last week" queries.
+**get_memory(memory_id)**: Fetches full memory content including all metadata, attributes, and status. Used after search to get complete details before updating.
+**expand_neighbors(memory_id, relationship_types?)**: Graph-based expansion to find memories connected via any relationship.
+**follow_relationship(source_id, relation_type, limit?)**: Traces specific relationship chains (e.g., LED_TO, CAUSED_BY) for narrative continuity.
 
-**expand_neighbors(memory_id, relationship_types?)** (`persona/tools/memory.py`): Graph expansion from a memory node. Returns connected memories via relationships.
+**Write Tools** (`persona/tools/memory.py`):
+**record(text)**: Ingests new information via the integration pipeline, automatically classifying it into the 4-pillar model.
+**update_memory(memory_id, updates)**: Modifies existing memory fields. `updates` can include `title`, `content`, `status` (active/completed/cancelled), `due_date`, or `importance`. Used for marking tasks done or editing details.
 
-**follow_relationship(source_id, relation_type, limit?)** (`persona/tools/memory.py`): Trace specific relationship chains (LED_TO, CAUSED_BY, NEXT, PREVIOUS).
+**Static Registry** (`persona/tools/runner.py`): Global `REGISTRY` maps tool names to handlers. Execution is handled via `execute(tool_call, ctx)` with per-request context injection.
 
-**Static Registry** (`persona/tools/runner.py`): Global `REGISTRY` with handlers. Context injected per-request via `execute(tool_call, ctx)`.
-
-**Bounded Execution** (`execute_tools_bounded`): Semaphore-limited concurrency, per-tool timeouts, partial failure capture.
+**Bounded Execution**: Handled by `execute_tools_bounded`, providing semaphore-limited concurrency, per-tool timeouts, and partial failure capture.
 
 ## Context Engineering Patterns
 

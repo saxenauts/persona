@@ -220,15 +220,47 @@ The current design inverts the responsibility:
 | System parses time expression | System executes structured query directly |
 | Parsing errors possible | Clean, deterministic execution |
 
+### Agent-Native Design
+
+Persona follows an **agent-native design philosophy**. As described in *Every.to*: "Tools should be atomic primitives. Features are outcomes achieved by an agent operating in a loop."
+
+No complex routing logic or date-parsing heuristics exist in the Persona codebase. Instead, the LLM reasons with these primitives to navigate the user's world.
+
+**Example Workflow**: "What was I doing after my wedding?"
+1. `recall("wedding")` → Finds the event and its date.
+2. LLM reasons about the subsequent date range.
+3. `browse(date_start="2023-07-01", ...)` → Explores memories chronologically.
+
 ### Available Tools
 
-**recall(query, date_start?, date_end?, memory_types?, limit?)**: Search memories by semantic similarity with optional filters. The LLM provides dates in ISO format, memory types as explicit filters.
+#### Read Tools
 
-**record(text)**: Store new information. The system automatically classifies type (episode/psyche/entity/note) and creates appropriate links.
+**recall(query, date_start?, date_end?, memory_types?, limit?)**: Semantic search with structured filters. Returns memory snippets ranked by similarity.
+
+**browse(date_start?, date_end?, memory_types?, limit?, order?)**: Time-ordered listing of memories. Unlike `recall`, results are sorted by `event_time`, not similarity. Used for chronological exploration (e.g., "what happened last week", "show me June 2023").
+- `order`: "desc" (newest first, default) or "asc" (oldest first).
+
+**get_memory(memory_id)**: Fetches full memory content including all metadata, attributes, and status. Used after search to get complete details before updating.
 
 **expand_neighbors(memory_id, relationship_types?)**: Given a memory, explore its graph connections. Returns neighbors linked by specified relationship types.
 
-**follow_relationship(source_id, relation_type, limit?)**: Trace a specific relationship chain. "What did this memory lead to?" or "What came before this?"
+**follow_relationship(source_id, relation_type, limit?)**: Traces a specific relationship chain (e.g., `LED_TO`, `CAUSED_BY`) for narrative continuity.
+
+#### Write Tools
+
+**record(text)**: Ingests new information via the integration pipeline, automatically classifying it into the 4-pillar model.
+
+**update_memory(memory_id, updates)**: Modifies existing memory fields. `updates` can include `title`, `content`, `status` (`active`/`completed`/`cancelled`), `due_date`, or `importance`.
+
+### Tool Selection Strategy
+
+| Goal | Primary Tool | Sorting |
+|------|--------------|---------|
+| Find specific information | `recall` | Similarity |
+| Review recent history | `browse` | Recency |
+| Mark task as done | `update_memory` | N/A |
+| Deep dive into a memory | `get_memory` | N/A |
+| Trace narrative cause/effect | `follow_relationship` | Temporal |
 
 ### Execution Model
 

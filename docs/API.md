@@ -48,6 +48,7 @@ Content-Type: application/json
 Response: 201 Created
 {
     "message": "Data ingested successfully",
+    "session_id": "conversation:conv_abc123",
     "memories_created": 3,
     "memories_created_by_type": {"episode": 1, "psyche": 1, "note": 1},
     "links_created": 2,
@@ -80,6 +81,7 @@ Content-Type: application/json
 Response: 201 Created
 {
     "message": "Successfully ingested batch of 2 items",
+    "session_ids": ["notes:session_1", "conversation:session_2"],
     "memories_created": 5,
     "memories_created_by_type": {"episode": 2, "psyche": 2, "note": 1},
     "links_created": 3,

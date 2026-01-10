@@ -49,10 +49,9 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Returns prose-formatted context for LLM consumption
 
 3. **Tools Layer** (`tools/memory.py`)
-   - `recall(query)`: Search memories with structured filters
-   - `record(text)`: Ingest new memories with type classification
-   - `expand_neighbors(memory_id)`: Graph expansion from a memory node
-   - `follow_relationship(source_id, relation_type)`: Trace relationship chains
+   - **Agent-Native Design**: Tools are atomic primitives; complex features are emergent outcomes of the agent's dialectic loop.
+   - **Read Tools**: `recall(query)`, `browse()` (chronological), `get_memory(id)`, `expand_neighbors(id)`, `follow_relationship(id, type)`.
+   - **Write Tools**: `record(text)` (auto-ingest), `update_memory(id, updates)` (edit status, due_date, importance).
 
 4. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories

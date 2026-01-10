@@ -202,21 +202,25 @@ PersonaService.run_agent()
     │   └── {user_context} ← UserCard.identity_prose
     │
     ├── Agent Loop (with tools)
-    │   ├── recall(query, date_start?, date_end?, memory_types?)
-    │   ├── record(text) → immediate persistence
-    │   ├── expand_neighbors(memory_id)
-    │   └── follow_relationship(source_id, relation_type)
+    │   ├── recall(query, ...) → Semantic similarity search
+    │   ├── browse(date_range, ...) → Chronological exploration
+    │   ├── get_memory(id) → Full content retrieval
+    │   ├── record(text) → Ingest new information
+    │   ├── update_memory(id, updates) → Modify existing nodes
+    │   ├── expand_neighbors(id) → Graph traversal
+    │   └── follow_relationship(id, type) → Trace narrative chains
     │
     └── Response (grounded in memories)
 ```
 
-**LLM-First Design**: No manual routers. No keyword matching. No heuristic gating. The LLM decides which tools to use based on context and prompt guidance. Modern LLMs handle 10-15 tools routinely; our 4 are trivial.
+**LLM-First Design**: No manual routers. No keyword matching. No heuristic gating. The LLM decides which tools to use based on context and prompt guidance. Modern LLMs handle 10-15 tools routinely; our 7 are trivial.
 
 **Retrieval Strategy**: The system prompt guides triangulation:
-1. **Semantic**: What they're asking about
-2. **Entity**: People, projects, places involved
-3. **Temporal**: When it happened
-4. **Type filter**: Episodes for events, Psyche for preferences, Notes for tasks
+1. **Semantic**: `recall` for "what did I say about X?"
+2. **Temporal**: `browse` for "what happened last week?" or "show me my recent tasks"
+3. **Structural**: `get_memory` after search to see full metadata before responding
+4. **Graph**: `expand_neighbors` or `follow_relationship` to find context related to a specific entity or event
+5. **Type filter**: Episodes for events, Psyche for preferences, Notes for tasks, Entities for world knowledge
 
 ---
 
@@ -230,7 +234,7 @@ PersonaService.run_agent()
 │                   (unified orchestrator)                                │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                         Tools Layer                                     │
-│              recall | record | expand | follow                          │
+│  recall | browse | get_memory | record | update_memory | expand | follow  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                    Memory Index (Memeplex)                              │
 │            Topics | People | Projects | Places | Concepts               │
@@ -259,7 +263,7 @@ PersonaService.run_agent()
 | **Integration** | `persona/services/integration_agent.py` | Graph linking |
 | **Consolidation** | `persona/services/consolidation_service.py` | UserCard, Memeplex refresh |
 | **Memory Model** | `persona/models/memory.py` | 4-pillar types, Memeplex |
-| **Tools** | `persona/tools/memory.py` | recall, record, expand, follow |
+| **Tools** | `persona/tools/memory.py` | recall, browse, get_memory, record, update_memory, expand, follow |
 | **Store** | `persona/core/memory_store.py` | Neo4j operations |
 | **Prompts** | `persona/llm/prompts.py` | PERSONAL_AI_SYSTEM_PROMPT |
 
