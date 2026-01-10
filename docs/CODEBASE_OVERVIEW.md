@@ -68,6 +68,12 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Low-level retrieval interface
    - Accepts optional `graph_ops` for resource sharing
 
+7. **Memeplex** (`models/memory.py`)
+   - Per-user "world model index" - what the LLM knows about this user
+   - Topics (universal), people, projects, places, concepts
+   - Time windows: last_week_topics, last_month_topics
+   - Stored as JSON blob, injected into system prompt as `{world_model}`
+
 ### Services
 
 Business logic layer between API and core:
@@ -126,6 +132,12 @@ User Message → /chat endpoint → PersonaService.run_agent()
 | `/users/{user_id}/persona/ask` | POST | Structured JSON extraction |
 | `/users/{user_id}/ingest` | POST | Ingest single content |
 | `/users/{user_id}/ingest/batch` | POST | Batch ingest |
+| `/users/{user_id}/integrate` | POST | Trigger integration agent |
+| `/users/{user_id}/sessions/{session_id}/close` | POST | Close session + integrate |
+| `/users/{user_id}/memeplex` | GET | Read user's world model index |
+| `/users/{user_id}/memeplex/refresh` | POST | Force refresh memeplex from memories |
+| `/users/{user_id}/memories` | GET | List memories (debug) |
+| `/users/{user_id}/memories/stats` | GET | Memory statistics (debug) |
 | `/users/{user_id}` | POST | Create user |
 | `/users/{user_id}` | DELETE | Delete user |
 
@@ -206,6 +218,32 @@ Trait: Values efficiency. Preference: Morning meetings.
 Current tasks: Launch MVP. Review documentation.
 </active_context>
 ```
+
+## Memeplex: World Model Index
+
+The Memeplex provides the LLM with a "table of contents" for the user's world. Without it, the agent only sees what's retrieved - with it, the agent knows what *exists* and can proactively explore.
+
+**Schema** (`persona/models/memory.py`):
+```python
+Memeplex(
+    user_id: str,
+    topics: List[str],           # "fitness", "AI research", "cooking"
+    people: List[str],           # "Sarah (wife)", "Max (colleague)"
+    projects: List[str],         # "Persona", "Home Renovation"
+    places: List[str],           # "SF (home)", "Tokyo (2024 trip)"
+    concepts: List[str],         # "stoicism", "minimalism"
+    last_week_topics: List[str], # What's been active recently
+    last_month_topics: List[str],
+    recent_focus: str,           # "Building Memeplex for v1 release"
+    memory_stats: MemoryStats,
+)
+```
+
+**Design Principle**: Topics are universal (everyone has them). Entities (people/projects/places) are optional.
+
+**Injected into system prompt** via `{world_model}` slot in `PERSONAL_AI_SYSTEM_PROMPT`.
+
+**Refresh flow**: Ingestion → Integration → Consolidation → `refresh_memeplex()` → stored in Neo4j.
 
 ## Further Reading
 

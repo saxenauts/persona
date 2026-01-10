@@ -1,39 +1,24 @@
-"""Memeplex: The Memory Index Layer.
+"""Memeplex: The Memory Index Layer - PROTOCOL DEFINITIONS.
+
+NOTE: This file contains PROTOCOL definitions only. The actual Memeplex
+implementation is in `persona/models/memory.py` (Memeplex model class).
 
 A memeplex (from memetics, Dawkins/Blackmore) is a group of memes that
 reinforce and propagate together. In Persona, the Memeplex is the index
-layer that clusters and routes queries to related memories.
+layer that provides the LLM with a "world model" of the user's life.
 
-The Memeplex provides fast, structured lookups into the memory graph
-without full embedding search. It serves as a navigation layer - pointing
-to where memories are, not storing the memories themselves.
+The actual Memeplex v1 is implemented as:
+- Model: persona/models/memory.py (Memeplex class)
+- Storage: persona/core/memory_store.py (save_memeplex, get_memeplex)
+- Refresh: persona/services/consolidation_service.py (refresh_memeplex)
+- Injection: persona/services/persona_service.py ({world_model} slot)
 
-The hippocampus in the brain doesn't store memories; it indexes them.
-The Memeplex does the same for Persona's memory graph.
-
-Three Index Dimensions:
+The protocols below define future interface extensions for:
 - Entity Registry: WHO/WHAT - people, places, things, concepts
 - Temporal Timeline: WHEN - time ranges, sequences, durations
 - Topic Cluster: ABOUT - themes, categories, contexts
 
-Usage:
-    mplex = Memeplex(graph_ops, store)
-
-    # Fast candidate resolution
-    candidates = await mplex.resolve(
-        entities=["Sarah", "project"],
-        time_range=(date(2024, 12, 1), date(2024, 12, 31)),
-    )
-
-    # Then vector search only within candidates
-    results = await vector_search(query, filter_ids=candidates)
-
-This module defines the interface. Full implementation requires:
-- Entity extraction during ingestion (Phase: Ingestion)
-- Coreference resolution (Phase: Ingestion)
-- Topic clustering (Phase: Consolidation)
-
-Current status: Interface only. Implementation follows ingestion work.
+Status: Protocols defined. Graph-based implementation deferred to v2.
 """
 
 from abc import ABC, abstractmethod

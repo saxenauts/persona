@@ -111,16 +111,48 @@ poetry run pytest tests/unit -v    # Local unit tests only
 
 **Link Prose**: Memory links rendered inline (e.g., "led to X", "caused by Y") for narrative continuity.
 
-## Memeplex: Index Layer (Interface Only)
+## Memeplex: World Model Index (Implemented)
 
-**Memeplex** (`persona/core/memeplex.py`): The memory index layer. Named after memetics (Dawkins) - a memeplex is a group of memes that reinforce and propagate together.
+**Memeplex** (`persona/models/memory.py`): Per-user memory index providing the LLM with a "table of contents" for the user's world. Named after memetics (Dawkins) - a memeplex is a group of memes that reinforce and propagate together.
 
-The Memeplex routes queries to memory candidates via structured lookups, reducing the search space for vector search. Three index dimensions:
-- **Entity Registry**: WHO/WHAT - people, places, things, concepts
-- **Temporal Timeline**: WHEN - time ranges, sequences, durations  
-- **Topic Cluster**: ABOUT - themes, categories, contexts
+**Schema** (stored as JSON blob in Neo4j):
+```python
+Memeplex(
+    user_id: str,
+    topics: List[str],           # Universal themes: "fitness", "AI research"
+    people: List[str],           # With context: "Sarah (wife)", "Max (colleague)"
+    projects: List[str],         # "Persona", "Home Renovation"
+    places: List[str],           # "SF (home)", "Tokyo (2024 trip)"
+    concepts: List[str],         # "stoicism", "minimalism"
+    last_week_topics: List[str], # Active in last 7 days
+    last_month_topics: List[str],# Active in last 30 days
+    recent_focus: str,           # "Building Memeplex for v1 release"
+    memory_stats: MemoryStats,
+)
+```
 
-Current status: Interface definitions only. Implementation requires entity extraction during ingestion (next phase).
+**Key Design**: Topics are universal (everyone has them). Entities (people/projects/places) are optional - a "loner" might only have topics.
+
+**Flow**:
+```
+Ingestion → Integration → Consolidation → refresh_memeplex()
+                                                ↓
+                                        Stored in Neo4j
+                                                ↓
+                         PersonaService.run_agent() fetches it
+                                                ↓
+                         Injected as {world_model} in system prompt
+```
+
+**API Endpoints**:
+- `GET /users/{user_id}/memeplex` - Read current memeplex
+- `POST /users/{user_id}/memeplex/refresh` - Force refresh from memories
+
+**Key Files**:
+- `persona/models/memory.py` - Memeplex model with `to_system_prompt()`
+- `persona/services/consolidation_service.py` - `refresh_memeplex()` function
+- `persona/core/memory_store.py` - `save_memeplex()` / `get_memeplex()`
+- `persona/services/persona_service.py` - Injects `{world_model}` into prompt
 
 ## Environment Configuration
 

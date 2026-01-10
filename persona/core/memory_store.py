@@ -16,7 +16,6 @@ from persona.models.memory import (
     EntityMemory,
     EntityAttribute,
     Memeplex,
-    ActiveMemory,
     MemoryStats,
     TemporalContext,
 )
@@ -659,11 +658,14 @@ class MemoryStore:
             "type": "memeplex",
             "user_id": memeplex.user_id,
             "updated_at": memeplex.updated_at.isoformat(),
-            "active_memories": json.dumps(
-                [am.model_dump(mode="json") for am in memeplex.active_memories]
-            ),
-            "last_session_summary": memeplex.last_session_summary,
-            "recent_keywords": json.dumps(memeplex.recent_keywords),
+            "topics": json.dumps(memeplex.topics),
+            "people": json.dumps(memeplex.people),
+            "projects": json.dumps(memeplex.projects),
+            "places": json.dumps(memeplex.places),
+            "concepts": json.dumps(memeplex.concepts),
+            "last_week_topics": json.dumps(memeplex.last_week_topics),
+            "last_month_topics": json.dumps(memeplex.last_month_topics),
+            "recent_focus": memeplex.recent_focus,
             "memory_stats": json.dumps(memeplex.memory_stats.model_dump()),
             "timeline_summary": memeplex.timeline_summary,
         }
@@ -731,23 +733,14 @@ class MemoryStore:
         if not props and "type" in node:
             props = node
 
-        active_memories_raw = props.get("active_memories", "[]")
-        if isinstance(active_memories_raw, str):
-            try:
-                active_memories_data = json.loads(active_memories_raw)
-            except json.JSONDecodeError:
-                active_memories_data = []
-        else:
-            active_memories_data = active_memories_raw
-
-        recent_keywords_raw = props.get("recent_keywords", "[]")
-        if isinstance(recent_keywords_raw, str):
-            try:
-                recent_keywords = json.loads(recent_keywords_raw)
-            except json.JSONDecodeError:
-                recent_keywords = []
-        else:
-            recent_keywords = recent_keywords_raw
+        def parse_json_list(key: str) -> List[str]:
+            raw = props.get(key, "[]")
+            if isinstance(raw, str):
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    return []
+            return raw if raw else []
 
         memory_stats_raw = props.get("memory_stats", "{}")
         if isinstance(memory_stats_raw, str):
@@ -772,9 +765,14 @@ class MemoryStore:
         return Memeplex(
             user_id=user_id,
             updated_at=updated_at,
-            active_memories=[ActiveMemory(**am) for am in active_memories_data],
-            last_session_summary=props.get("last_session_summary", ""),
-            recent_keywords=recent_keywords,
+            topics=parse_json_list("topics"),
+            people=parse_json_list("people"),
+            projects=parse_json_list("projects"),
+            places=parse_json_list("places"),
+            concepts=parse_json_list("concepts"),
+            last_week_topics=parse_json_list("last_week_topics"),
+            last_month_topics=parse_json_list("last_month_topics"),
+            recent_focus=props.get("recent_focus", ""),
             memory_stats=MemoryStats(**memory_stats_data),
             timeline_summary=props.get("timeline_summary", ""),
         )

@@ -3,7 +3,7 @@
 Minimal v1: Single LLM call to synthesize UserCard.identity_prose from recent memories.
 No intermediate theme extraction - "current threads" are folded into the UserCard prompt.
 
-Runs after integration to refresh the cached UserCard.
+Runs after integration to refresh the cached UserCard and Memeplex.
 """
 
 import json
@@ -14,7 +14,13 @@ from typing import Optional, List
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import UserCard, TemporalContext, Memory
+from persona.models.memory import (
+    UserCard,
+    TemporalContext,
+    Memory,
+    Memeplex,
+    MemoryStats,
+)
 from persona.services.user_service import UserCardService
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
@@ -40,11 +46,43 @@ Memories:
 Return only valid JSON."""
 
 
+MEMEPLEX_REFRESH_PROMPT = """Extract a world model index from these memories.
+
+Current memeplex (if any):
+{current_memeplex}
+
+Recent memories:
+{memories}
+
+Entities from database:
+{entities}
+
+Return JSON with:
+- topics: array of 5-15 main topics/themes the user cares about (e.g. "fitness", "AI research", "cooking")
+- people: array of known people with relationship context (e.g. "Sarah (wife)", "Max (colleague)")
+- projects: array of active or notable projects (e.g. "Persona", "Home Renovation")
+- places: array of significant places (e.g. "SF (home)", "Tokyo (2024 trip)")
+- concepts: array of abstract concepts/philosophies (e.g. "stoicism", "minimalism")
+- last_week_topics: topics active in last 7 days
+- last_month_topics: topics active in last 30 days
+- recent_focus: 1-2 sentences on current primary focus
+
+Rules:
+- Merge with existing memeplex, don't lose prior knowledge
+- Topics are UNIVERSAL - everyone has these. Entities are optional.
+- Keep lists concise: max 15 topics, 20 people, 15 projects, 10 places, 10 concepts
+- For people, include relationship context in parentheses
+- For places, include significance in parentheses
+
+Return only valid JSON."""
+
+
 @dataclass
 class ConsolidationResult:
     success: bool
     user_card_updated: bool = False
     temporal_context_updated: bool = False
+    memeplex_updated: bool = False
     duration_ms: float = 0.0
     reason: str = ""
     errors: List[str] = field(default_factory=list)
@@ -104,6 +142,13 @@ async def run_consolidation(
             await persist_temporal_context(graph_ops, user_id, temporal_ctx)
             result.temporal_context_updated = True
             logger.info(f"Updated temporal context for {user_id}")
+
+        memeplex = await refresh_memeplex(user_id, graph_ops, store)
+        if memeplex and memeplex.topics:
+            result.memeplex_updated = True
+            logger.info(
+                f"Updated memeplex for {user_id}: {len(memeplex.topics)} topics"
+            )
 
         result.duration_ms = (time.time() - start_time) * 1000
 
@@ -290,6 +335,99 @@ async def generate_temporal_context(
             week_start=week_start.strftime("%Y-%m-%d"),
             month_name=now.strftime("%B %Y"),
         )
+
+
+async def refresh_memeplex(
+    user_id: str,
+    graph_ops: GraphOps,
+    store: MemoryStore,
+) -> Optional[Memeplex]:
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    current_memeplex = await store.get_memeplex(user_id)
+
+    episodes = await store.get_by_type("episode", user_id, limit=30)
+    entities = await store.get_by_type("entity", user_id, limit=50)
+
+    week_episodes = [
+        e
+        for e in episodes
+        if e.event_time and e.event_time >= week_ago.replace(tzinfo=None)
+    ]
+    month_episodes = [
+        e
+        for e in episodes
+        if e.event_time and e.event_time >= month_ago.replace(tzinfo=None)
+    ]
+
+    if not month_episodes and not entities:
+        return current_memeplex
+
+    memory_text = "\n".join(
+        [
+            f"[{e.event_time.strftime('%Y-%m-%d') if e.event_time else ''}] {e.content[:200]}"
+            for e in month_episodes[:20]
+        ]
+    )
+
+    entity_text = "\n".join(
+        [
+            f"- {getattr(e, 'canonical_name', 'Unknown')} ({getattr(e, 'entity_type', 'entity')}): {getattr(e, 'description', '')[:100]}"
+            for e in entities[:30]
+            if hasattr(e, "canonical_name")
+        ]
+    )
+
+    current_text = ""
+    if current_memeplex:
+        current_text = f"Topics: {', '.join(current_memeplex.topics[:10])}\n"
+        if current_memeplex.people:
+            current_text += f"People: {', '.join(current_memeplex.people[:10])}\n"
+        if current_memeplex.projects:
+            current_text += f"Projects: {', '.join(current_memeplex.projects[:10])}\n"
+
+    try:
+        chat_client = get_chat_client()
+        response = await chat_client.chat(
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content=MEMEPLEX_REFRESH_PROMPT.format(
+                        current_memeplex=current_text or "None",
+                        memories=memory_text or "No recent memories",
+                        entities=entity_text or "No entities yet",
+                    ),
+                )
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        data = json.loads(response.content or "{}")
+
+        stats = await store.compute_memory_stats(user_id)
+
+        memeplex = Memeplex(
+            user_id=user_id,
+            updated_at=now,
+            topics=data.get("topics", [])[:15],
+            people=data.get("people", [])[:20],
+            projects=data.get("projects", [])[:15],
+            places=data.get("places", [])[:10],
+            concepts=data.get("concepts", [])[:10],
+            last_week_topics=data.get("last_week_topics", [])[:10],
+            last_month_topics=data.get("last_month_topics", [])[:10],
+            recent_focus=data.get("recent_focus", ""),
+            memory_stats=stats,
+        )
+
+        await store.save_memeplex(memeplex)
+        return memeplex
+
+    except Exception as e:
+        logger.warning(f"Memeplex refresh failed: {e}")
+        return current_memeplex
 
 
 async def maybe_run_consolidation(

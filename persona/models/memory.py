@@ -431,89 +431,115 @@ class Memeplex(BaseModel):
     """Per-user memory index. Stored as single JSON node in Neo4j.
 
     The Memeplex is the "table of contents" for a user's memory:
-    - What's currently active (2-5 items typically)
+    - Topics/themes they care about (universal - everyone has these)
+    - Known entities (people, projects, places, concepts - optional)
+    - Time windows (what's been active recently)
     - Temporal context (this week, this month)
-    - Recent context for continuity
-    - Keywords so LLM knows what's queryable
-    - Overview stats
 
     Lives in system prompt for immediate LLM access.
-    Updated after ingestion during consolidation.
+    Updated after ingestion during integration phase.
+
+    Design: Topics are universal. Entities are optional.
+    A "loner" might only have topics. A social person has both.
     """
 
     user_id: str
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Temporal grounding
+    # === TOPICS (Universal - everyone has these) ===
+    topics: List[str] = Field(
+        default_factory=list,
+        description="Main topics/themes user cares about. Max 15. e.g. ['fitness', 'AI research', 'cooking']",
+    )
+
+    # === ENTITIES (Optional - depends on user's world) ===
+    people: List[str] = Field(
+        default_factory=list,
+        description="Known people with relationship. Max 20. e.g. ['Sarah (wife)', 'Max (colleague)']",
+    )
+    projects: List[str] = Field(
+        default_factory=list,
+        description="Active or notable projects. Max 15. e.g. ['Persona', 'Home Renovation']",
+    )
+    places: List[str] = Field(
+        default_factory=list,
+        description="Significant places. Max 10. e.g. ['SF (home)', 'Tokyo (2024 trip)']",
+    )
+    concepts: List[str] = Field(
+        default_factory=list,
+        description="Abstract concepts/philosophies. Max 10. e.g. ['stoicism', 'minimalism']",
+    )
+
+    # === TIME WINDOWS (What's been active) ===
+    last_week_topics: List[str] = Field(
+        default_factory=list,
+        description="Topics active in last 7 days. e.g. ['Persona v1', 'fitness']",
+    )
+    last_month_topics: List[str] = Field(
+        default_factory=list,
+        description="Topics active in last 30 days.",
+    )
+    recent_focus: str = Field(
+        default="",
+        description="1-2 sentences on current focus. e.g. 'Building Memeplex for Persona v1 release'",
+    )
+
+    # === TEMPORAL GROUNDING ===
     temporal_context: Optional[TemporalContext] = Field(default=None)
 
-    # What's active right now (2-5 items typically)
-    active_memories: List[ActiveMemory] = Field(default_factory=list)
-
-    # Recent context for continuity
-    last_session_summary: str = Field(
-        default="", description="2-3 sentences summarizing recent sessions"
-    )
-    recent_keywords: List[str] = Field(
-        default_factory=list, description="Top 10-15 terms from recent sessions"
-    )
-
-    # What exists (for LLM to know what's queryable)
+    # === MEMORY STATS ===
     memory_stats: MemoryStats = Field(default_factory=MemoryStats)
 
-    # Chronological anchor
+    # === TIMELINE ===
     timeline_summary: str = Field(
         default="",
         description="e.g. 'Active since Nov 2024, 47 sessions, 312 memories'",
     )
 
     def to_system_prompt(self) -> str:
-        """Render Memeplex as system prompt section for LLM consumption."""
-        lines = ["<memeplex>"]
+        lines = ["## Your Knowledge of This User", ""]
 
-        # Temporal context first (recency/primacy)
+        if self.topics:
+            lines.append(f"**Topics**: {', '.join(self.topics)}")
+
+        if self.people:
+            lines.append(f"**People**: {', '.join(self.people)}")
+
+        if self.projects:
+            lines.append(f"**Projects**: {', '.join(self.projects)}")
+
+        if self.places:
+            lines.append(f"**Places**: {', '.join(self.places)}")
+
+        if self.concepts:
+            lines.append(f"**Concepts**: {', '.join(self.concepts)}")
+
+        lines.append("")
+
+        if self.last_week_topics:
+            lines.append(f"**Last week**: {', '.join(self.last_week_topics)}")
+
+        if self.last_month_topics:
+            lines.append(f"**Last month**: {', '.join(self.last_month_topics)}")
+
+        if self.recent_focus:
+            lines.append(f"**Current focus**: {self.recent_focus}")
+
         if self.temporal_context:
             tc = self.temporal_context
             if tc.current_date:
-                lines.append(f"TODAY: {tc.current_date}")
-            if tc.week_summary:
-                lines.append(f"THIS WEEK ({tc.week_start}): {tc.week_summary}")
-            if tc.month_summary:
-                lines.append(f"THIS MONTH ({tc.month_name}): {tc.month_summary}")
+                lines.append(f"**Today**: {tc.current_date}")
             if tc.upcoming:
-                lines.append(f"UPCOMING: {', '.join(tc.upcoming[:3])}")
-            lines.append("")
+                lines.append(f"**Upcoming**: {', '.join(tc.upcoming[:3])}")
 
-        # Active memories
-        if self.active_memories:
-            lines.append("ACTIVE NOW:")
-            for am in self.active_memories:
-                kw = ", ".join(am.keywords[:5]) if am.keywords else "no keywords"
-                lines.append(f"• {am.title} ({am.memory_type}) - {am.context_snippet}")
-                lines.append(f"  keywords: {kw}")
-        else:
-            lines.append("ACTIVE NOW: None")
-
-        # Recent context
-        if self.last_session_summary:
-            lines.append("")
-            lines.append(f"RECENT: {self.last_session_summary}")
-
-        # Overview
         lines.append("")
         stats = self.memory_stats
         lines.append(
-            f"MEMORY OVERVIEW: {stats.total_memories} memories | "
-            f"{stats.total_entities} entities | {stats.active_notes} active notes"
+            f"*{stats.total_memories} memories | "
+            f"{stats.total_entities} entities | {stats.active_notes} active notes*"
         )
 
         if self.timeline_summary:
-            lines.append(self.timeline_summary)
-
-        lines.append("")
-        lines.append(
-            "Use recall() to search memories. Use record() to save new information."
-        )
-        lines.append("</memeplex>")
+            lines.append(f"*{self.timeline_summary}*")
 
         return "\n".join(lines)

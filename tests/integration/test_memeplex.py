@@ -14,7 +14,6 @@ from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 from persona.models.memory import (
     Memeplex,
-    ActiveMemory,
     MemoryStats,
     EpisodeMemory,
     NoteMemory,
@@ -34,17 +33,14 @@ async def test_memeplex_create_and_retrieve():
 
         memeplex = Memeplex(
             user_id=user_id,
-            active_memories=[
-                ActiveMemory(
-                    memory_id=uuid4(),
-                    memory_type="note",
-                    title="Job search at TechCorp",
-                    keywords=["techcorp", "interview", "salary"],
-                    context_snippet="3 rounds done, waiting on offer",
-                )
-            ],
-            last_session_summary="Discussed interview prep and salary expectations.",
-            recent_keywords=["interview", "techcorp", "remote", "offer"],
+            topics=["fitness", "career", "cooking"],
+            people=["Sarah (wife)", "Max (colleague)"],
+            projects=["Job Search", "Home Renovation"],
+            places=["SF (home)", "Denver (hometown)"],
+            concepts=["stoicism"],
+            last_week_topics=["career", "interview prep"],
+            last_month_topics=["fitness", "career", "cooking"],
+            recent_focus="Interview prep for TechCorp - 3 rounds done",
             memory_stats=MemoryStats(
                 total_memories=50,
                 total_episodes=30,
@@ -62,14 +58,10 @@ async def test_memeplex_create_and_retrieve():
 
         assert retrieved is not None
         assert retrieved.user_id == user_id
-        assert len(retrieved.active_memories) == 1
-        assert retrieved.active_memories[0].title == "Job search at TechCorp"
-        assert "techcorp" in retrieved.active_memories[0].keywords
-        assert (
-            retrieved.last_session_summary
-            == "Discussed interview prep and salary expectations."
-        )
-        assert "interview" in retrieved.recent_keywords
+        assert "fitness" in retrieved.topics
+        assert "Sarah (wife)" in retrieved.people
+        assert "Job Search" in retrieved.projects
+        assert "career" in retrieved.last_week_topics
         assert retrieved.memory_stats.total_memories == 50
         assert retrieved.timeline_summary == "Active since Dec 2024, 12 sessions"
 
@@ -97,7 +89,7 @@ async def test_memeplex_get_or_create():
         memeplex = await store.get_or_create_memeplex(user_id)
         assert memeplex is not None
         assert memeplex.user_id == user_id
-        assert memeplex.active_memories == []
+        assert memeplex.topics == []
 
         memeplex_again = await store.get_or_create_memeplex(user_id)
         assert memeplex_again is not None
@@ -123,31 +115,22 @@ async def test_memeplex_update():
 
         memeplex = Memeplex(
             user_id=user_id,
-            last_session_summary="Initial summary",
-            recent_keywords=["keyword1"],
+            topics=["topic1"],
+            recent_focus="Initial focus",
         )
         await store.save_memeplex(memeplex)
 
-        memeplex.last_session_summary = "Updated summary after new session"
-        memeplex.recent_keywords = ["keyword1", "keyword2", "keyword3"]
-        memeplex.active_memories.append(
-            ActiveMemory(
-                memory_id=uuid4(),
-                memory_type="entity",
-                title="Sarah",
-                keywords=["sister", "NYC"],
-                context_snippet="Planning wedding",
-            )
-        )
+        memeplex.recent_focus = "Updated focus after new session"
+        memeplex.topics = ["topic1", "topic2", "topic3"]
+        memeplex.people.append("Sarah (sister)")
         await store.save_memeplex(memeplex)
 
         retrieved = await store.get_memeplex(user_id)
 
         assert retrieved is not None
-        assert retrieved.last_session_summary == "Updated summary after new session"
-        assert len(retrieved.recent_keywords) == 3
-        assert len(retrieved.active_memories) == 1
-        assert retrieved.active_memories[0].title == "Sarah"
+        assert retrieved.recent_focus == "Updated focus after new session"
+        assert len(retrieved.topics) == 3
+        assert "Sarah (sister)" in retrieved.people
 
         print(f"\n✅ Memeplex update works for user {user_id}")
 
@@ -173,7 +156,7 @@ async def test_compute_memory_stats():
             id=uuid4(),
             title="Morning workout",
             content="Did a 30 minute run",
-            timestamp=now - timedelta(hours=2),
+            event_time=now - timedelta(hours=2),
             user_id=user_id,
             session_id="session-1",
         )
@@ -181,7 +164,7 @@ async def test_compute_memory_stats():
             id=uuid4(),
             title="Evening meeting",
             content="Had team sync",
-            timestamp=now - timedelta(hours=1),
+            event_time=now - timedelta(hours=1),
             user_id=user_id,
             session_id="session-2",
         )
@@ -189,7 +172,7 @@ async def test_compute_memory_stats():
             id=uuid4(),
             title="Buy groceries",
             content="Milk, eggs, bread",
-            timestamp=now,
+            event_time=now,
             user_id=user_id,
             status="active",
             session_id="session-2",
@@ -198,7 +181,7 @@ async def test_compute_memory_stats():
             id=uuid4(),
             title="Call mom",
             content="Birthday next week",
-            timestamp=now,
+            event_time=now,
             user_id=user_id,
             status="done",
             session_id="session-2",
@@ -233,24 +216,13 @@ async def test_compute_memory_stats():
 async def test_memeplex_to_system_prompt():
     memeplex = Memeplex(
         user_id="test-user",
-        active_memories=[
-            ActiveMemory(
-                memory_id=uuid4(),
-                memory_type="note",
-                title="Job search",
-                keywords=["interview", "techcorp", "remote"],
-                context_snippet="3 rounds done",
-            ),
-            ActiveMemory(
-                memory_id=uuid4(),
-                memory_type="entity",
-                title="Sarah",
-                keywords=["sister", "wedding"],
-                context_snippet="Planning June wedding",
-            ),
-        ],
-        last_session_summary="Discussed interview and wedding planning.",
-        recent_keywords=["interview", "wedding", "techcorp"],
+        topics=["fitness", "career", "cooking"],
+        people=["Sarah (wife)", "Max (colleague)"],
+        projects=["Job Search", "Home Renovation"],
+        places=["SF (home)"],
+        last_week_topics=["career", "interview"],
+        last_month_topics=["fitness", "career"],
+        recent_focus="Interview prep for TechCorp",
         memory_stats=MemoryStats(
             total_memories=100,
             total_entities=15,
@@ -261,16 +233,13 @@ async def test_memeplex_to_system_prompt():
 
     prompt = memeplex.to_system_prompt()
 
-    assert "<memeplex>" in prompt
-    assert "</memeplex>" in prompt
-    assert "ACTIVE NOW:" in prompt
-    assert "Job search" in prompt
-    assert "Sarah" in prompt
-    assert "interview" in prompt
-    assert "RECENT:" in prompt
-    assert "MEMORY OVERVIEW:" in prompt
+    assert "Your Knowledge" in prompt
+    assert "Topics" in prompt
+    assert "fitness" in prompt
+    assert "Sarah (wife)" in prompt
+    assert "Job Search" in prompt
+    assert "Last week" in prompt
     assert "100 memories" in prompt
-    assert "recall()" in prompt
 
     print(f"\n✅ to_system_prompt() renders correctly:")
     print(prompt)
@@ -279,7 +248,8 @@ async def test_memeplex_to_system_prompt():
 @pytest.mark.asyncio
 async def test_persona_service_loads_memeplex():
     from persona.core.graph_ops import GraphOps
-    from persona.services.persona_service import PersonaService, AGENT_SYSTEM_PROMPT
+    from persona.services.persona_service import PersonaService
+    from persona.llm.prompts import PERSONAL_AI_SYSTEM_PROMPT
 
     graph_db = Neo4jGraphDatabase()
     await graph_db.initialize()
@@ -292,17 +262,9 @@ async def test_persona_service_loads_memeplex():
 
         memeplex = Memeplex(
             user_id=user_id,
-            active_memories=[
-                ActiveMemory(
-                    memory_id=uuid4(),
-                    memory_type="note",
-                    title="Test active note",
-                    keywords=["testing", "integration"],
-                    context_snippet="Testing memeplex integration",
-                )
-            ],
-            last_session_summary="This is a test session.",
-            recent_keywords=["test", "memeplex"],
+            topics=["testing", "integration"],
+            people=["Test Person"],
+            recent_focus="Testing memeplex integration",
             memory_stats=MemoryStats(total_memories=10),
         )
         await store.save_memeplex(memeplex)
@@ -311,16 +273,17 @@ async def test_persona_service_loads_memeplex():
         assert retrieved is not None
 
         prompt_section = retrieved.to_system_prompt()
-        assert "Test active note" in prompt_section
-        assert "testing, integration" in prompt_section
+        assert "testing" in prompt_section
+        assert "Test Person" in prompt_section
 
-        formatted = AGENT_SYSTEM_PROMPT.format(memeplex_context=prompt_section)
-        assert "<memeplex>" in formatted
-        assert "Test active note" in formatted
-        assert "## Available Tools" in formatted
+        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(
+            world_model=prompt_section, user_context=""
+        )
+        assert "Your Knowledge" in formatted
+        assert "testing" in formatted
 
         print(f"\n✅ PersonaService memeplex integration works")
-        print(f"   Active memories in prompt: {len(retrieved.active_memories)}")
+        print(f"   Topics in prompt: {len(retrieved.topics)}")
 
     finally:
         await graph_db.delete_user(user_id)

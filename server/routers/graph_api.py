@@ -754,3 +754,104 @@ async def get_memory_stats(
     except Exception as e:
         logger.error(f"Error getting stats for user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class MemeplexResponse(BaseModel):
+    user_id: str
+    topics: List[str] = Field(default_factory=list)
+    people: List[str] = Field(default_factory=list)
+    projects: List[str] = Field(default_factory=list)
+    places: List[str] = Field(default_factory=list)
+    concepts: List[str] = Field(default_factory=list)
+    last_week_topics: List[str] = Field(default_factory=list)
+    last_month_topics: List[str] = Field(default_factory=list)
+    recent_focus: str = ""
+    updated_at: Optional[str] = None
+
+
+@router.get(
+    "/users/{user_id}/memeplex",
+    response_model=MemeplexResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_memeplex(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        store = MemoryStore(graph_ops.graph_db, graph_ops.vector_store)
+        memeplex = await store.get_memeplex(user_id)
+
+        if not memeplex:
+            return MemeplexResponse(user_id=user_id)
+
+        return MemeplexResponse(
+            user_id=user_id,
+            topics=memeplex.topics,
+            people=memeplex.people,
+            projects=memeplex.projects,
+            places=memeplex.places,
+            concepts=memeplex.concepts,
+            last_week_topics=memeplex.last_week_topics,
+            last_month_topics=memeplex.last_month_topics,
+            recent_focus=memeplex.recent_focus,
+            updated_at=memeplex.updated_at.isoformat() if memeplex.updated_at else None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting memeplex for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MemeplexRefreshResponse(BaseModel):
+    status: str
+    topics_count: int = 0
+    entities_count: int = 0
+    updated_at: Optional[str] = None
+
+
+@router.post(
+    "/users/{user_id}/memeplex/refresh",
+    response_model=MemeplexRefreshResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def refresh_memeplex(
+    user_id: str = Path(..., description="The unique identifier for the user"),
+    graph_ops: GraphOps = Depends(get_graph_ops),
+):
+    from persona.services.consolidation_service import refresh_memeplex as do_refresh
+
+    try:
+        if not await graph_ops.user_exists(user_id):
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+        store = MemoryStore(graph_ops.graph_db, graph_ops.vector_store)
+        memeplex = await do_refresh(user_id, graph_ops, store)
+
+        if not memeplex:
+            return MemeplexRefreshResponse(status="no_data")
+
+        entities_count = (
+            len(memeplex.people)
+            + len(memeplex.projects)
+            + len(memeplex.places)
+            + len(memeplex.concepts)
+        )
+
+        return MemeplexRefreshResponse(
+            status="refreshed",
+            topics_count=len(memeplex.topics),
+            entities_count=entities_count,
+            updated_at=memeplex.updated_at.isoformat() if memeplex.updated_at else None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error refreshing memeplex for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

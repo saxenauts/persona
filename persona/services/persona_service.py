@@ -46,8 +46,10 @@ class PersonaService:
         user_card = await self._get_user_card(user_id, user_timezone)
         memeplex = await self._get_memeplex(user_id)
 
-        user_context = self._build_user_context(user_card, memeplex)
-        system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(user_context=user_context)
+        world_model, user_context = self._build_user_context(user_card, memeplex)
+        system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
+            world_model=world_model, user_context=user_context
+        )
 
         adapter = PersonaAdapter(user_id=user_id, graph_ops=self.graph_ops)
 
@@ -130,7 +132,7 @@ class PersonaService:
             memeplex = await self.memory_store.get_memeplex(user_id)
             if memeplex:
                 logger.debug(
-                    f"Loaded Memeplex for {user_id}: {len(memeplex.active_memories)} active items"
+                    f"Loaded Memeplex for {user_id}: {len(memeplex.topics)} topics"
                 )
             return memeplex
         except Exception as e:
@@ -139,18 +141,17 @@ class PersonaService:
 
     def _build_user_context(
         self, user_card: Optional[UserCard], memeplex: Optional[Memeplex]
-    ) -> str:
-        parts = []
-
-        if user_card and user_card.identity_prose:
-            parts.append(f"## Who They Are\n\n{user_card.identity_prose}")
+    ) -> tuple[str, str]:
+        world_model = ""
+        user_context = ""
 
         if memeplex:
-            memeplex_str = memeplex.to_system_prompt()
-            if memeplex_str:
-                parts.append(memeplex_str)
+            world_model = memeplex.to_system_prompt()
 
-        return "\n\n".join(parts) if parts else ""
+        if user_card and user_card.identity_prose:
+            user_context = f"## Who They Are\n\n{user_card.identity_prose}"
+
+        return world_model, user_context
 
     async def ask(
         self,

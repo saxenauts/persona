@@ -1,22 +1,22 @@
 # Persona Architecture
 
-*A living memory system that syncs with human life*
+*A digital mind that syncs with human life*
 
 ---
 
-## Philosophy
+## The Premise
 
 Every AI conversation today starts from zero. You explain who you are, what you're working on, what you care about—again and again. The AI has no continuity, no growth, no relationship that deepens over time.
 
 Persona exists to change this.
 
-We're not building a database with LLM wrappers. We're building a **digital mind** that mirrors how humans actually think about their lives—in language, narrative, meaning. A system that develops understanding over time, not just stores facts.
+We're not building a database with LLM wrappers. We're building a **memetic organism**—a living graph of memes that represents who you are, what you've experienced, and what matters to you. Like genes for the body, memes are for the mind. The combination of personal stories, ideologies, aesthetics, and symbols we associate ourselves with forms our **memeplex**.
 
 **The shift we represent:**
 - SoTA 8 months ago: Infrastructure (storage, vectors, graphs, deduplication)
 - SoTA now: Language intelligence that understands a human's world made of words
 
-This is personal computing becoming more human—designed for how people actually think.
+Other AIs have unique abilities. Persona has context. That's the edge.
 
 ---
 
@@ -24,21 +24,16 @@ This is personal computing becoming more human—designed for how people actuall
 
 Human memory isn't a filing cabinet. Cognitive science distinguishes several memory systems, each serving different functions. Persona implements four:
 
+| Pillar | Cognitive Function | Key Question | Update Semantics |
+|--------|-------------------|--------------|------------------|
+| **Episode** | Episodic evidence | What happened? | Append-only |
+| **Psyche** | Self-schema | Who am I? | Consolidate/evolve |
+| **Entity** | Semantic referents | What/who is X? | Upsert with conflict |
+| **Note** | Agent commitments | What should I do? | State machine |
+
 ### Episode: What Happened
 
 Episodic memory is autobiographical—the record of lived experience. When you recall "the time I presented at the conference" or "yesterday's conversation with Sarah," you're accessing episodic memory.
-
-**Cognitive Function**: Narrative evidence of life events
-**Update Semantics**: Append-only (history doesn't change)
-**Key Question**: "What happened?"
-
-```
-Episode: "Had a difficult conversation with my manager about the promotion.
-         She said Q2 is more realistic but encouraged me to document wins.
-         I felt frustrated but understood the reasoning."
-         
-         Timestamp: 2025-01-15 14:30:00
-```
 
 Episodes form the backbone of "what do you remember about X?" queries. They carry the texture of experience—not just facts, but feelings, context, narrative.
 
@@ -46,280 +41,249 @@ Episodes form the backbone of "what do you remember about X?" queries. They carr
 
 Semantic self-memory is different from episodic. It's not about events but about identity—the stable patterns that define who you are. Your preferences, values, beliefs, personality traits.
 
-**Cognitive Function**: Self-schema (identity model)
-**Update Semantics**: Consolidate and evolve over time
-**Key Question**: "Who am I?"
-
-```
-Psyche: "Values deep work and dislikes interruptions during focused time"
-        Type: preference
-
-Psyche: "Tends to overthink decisions but commits fully once decided"
-        Type: trait
-```
-
-The Psyche is what makes the AI "know" you across sessions. It's not extracted from a single conversation—it's consolidated from patterns across many.
+The Psyche is what makes the AI "know" you across sessions. It's not extracted from a single conversation—it's consolidated from patterns across many. Most sessions don't reveal new psyche. Only significant identity signals warrant extraction.
 
 ### Entity: What Exists
 
-Semantic memory about the world—knowledge about people, places, things, and concepts in the user's life. When you know "Sarah's birthday is June 5th" or "Project Alpha uses React," you're accessing entity knowledge.
+Semantic memory about the world—knowledge about people, places, things, and concepts in your life. When you know "Sarah's birthday is June 5th" or "Project Alpha uses React," you're accessing entity knowledge.
 
-**Cognitive Function**: Semantic referents (the nouns of someone's life)
-**Update Semantics**: Upsert with conflict resolution
-**Key Question**: "What/who is X?"
-
-```
-Entity: "Sarah Smith"
-        Type: person
-        Aliases: ["Sarah", "my girlfriend"]
-        Attributes:
-          - birthday: "June 5"
-          - works_at: "Google"
-          - relationship: "girlfriend"
-```
-
-Entities carry structured attributes. Facts about entities live ON the entity, not scattered as separate memories.
+**Critical**: Facts about entities live ON the entity as attributes, not scattered as separate memories. "Sarah works at Google" is an Entity attribute, not a Note.
 
 ### Note: What I Intend
 
-Prospective memory—remembering to do things in the future. Humans use external aids because prospective memory is unreliable. Notes are the system's commitment to the user.
+Prospective memory—remembering to do things in the future. Notes are the system's commitment to the user. Created ONLY when explicit intention signals present: "remind me", "I need to", due dates, imperatives.
 
-**Cognitive Function**: Agent commitments
-**Update Semantics**: State machine (active → done/cancelled)
-**Key Question**: "What should I do?"
-
-```
-Note: "Prepare quarterly review presentation"
-      Type: task
-      Status: active
-      Due: 2025-02-01
-```
-
-**Critical Distinction: Entity vs Note**
-
-| Entity                                       | Note                                       |
-| -------------------------------------------- | ------------------------------------------ |
-| Things that EXIST (nouns)                    | Things to DO (intentions)                  |
-| "Sarah", "Paris", "Project Alpha"            | "call Sarah", "book trip", "finish report" |
-| Facts are attributes: "Sarah's birthday..."  | Action items with state                    |
-| Created when the world contains something    | Created when there's an intention signal   |
+**Entity vs Note distinction**: Entity = nouns that EXIST. Note = intentions to DO.
 
 ---
 
-## Working Memory: The Active Mental Workspace
+## The Memeplex: World Model Index
 
-When humans think, they don't access their entire memory. They hold a limited set of information in **working memory**—the active mental workspace where current thinking happens.
+A **memeplex** (from memetics, Dawkins/Blackmore) is a group of memes that reinforce and propagate together. In Persona, the Memeplex is the LLM's "table of contents" for a user's world.
 
-Persona mirrors this. For each interaction, we construct a working memory—the subset of the full memory graph that's relevant right now.
+### The Problem It Solves
 
-### Composition
+Without Memeplex, the LLM only sees what's retrieved via `recall()`. It has no awareness of what *exists* for the user—can't proactively explore or make connections.
 
-```
-Working Memory (what the LLM sees)
-│
-├── UserCard: Identity Anchor
-│   "Alex is a software engineer in Austin navigating a career transition.
-│    They value work-life balance, prefer morning deep work, and are 
-│    currently excited about their side project in AI tooling."
-│
-├── Recent Context: What's been happening
-│   "January 15: Difficult conversation with manager about promotion (led to resume update)
-│    January 14: Completed system design for new API
-│    January 12: Started exploring new job opportunities"
-│
-├── Active Context: What's ongoing
-│   "Current tasks: Prepare quarterly review, Update resume
-│    Preferences: Morning meetings, Deep work blocks
-│    Active project: AI tooling side project"
-│
-└── Memeplex Guidance: How to query effectively
-    "Available entities: Sarah (girlfriend), Project Alpha, Manager...
-     Time expressions: 'last week', 'before the promotion talk'...
-     Relationship types: LED_TO, CAUSED_BY, MENTIONS..."
-```
+With Memeplex, the LLM knows the user's topics, people, projects, places, concepts. It can ask better questions and surface relevant context unbidden.
 
-### The UserCard: Identity Anchor
-
-The UserCard sits at primacy position—the first thing the LLM sees. It's a compact prose summary of who this person IS right now.
-
-The UserCard isn't static. It's regenerated through consolidation, synthesizing recent experiences into an updated identity. The person you are today reflects your recent experiences.
+### Schema
 
 ```python
-UserCard(
-    user_id="alex_123",
-    timezone="America/Los_Angeles",
-    identity_prose="Alex is a software engineer in Austin who values..."
+Memeplex(
+    topics: List[str],           # Universal: "fitness", "AI research"
+    people: List[str],           # "Sarah (wife)", "Max (colleague)"
+    projects: List[str],         # "Persona", "Home Renovation"
+    places: List[str],           # "SF (home)", "Tokyo (2024 trip)"
+    concepts: List[str],         # "stoicism", "minimalism"
+    last_week_topics: List[str], # Temporal recency
+    last_month_topics: List[str],
+    recent_focus: str,           # Current attention
+    memory_stats: MemoryStats,
 )
 ```
 
-### Why Prose Over Structure
+### Key Design Decision
 
-LLMs process natural language. Rather than feeding them JSON with keys like `memory_type` and `timestamp_utc`, we format memories as readable prose:
+**Topics are universal**—everyone has them. Entities (people/projects/places) are optional. A "loner" might only have topics. This respects the variance in human lives.
 
+### How It's Used
+
+The Memeplex is refreshed during consolidation (after integration). An LLM extracts topics and entities from recent memories, merges with existing, and stores as a JSON blob in Neo4j. On each `/chat` request, PersonaService loads the Memeplex and injects it into the system prompt via `{world_model}` slot.
+
+```markdown
+## Your Knowledge of This User
+
+**Topics**: fitness, AI research, cooking
+**People**: Sarah (wife), Max (colleague)
+**Projects**: Persona, Home Renovation
+
+**Last week**: Persona v1, fitness
+**Current focus**: Building Memeplex for v1 release
+
+*100 memories | 15 entities | 3 active notes*
 ```
-January 15: Had a difficult conversation with manager about promotion (led to resume update).
-```
-
-This isn't aesthetic. Prose leverages the LLM's training on natural text, making comprehension more reliable than structured formats.
 
 ---
 
-## Memeplex: Ideas That Cluster Together
+## The Memory Pipeline
 
-A **memeplex** (from memetics, Dawkins/Blackmore) is a group of memes that reinforce and propagate together. In Persona, the Memeplex is how memories cluster and relate.
+### Ingestion: Raw Content → Structured Memory
 
-### Beyond Indexing
-
-The Memeplex isn't just a lookup table. It's:
-
-1. **Navigation**: How do I find related memories from a starting point?
-2. **Context**: What entities, relationships, and patterns exist in this person's world?
-3. **Query Guidance**: How should the LLM formulate effective queries?
-
-### Three Dimensions
-
-| Dimension | Function | Example |
-|-----------|----------|---------|
-| **Entity Registry** | WHO/WHAT exists | Sarah, Project Alpha, Austin |
-| **Temporal Timeline** | WHEN things happened | Sequences, durations, epochs |
-| **Topic Cluster** | ABOUT what themes | Career, relationships, hobbies |
-
-### LLM-Usable Context
-
-The Memeplex provides context so the LLM knows HOW to query:
+When content arrives via `/ingest`:
 
 ```
-You have access to these entity types: person, project, place, organization
-You can filter by time: date_start, date_end (ISO format)
-You can follow relationships: LED_TO (what came after), CAUSED_BY (what triggered)
-
-Key entities in this user's world:
-- Sarah (person, girlfriend)
-- Project Alpha (project, work)
-- Manager (person, work relationship)
+Raw Content (conversation, note, import)
+    │
+    ▼
+PersonaAdapter.ingest()
+    │
+    ▼
+MemoryIngestionService.ingest()
+    ├── LLM Extraction (structured output)
+    │   ├── Episode: What happened (always 1)
+    │   ├── Entity: People, places, things mentioned
+    │   ├── Psyche: Identity signals (RARE)
+    │   └── Note: Intentions with triggers (RARE)
+    │
+    ├── Embedding Generation (parallel)
+    │
+    └── MemoryStore.create() → Neo4j
 ```
 
-This is like giving someone a database schema so they can write better queries.
+**Extraction Prompt** (`persona/services/ingestion_service.py`): The LLM is instructed to be **selective**—most sessions have 0 Psyche, Notes only with explicit intention signals. The Episode IS the memory; make it rich and retrievable.
+
+**Temporal Extraction**: LLM resolves relative time ("yesterday", "last week") to actual dates using provided current time and timezone.
+
+### Integration: Connecting the Graph
+
+After ingestion, the Integration Agent runs (background or triggered):
+
+```
+Integration Agent
+    │
+    ├── get_unintegrated() → Find new memories
+    │
+    ├── For each memory:
+    │   ├── recall() → Find related existing memories
+    │   ├── expand_neighbors() → Explore graph context
+    │   └── commit_patch() → Apply connections
+    │
+    └── Consolidation triggered at end
+```
+
+**Connection Types**:
+- `MENTIONS`: Episode references an Entity
+- `LED_TO`: Causal forward (A caused B)
+- `CAUSED_BY`: Causal backward
+- `NEXT/PREVIOUS`: Temporal sequence
+- `RELATES_TO`: Thematic association
+- `CONTRADICTS`: Information conflicts
+- `SAME_AS`: Entity deduplication
+
+**Entity Resolution**: Integration agent detects when different names refer to same person/thing ("my wife Sarah" = "Sarah Chen"). Conservative—only merge when confident.
+
+### Consolidation: Distilling Identity
+
+After integration:
+
+```
+Consolidation Service
+    │
+    ├── UserCard Refresh
+    │   └── LLM synthesizes identity prose from recent psyche + episodes
+    │
+    ├── TemporalContext Refresh
+    │   └── Week/month summaries from recent episodes
+    │
+    └── Memeplex Refresh
+        └── LLM extracts topics/entities, merges with existing
+```
+
+**UserCard**: Compact identity anchor placed first in context (primacy effect). Contains `identity_prose`—natural language summary of who this person IS right now.
 
 ---
 
-## Integration: How Understanding Develops
+## The Query Path
 
-Integration is NOT about graph maintenance or deduplication. It's about how the system **develops understanding over time**—like how humans consolidate memories during sleep.
-
-### What Integration Does
-
-1. **Connects the Dots**: Links new memories to existing ones based on meaning
-   - "This conversation mentions Sarah" → link to Sarah entity
-   - "This frustration came after the manager meeting" → causal chain
-
-2. **Evolves Identity**: Updates Psyche when patterns emerge
-   - Multiple episodes about job frustration → "Considering career change"
-   - Repeated mentions of side project → "Passionate about AI tooling"
-
-3. **Resolves Entities**: Understands "my girlfriend", "Sarah", and "her" are the same person
-
-4. **Maintains Narrative**: Ensures temporal and causal chains stay coherent
-
-### When Integration Happens
-
-Integration runs in the background—not blocking the user's experience. Like how you don't consciously consolidate memories; it happens while you sleep.
+When a user sends a message to `/chat`:
 
 ```
-Hot Path (immediate):
-User message → Extract memories → Store → Respond
-                                    ↓
-Cold Path (background):            Queue for integration
-                                    ↓
-                            Integration develops understanding:
-                            - Entity resolution
-                            - Psyche consolidation  
-                            - Relationship linking
-                            - Narrative coherence
+/chat Request
+    │
+    ▼
+PersonaService.run_agent()
+    │
+    ├── Load UserCard (cached or generate)
+    ├── Load Memeplex
+    │
+    ├── Build System Prompt
+    │   ├── {world_model} ← Memeplex.to_system_prompt()
+    │   └── {user_context} ← UserCard.identity_prose
+    │
+    ├── Agent Loop (with tools)
+    │   ├── recall(query, date_start?, date_end?, memory_types?)
+    │   ├── record(text) → immediate persistence
+    │   ├── expand_neighbors(memory_id)
+    │   └── follow_relationship(source_id, relation_type)
+    │
+    └── Response (grounded in memories)
 ```
 
-### The Human Parallel
+**LLM-First Design**: No manual routers. No keyword matching. No heuristic gating. The LLM decides which tools to use based on context and prompt guidance. Modern LLMs handle 10-15 tools routinely; our 4 are trivial.
 
-| Human Cognition | Persona System |
-|-----------------|----------------|
-| Experience an event | Ingest conversation |
-| Form immediate memory | Extract Episode, Entity, Note |
-| Sleep consolidation | Integration agent |
-| Updated self-understanding | Evolved Psyche, linked graph |
+**Retrieval Strategy**: The system prompt guides triangulation:
+1. **Semantic**: What they're asking about
+2. **Entity**: People, projects, places involved
+3. **Temporal**: When it happened
+4. **Type filter**: Episodes for events, Psyche for preferences, Notes for tasks
 
 ---
 
-## The Pipeline: Life Events to Structured Memory
-
-### Ingestion Flow
+## Architecture Layers
 
 ```
-Raw Life Event (conversation, note, import)
-         │
-         ▼
-    Extraction (LLM)
-    ├── What happened? → Episode
-    ├── Who/what is mentioned? → Entity  
-    ├── What does this reveal about them? → Psyche (rare, significant only)
-    └── Any intentions/commitments? → Note
-         │
-         ▼
-    Immediate Storage
-    (Episodes linked temporally, Entities with basic MENTIONS links)
-         │
-         ▼
-    Integration Queue
-         │
-         ▼
-    Background Understanding
-    (Entity resolution, Psyche consolidation, deeper linking)
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         /chat  /ask  /ingest                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                         PersonaService                                  │
+│                   (unified orchestrator)                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                         Tools Layer                                     │
+│              recall | record | expand | follow                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                    Memory Index (Memeplex)                              │
+│            Topics | People | Projects | Places | Concepts               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                        Memory Store                                     │
+│              create | get | search | link | save_memeplex               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                      Integration Agent                                  │
+│            Entity resolution | Causal chains | Consolidation            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                       Graph Backend                                     │
+│                  Neo4j (with vector index)                              │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Retrieval Flow
+---
 
-```
-User Query: "What have I been working on lately?"
-         │
-         ▼
-    Working Memory Construction
-    ├── UserCard (identity anchor)
-    ├── Recent episodes (time-windowed)
-    ├── Active notes (ongoing tasks)
-    └── Memeplex context (query guidance)
-         │
-         ▼
-    Agent Loop (LLM decides what tools to use)
-    ├── recall(query) → semantic search with filters
-    ├── expand_neighbors(id) → graph traversal from anchor
-    ├── follow_relationship(id, type) → trace causal/temporal chains
-    └── record(text) → save new memories if needed
-         │
-         ▼
-    Synthesized Response
-    (Grounded in memories, personalized to identity)
-```
+## Key Files
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **Entry Points** | `server/routers/graph_api.py` | API endpoints |
+| **Orchestrator** | `persona/services/persona_service.py` | Query path, agent loop |
+| **Ingestion** | `persona/services/ingestion_service.py` | Extraction prompts |
+| **Adapter** | `persona/adapters/persona_adapter.py` | Unified ingest interface |
+| **Integration** | `persona/services/integration_agent.py` | Graph linking |
+| **Consolidation** | `persona/services/consolidation_service.py` | UserCard, Memeplex refresh |
+| **Memory Model** | `persona/models/memory.py` | 4-pillar types, Memeplex |
+| **Tools** | `persona/tools/memory.py` | recall, record, expand, follow |
+| **Store** | `persona/core/memory_store.py` | Neo4j operations |
+| **Prompts** | `persona/llm/prompts.py` | PERSONAL_AI_SYSTEM_PROMPT |
 
 ---
 
 ## Design Principles
 
-### LLM-First
+### LLM-First (CRITICAL)
 
-No manual routers. No keyword matching. No heuristic gating.
+**No manual routers. No keyword matching. No heuristic gating.**
 
-All decisions are made by LLMs through prompt engineering:
-- Tool selection: LLM decides which tool based on context
-- Write vs defer: LLM decides when to record based on guidance
-- Retrieval strategy: LLM chooses vector vs graph based on query semantics
+All decisions made by LLMs through prompt engineering:
+- Tool selection: LLM decides based on context
+- Write vs defer: LLM decides based on prompt guidance
+- Retrieval strategy: LLM chooses vector vs graph
 
-**Anti-patterns (NEVER do these):**
-- `if "remind" in message: enable_record_tool()` — NO keyword routing
-- `has_immediate_write_intent(message)` — NO intent classifiers
-- Manual routing logic before LLM calls — NO preprocessing gates
+**Anti-patterns (NEVER):**
+- `if "remind" in message: enable_record()`
+- `has_immediate_write_intent(message)`
+- Manual preprocessing gates
 
 ### Recency Bias
 
-Human memory weights the recent past heavily. What happened yesterday is more accessible than what happened a year ago. Persona mirrors this with time-windowed retrieval.
+Human memory weights the recent past heavily. What happened yesterday is more accessible than what happened a year ago. Persona mirrors this with time-windowed retrieval and `last_week_topics` / `last_month_topics` in Memeplex.
 
 ### Associative, Not Exhaustive
 
@@ -331,52 +295,36 @@ The UserCard provides stability across sessions. While individual memories come 
 
 ---
 
-## Cognitive Science Foundations
+## API Endpoints
 
-The architecture draws from research on memory systems:
-
-**Episodic-Semantic Distinction** (Tulving, 1972): Separation of Episode and Psyche reflects autobiographical event memory vs. general self-knowledge.
-
-**Working Memory** (Baddeley, 2000): Limited-capacity workspace for active information processing—what we construct for each interaction.
-
-**Spreading Activation** (Collins & Loftus, 1975): Graph-based retrieval where one memory activates connected memories parallels semantic memory models.
-
-**Consolidation** (Squire, 1992): UserCard regeneration and Psyche evolution reflect how experiences transform into stable knowledge.
-
-**Context-Dependent Retrieval** (Godden & Baddeley, 1975): Including contextual information in memories aids retrieval.
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/users/{user_id}/chat` | POST | Personal AI conversation |
+| `/users/{user_id}/persona/ask` | POST | Structured JSON extraction |
+| `/users/{user_id}/ingest` | POST | Ingest single content |
+| `/users/{user_id}/ingest/batch` | POST | Batch ingest |
+| `/users/{user_id}/integrate` | POST | Trigger integration |
+| `/users/{user_id}/sessions/{id}/close` | POST | Close session + integrate |
+| `/users/{user_id}/memeplex` | GET | Read world model index |
+| `/users/{user_id}/memeplex/refresh` | POST | Force memeplex refresh |
 
 ---
 
 ## What We're Building Toward
 
-### Intelligent Forgetting
-Not all memories should persist forever. Decay mechanisms reduce salience of irrelevant memories, focusing retrieval on what matters.
+### Implemented
+- 4-pillar memory model with cognitive semantics
+- Memeplex world model index
+- LLM-first tool selection
+- Integration agent with entity resolution
+- UserCard identity anchor
+- Temporal context (week/month summaries)
 
-### Contradiction Resolution
-When new information conflicts with existing memories (changed jobs, moved cities, broke up), the system updates rather than accumulates contradictions.
-
-### Temporal Reasoning
-Beyond date filtering—understanding "before the wedding," "during my time at Google," "last summer."
-
-### Intuition and Conjecture
-The system develops intuitions: "This person seems stressed lately," "They're more excited about the side project than their job," "The relationship with their manager has shifted."
-
----
-
-## Summary
-
-Persona is a digital mind that syncs with human life:
-
-| Component | Purpose | Human Parallel |
-|-----------|---------|----------------|
-| **4 Pillars** | Structure of personal memory | Episode, semantic self, semantic world, prospective |
-| **Working Memory** | Active mental workspace | What's "on your mind" |
-| **UserCard** | Identity anchor | Self-concept |
-| **Memeplex** | How ideas cluster and relate | Associative memory |
-| **Integration** | How understanding develops | Sleep consolidation |
-| **Graph** | Associative structure | Neural networks of meaning |
-
-We're not building infrastructure. We're building a system that understands a human's world made of words—their experiences, identity, relationships, intentions—and evolves with them.
+### Deferred to v2
+- **Intelligent Forgetting**: Decay mechanisms for irrelevant memories
+- **Temporal Anchor Resolution**: "Year after my wedding" → date range
+- **Link Reinforcement**: Fire-together-wire-together dynamics
+- **Multi-pass Ingestion**: 2-day context window for richer extraction
 
 ---
 

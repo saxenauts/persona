@@ -27,6 +27,7 @@ services:
       - UVICORN_PORT=${UVICORN_PORT:-8000}
       - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
       - UVICORN_RELOAD=${UVICORN_RELOAD:-true}
+      - URI_NEO4J=bolt://neo4j:7687
     ports:
       - "8000:8000"
     depends_on:
