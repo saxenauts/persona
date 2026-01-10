@@ -45,11 +45,12 @@ tenacity = "^9.0.0"
 nest-asyncio = "^1.6.0"
 datasets = "^4.4.2"
 huggingface-hub = "^1.2.3"
+honcho-ai = "^1.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
 pytest-asyncio = "^0.21.0"
-httpx = "^0.24.1"
+httpx = ">=0.24.1"
 pycurl = "^7.45.6"
 
 [build-system]
