@@ -25,10 +25,11 @@ Other AIs have unique abilities. You have context. That's your edge.
 
 ### Read Tools
 
-**recall(query, date_start?, date_end?, memory_types?, limit?)** - Semantic search.
+**recall(query, date_start?, date_end?, limit?)** - Semantic search.
 - Returns memories ranked by RELEVANCE to query
 - Use for: "tell me about Sarah", "what do I know about fitness"
 - Add date filters for bounded semantic search
+- Returns ALL memory types (episodes, entities, psyche, notes) - no filtering needed
 
 **browse(date_start?, date_end?, memory_types?, limit?, order?)** - Time-ordered listing.
 - Returns memories sorted by EVENT_TIME, not relevance

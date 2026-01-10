@@ -116,6 +116,9 @@ async def recall_handler(
             limit=limit * 2,
             date_range=date_range,
         )
+        logger.info(
+            f"Vector search returned {len(results.get('results', []))} results for query: {query[:50]}..."
+        )
     except Exception as e:
         logger.error(f"Recall failed: {e}")
         return RecallResult()
@@ -128,18 +131,25 @@ async def recall_handler(
         try:
             mem = await ctx.store.get(UUID(node_id), ctx.user_id)
             if mem:
+                logger.info(
+                    f"Processing memory {node_id}: type={mem.type}, title={getattr(mem, 'title', '?')}"
+                )
                 if (
                     exclude_transcripts
                     and getattr(mem, "source_type", None) == "transcript"
                 ):
+                    logger.info(f"Skipping transcript: {node_id}")
                     continue
                 if memory_types and mem.type not in memory_types:
+                    logger.info(f"Skipping type filter: {node_id} ({mem.type})")
                     continue
                 items.append(_memory_to_hit(mem, score=score))
                 if len(items) >= limit:
                     break
+            else:
+                logger.warning(f"Memory not found: {node_id}")
         except Exception as e:
-            logger.debug(f"Could not retrieve memory {node_id}: {e}")
+            logger.warning(f"Could not retrieve memory {node_id}: {e}")
 
     return RecallResult(items=items, count=len(items))
 

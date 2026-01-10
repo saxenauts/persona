@@ -27,14 +27,6 @@ RECALL_TOOL = {
                     "type": "string",
                     "description": "End date filter (ISO 8601: YYYY-MM-DD). Only return memories up to this date.",
                 },
-                "memory_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": ["episode", "psyche", "note", "entity"],
-                    },
-                    "description": "Filter by memory type. episode=events, psyche=traits/preferences, note=goals/tasks, entity=people/places/things.",
-                },
                 "limit": {
                     "type": "integer",
                     "description": "Maximum results to return. Default: 10.",

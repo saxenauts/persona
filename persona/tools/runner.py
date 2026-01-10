@@ -63,7 +63,9 @@ class ToolRegistry:
 
         try:
             args = json.loads(tool_call.arguments)
+            logger.info(f"Tool call: {tool_call.name}({args})")
             result = await handler(ctx, **args)
+            logger.info(f"Tool result: {tool_call.name} -> {result}")
 
             if hasattr(result, "__dict__"):
                 content = json.dumps(result.__dict__, default=str)
@@ -305,6 +307,7 @@ class AgentRunner:
                     if exec_result.ok
                     else json.dumps({"error": exec_result.error})
                 )
+                logger.info(f"Tool message to LLM: {content[:500]}")
                 current_messages.append(
                     ChatMessage(
                         role="tool",
