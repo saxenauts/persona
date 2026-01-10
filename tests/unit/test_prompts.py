@@ -17,12 +17,15 @@ class TestPersonalAIPrompt:
 
     def test_formats_with_user_context(self):
         test_context = "## Who They Are\n- Test user identity"
-        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(user_context=test_context)
+        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(
+            user_context=test_context, world_model=""
+        )
         assert test_context in formatted
         assert "{user_context}" not in formatted
+        assert "{world_model}" not in formatted
 
     def test_formats_with_empty_context(self):
-        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(user_context="")
+        formatted = PERSONAL_AI_SYSTEM_PROMPT.format(user_context="", world_model="")
         assert "Personal AI" in formatted
 
     def test_contains_context_edge_messaging(self):
