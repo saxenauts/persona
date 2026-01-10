@@ -85,8 +85,6 @@ poetry run pytest tests/unit -v    # Local unit tests only
 - `run_agent()`: Single retrieval path using agent loop with recall/record/expand/follow tools. Optional `output_schema` for structured JSON output.
 - `ask()`: Thin wrapper that calls `run_agent(output_schema=...)` for structured extraction use cases.
 
-**RAGInterface** (`persona/core/rag_interface.py`): Low-level retrieval interface. Accepts optional `graph_ops` for resource sharing.
-
 ## Tools Layer
 
 **ToolContext** (`persona/tools/context.py`): Per-request context injected at execution time. Contains user_id, graph_ops, store, timezone, user_card. Not exposed to LLM.

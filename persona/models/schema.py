@@ -6,7 +6,7 @@ see persona.models.memory instead.
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 # =============================================================================
@@ -16,52 +16,6 @@ from typing import Dict, Any, Optional
 
 class UserCreate(BaseModel):
     user_id: str
-
-
-class RAGQuery(BaseModel):
-    query: str
-    retrieval_query: Optional[str] = (
-        None  # Separate query for retrieval (strips MCQ options)
-    )
-    include_stats: bool = False
-
-
-class RAGResponse(BaseModel):
-    answer: str
-    model: Optional[str] = None
-    usage: Optional[Dict[str, Any]] = None
-    temperature: Optional[float] = None
-    prompt_tokens: Optional[int] = None
-    completion_tokens: Optional[int] = None
-    context_chars: Optional[int] = None
-    retrieval: Optional[Dict[str, Any]] = None
-    retrieval_ms: Optional[float] = None
-    generation_ms: Optional[float] = None
-
-
-class AgentRAGQuery(BaseModel):
-    query: str
-    include_stats: bool = False
-    session_id: Optional[str] = None
-    user_timezone: str = "UTC"
-    max_turns: Optional[int] = Field(
-        default=None, description="Maximum tool-calling turns before returning"
-    )
-    timeout: Optional[float] = Field(
-        default=None, description="Maximum seconds before returning"
-    )
-
-
-class AgentRAGResponse(BaseModel):
-    answer: str
-    status: str = Field(
-        default="completed",
-        description="Agent status: completed, max_turns, timeout, error",
-    )
-    state: Optional[str] = Field(
-        default=None, description="Serialized state for resumption (if can_resume)"
-    )
-    stats: Optional[Dict[str, Any]] = None
 
 
 class AskRequest(BaseModel):

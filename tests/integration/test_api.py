@@ -1,7 +1,5 @@
 import pytest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
-from server.main import app
 
 pytestmark = pytest.mark.asyncio
 
@@ -125,98 +123,6 @@ async def test_ingest_idempotency(test_client, isolated_graph_ops):
 
         # The number of nodes should be the same
         assert len(nodes_after_second_ingest) == len(nodes_after_first_ingest)
-
-
-async def test_rag_query(test_client, api_test_user):
-    """Test RAG query endpoint"""
-    user_id = api_test_user
-    test_client.post(f"/api/v1/users/{user_id}")
-    response = test_client.post(
-        f"/api/v1/users/{user_id}/rag/query", json={"query": "What is this text about?"}
-    )
-    assert response.status_code == 200
-    assert "answer" in response.json()
-
-
-async def test_rag_query_non_existent_user(test_client):
-    """Test that a RAG query for a non-existent user returns a 404."""
-    response = test_client.post(
-        "/api/v1/users/non-existent-user/rag/query", json={"query": "Does not matter"}
-    )
-    assert response.status_code == 404
-
-
-async def test_rag_agent_query(test_client, api_test_user):
-    """Test agent RAG query endpoint with tool-calling loop"""
-    user_id = api_test_user
-    test_client.post(f"/api/v1/users/{user_id}")
-    response = test_client.post(
-        f"/api/v1/users/{user_id}/rag/agent",
-        json={
-            "query": "What do you know about me?",
-            "include_stats": True,
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "answer" in data
-    assert "status" in data
-    assert data["status"] in ["completed", "max_turns", "timeout", "error"]
-    if data.get("stats"):
-        assert "tool_calls_made" in data["stats"]
-        assert "turns" in data["stats"]
-
-
-async def test_rag_agent_with_limits(test_client, api_test_user):
-    """Test agent RAG with max_turns and timeout limits"""
-    user_id = api_test_user
-    test_client.post(f"/api/v1/users/{user_id}")
-    response = test_client.post(
-        f"/api/v1/users/{user_id}/rag/agent",
-        json={
-            "query": "Tell me everything about my goals",
-            "max_turns": 3,
-            "timeout": 30.0,
-            "include_stats": True,
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "answer" in data
-    assert "status" in data
-
-
-async def test_rag_agent_non_existent_user(test_client):
-    """Test that agent RAG for non-existent user returns 404"""
-    response = test_client.post(
-        "/api/v1/users/non-existent-user/rag/agent", json={"query": "Does not matter"}
-    )
-    assert response.status_code == 404
-
-
-async def test_rag_query_for_user_with_no_graph(test_client, isolated_graph_ops):
-    """Test that a RAG query for a user with no data returns a clean response."""
-    async for graph_ops, user_id in isolated_graph_ops:
-        response = test_client.post(
-            f"/api/v1/users/{user_id}/rag/query",
-            json={"query": "What is this text about?"},
-        )
-        assert response.status_code == 200
-        assert "answer" in response.json()
-        # The mock will return a default string, the key is that the API doesn't crash.
-
-
-async def test_rag_query_vector(test_client, api_test_user):
-    """Test vector-only RAG query endpoint"""
-    user_id = api_test_user
-    test_client.post(f"/api/v1/users/{user_id}")
-    response = test_client.post(
-        f"/api/v1/users/{user_id}/rag/query-vector",
-        json={"query": "What is this text about?"},
-    )
-    assert response.status_code == 200
-    assert "query" in response.json()
-    assert "response" in response.json()
 
 
 async def test_ask_insights(test_client, api_test_user):

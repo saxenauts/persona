@@ -425,10 +425,6 @@ async def persona_ask(
         )
 
 
-class IntegrateRequest(BaseModel):
-    memory_ids: Optional[List[str]] = Field(default=None)
-
-
 class IntegrateResponse(BaseModel):
     status: str
     links_created: int = 0
@@ -436,49 +432,6 @@ class IntegrateResponse(BaseModel):
     derived_created: int = 0
     conflicts_flagged: int = 0
     errors: List[str] = Field(default_factory=list)
-
-
-@router.post(
-    "/users/{user_id}/integrate",
-    response_model=IntegrateResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def trigger_integration(
-    user_id: str = Path(..., description="The unique identifier for the user"),
-    request: Optional[IntegrateRequest] = Body(default=None),
-    graph_ops: GraphOps = Depends(get_graph_ops),
-):
-    try:
-        if not await graph_ops.user_exists(user_id):
-            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-
-        trigger_ids = request.memory_ids if request and request.memory_ids else []
-
-        logger.info(f"Triggering integration for user {user_id}")
-        result = await run_integration_agent(
-            user_id=user_id,
-            trigger_ids=trigger_ids,
-            graph_ops=graph_ops,
-            session_id=None,  # Full user scope
-        )
-
-        return IntegrateResponse(
-            status="success" if result.success else "failed",
-            links_created=result.links_created,
-            merges_applied=result.merges_performed,
-            derived_created=0,
-            conflicts_flagged=result.flags_raised,
-            errors=result.errors,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in integration for user {user_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error occurred while processing integration",
-        )
 
 
 @router.post(

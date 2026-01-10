@@ -64,11 +64,7 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Renders links inline for narrative continuity
    - Sections: `<user>`, `<recent_context>`, `<active_context>`
 
-6. **RAGInterface** (`core/rag_interface.py`)
-   - Low-level retrieval interface
-   - Accepts optional `graph_ops` for resource sharing
-
-7. **Memeplex** (`models/memory.py`)
+6. **Memeplex** (`models/memory.py`)
    - Per-user "world model index" - what the LLM knows about this user
    - Topics (universal), people, projects, places, concepts
    - Time windows: last_week_topics, last_month_topics
@@ -89,10 +85,9 @@ Business logic layer between API and core:
    - Creates Episode, Psyche, Entity, and Note memories
    - Handles temporal linking between episodes
 
-3. **UserCardService** (`services/user_service.py`)
-   - Synthesizes UserCard from Psyche memories + active Notes
-   - Uses LLM to generate identity prose
-   - Cached per session (lazy generation on first query)
+3. **ConsolidationService** (`services/consolidation_service.py`)
+   - Synthesizes UserCard identity prose + Memeplex refresh
+   - Cached in graph with TTL (lazy generation on first query)
 
 ## Data Flow
 
@@ -132,7 +127,6 @@ User Message → /chat endpoint → PersonaService.run_agent()
 | `/users/{user_id}/persona/ask` | POST | Structured JSON extraction |
 | `/users/{user_id}/ingest` | POST | Ingest single content |
 | `/users/{user_id}/ingest/batch` | POST | Batch ingest |
-| `/users/{user_id}/integrate` | POST | Trigger integration agent |
 | `/users/{user_id}/sessions/{session_id}/close` | POST | Close session + integrate |
 | `/users/{user_id}/memeplex` | GET | Read user's world model index |
 | `/users/{user_id}/memeplex/refresh` | POST | Force refresh memeplex from memories |

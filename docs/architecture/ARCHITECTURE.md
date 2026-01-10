@@ -303,7 +303,6 @@ The UserCard provides stability across sessions. While individual memories come 
 | `/users/{user_id}/persona/ask` | POST | Structured JSON extraction |
 | `/users/{user_id}/ingest` | POST | Ingest single content |
 | `/users/{user_id}/ingest/batch` | POST | Batch ingest |
-| `/users/{user_id}/integrate` | POST | Trigger integration |
 | `/users/{user_id}/sessions/{id}/close` | POST | Close session + integrate |
 | `/users/{user_id}/memeplex` | GET | Read world model index |
 | `/users/{user_id}/memeplex/refresh` | POST | Force memeplex refresh |

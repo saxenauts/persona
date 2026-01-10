@@ -262,20 +262,4 @@ class PersonaAdapter:
 
         logger.info(f"Batch ingestion complete: {len(final_results)} results")
 
-        if persist and any(r.success for r in final_results):
-            all_memory_ids = []
-            for r in final_results:
-                if r.success:
-                    all_memory_ids.extend([str(m.id) for m in r.memories])
-
-            if all_memory_ids:
-                logger.info(
-                    f"Running integration agent on {len(all_memory_ids)} batch memories"
-                )
-                await run_integration_agent(
-                    user_id=self.user_id,
-                    trigger_ids=all_memory_ids,
-                    graph_ops=self.graph_ops,
-                )
-
         return final_results

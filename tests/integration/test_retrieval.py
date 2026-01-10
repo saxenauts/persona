@@ -13,7 +13,6 @@ from persona.core.memory_store import MemoryStore
 from persona.core.backends.neo4j_graph import Neo4jGraphDatabase
 from persona.core.retrieval import Retriever
 from persona.core.graph_ops import GraphOps
-from persona.services.user_service import UserCardService
 
 
 USER_ID = "fitness_test_v2"
