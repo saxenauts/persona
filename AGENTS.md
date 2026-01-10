@@ -177,10 +177,7 @@ This repo prioritizes **optimization work** - every layer must be transparent an
 3. **Atomic state changes** - Checkpoints, configs use temp+rename pattern
 4. **Resource cleanup** - Failed operations must release connections, reset adapters
 
-**Eval Framework Observability:**
-- `CallRateMonitor`: Logs RPM/TPM every 30s (must record calls regardless of `GRAPHITI_RPS` setting)
-- `DeepLogger`: Per-question JSONL with ingestion/retrieval/generation timings
-- Stage logs: `evals/results/graphiti_stage_logs/{user_id}.jsonl` for debugging adapter internals
+**Eval Framework:** See https://github.com/saxenauts/memory-evals (separate repo)
 
 **When adding new components:**
 - Include timing instrumentation (`time.time()` around operations)
