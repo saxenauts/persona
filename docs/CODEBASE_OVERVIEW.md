@@ -45,8 +45,8 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Orchestrates: extraction → linking → persistence
 
 2. **Retriever** (`core/retrieval.py`)
-   - Time-windowed fetch with vector similarity
-   - Returns formatted context for LLM consumption
+   - Time-windowed fetch + link expansion
+   - Returns prose-formatted context for LLM consumption
 
 3. **Tools Layer** (`tools/memory.py`)
    - `recall(query)`: Search memories with structured filters

@@ -60,7 +60,7 @@ poetry run pytest tests/unit -v    # Local unit tests only
    - **Note**: What to do (tasks, goals, reminders - only with intention triggers)
 2. **PersonaAdapter**: Single entry point for ingestion (extracts, links, persists)
 3. **PersonaService** (`persona/services/persona_service.py`): Unified orchestrator for queries with `query()` and `run_agent()` methods
-4. **Retriever**: Time-windowed fetch with vector similarity for context retrieval
+4. **Retriever**: Time-windowed fetch + link expansion for working-memory context (vector similarity is used by `recall()`/search paths, not the base window)
 5. **Tools Layer** (`persona/tools/`): `recall(query)` and `record(text)` dialectic tools with internal intelligence
 6. **Dependency Injection**: `GraphOps` injected via FastAPI's `Depends()` — no duplicate connections
 7. **Context Engineering**: Prose-based context formatting with UserCard identity anchor

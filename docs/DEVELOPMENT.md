@@ -58,8 +58,8 @@ tests/
    - `ask()`: Structured JSON extraction
 
 3. **Retriever** (`core/retrieval.py`)
-   - Vector similarity + graph traversal
-   - Returns formatted context for LLM
+   - Time-windowed fetch + graph traversal (via stored links)
+   - Returns prose-formatted context for LLM
 
 4. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories
