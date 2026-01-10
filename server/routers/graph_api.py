@@ -18,7 +18,7 @@ from persona.adapters import PersonaAdapter
 from persona.utils.session import get_session_id
 from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, List, Any
 import os
 import re
@@ -40,10 +40,43 @@ class IngestRequest(BaseModel):
     metadata: Optional[Dict[str, str]] = Field(default=None)
 
 
-class IngestBatchRequest(BaseModel):
-    """Request body for batch ingestion."""
+class IngestBatchItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    items: List[IngestRequest] = Field(..., description="List of items to ingest.")
+    content: str = Field(..., description="Raw text content to ingest.")
+    source_type: str = Field(default="conversation")
+    provider_session_id: Optional[str] = Field(default=None)
+
+
+class IngestBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[IngestBatchItem] = Field(..., description="List of items to ingest.")
+
+
+class TimingsMs(BaseModel):
+    extract: float = Field(default=0.0)
+    embed: float = Field(default=0.0)
+    persist: float = Field(default=0.0)
+    total: float = Field(default=0.0)
+
+
+class IngestResponse(BaseModel):
+    message: str
+    session_id: str
+    memories_created: int
+    memories_created_by_type: Dict[str, int]
+    links_created: int
+    timings_ms: TimingsMs
+
+
+class IngestBatchResponse(BaseModel):
+    message: str
+    session_ids: List[str]
+    memories_created: int
+    memories_created_by_type: Dict[str, int]
+    links_created: int
+    timings_ms: TimingsMs
 
 
 router = APIRouter()
@@ -165,7 +198,11 @@ async def delete_user(
         )
 
 
-@router.post("/users/{user_id}/ingest", status_code=201)
+@router.post(
+    "/users/{user_id}/ingest",
+    response_model=IngestResponse,
+    status_code=201,
+)
 async def ingest_data(
     user_id: str = Path(..., description="The unique identifier for the user"),
     data: IngestRequest = Body(...),
@@ -212,6 +249,7 @@ async def ingest_data(
         )
         return {
             "message": "Data ingested successfully",
+            "session_id": session_id,
             "memories_created": len(result.memories),
             "memories_created_by_type": type_counts,
             "links_created": links_created,
@@ -241,7 +279,11 @@ async def ingest_data(
         )
 
 
-@router.post("/users/{user_id}/ingest/batch", status_code=201)
+@router.post(
+    "/users/{user_id}/ingest/batch",
+    response_model=IngestBatchResponse,
+    status_code=201,
+)
 async def ingest_batch_data(
     user_id: str = Path(..., description="The unique identifier for the user"),
     batch_data: IngestBatchRequest = Body(...),
@@ -262,11 +304,19 @@ async def ingest_batch_data(
         if not batch_data.items:
             raise HTTPException(status_code=400, detail="Batch cannot be empty")
 
-        # Use PersonaAdapter for batch ingestion
+        session_ids = [
+            get_session_id(item.source_type, item.provider_session_id)
+            for item in batch_data.items
+        ]
+
         adapter = PersonaAdapter(user_id, graph_ops)
         items_for_adapter = [
-            {"content": item.content, "source_type": item.source_type}
-            for item in batch_data.items
+            {
+                "content": item.content,
+                "source_type": item.source_type,
+                "session_id": session_id,
+            }
+            for item, session_id in zip(batch_data.items, session_ids)
         ]
         results = await adapter.ingest_batch(items_for_adapter)
 
@@ -292,6 +342,7 @@ async def ingest_batch_data(
         )
         return {
             "message": f"Successfully ingested batch of {len(batch_data.items)} items",
+            "session_ids": session_ids,
             "memories_created": total_memories,
             "memories_created_by_type": type_counts,
             "links_created": total_links,
