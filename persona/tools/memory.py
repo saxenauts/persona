@@ -258,10 +258,149 @@ async def follow_relationship_handler(
     return RecallResult(items=items, count=len(items))
 
 
-# Static handler registry - maps tool names to handler functions
+@dataclass
+class BrowseResult:
+    items: List[MemoryHit] = field(default_factory=list)
+    count: int = 0
+
+
+@dataclass
+class GetMemoryResult:
+    found: bool = False
+    memory: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class UpdateMemoryResult:
+    success: bool = False
+    memory_id: Optional[str] = None
+    updated_fields: List[str] = field(default_factory=list)
+
+
+async def browse_handler(
+    ctx: ToolContext,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    memory_types: Optional[List[str]] = None,
+    limit: int = 20,
+    order: str = "desc",
+) -> BrowseResult:
+    """Time-ordered listing of memories. Unlike recall, results are sorted by event_time, not similarity."""
+    start_date = _parse_date(date_start)
+    end_date = _parse_date(date_end)
+
+    all_memories = []
+    types_to_fetch = memory_types or ["episode", "psyche", "note", "entity"]
+
+    for mem_type in types_to_fetch:
+        memories = await ctx.store.get_by_type(mem_type, ctx.user_id, limit=limit * 2)
+        all_memories.extend(memories)
+
+    if start_date:
+        all_memories = [
+            m
+            for m in all_memories
+            if m.event_time and m.event_time.date() >= start_date
+        ]
+    if end_date:
+        all_memories = [
+            m for m in all_memories if m.event_time and m.event_time.date() <= end_date
+        ]
+
+    reverse = order.lower() == "desc"
+    all_memories.sort(key=lambda m: m.event_time or datetime.min, reverse=reverse)
+    all_memories = all_memories[:limit]
+
+    items = [_memory_to_hit(mem) for mem in all_memories]
+    return BrowseResult(items=items, count=len(items))
+
+
+async def get_memory_handler(
+    ctx: ToolContext,
+    memory_id: str,
+) -> GetMemoryResult:
+    """Fetch a single memory by ID. Returns full content, not just a snippet."""
+    try:
+        memory_uuid = UUID(memory_id)
+    except ValueError:
+        logger.warning(f"Invalid memory_id format: {memory_id}")
+        return GetMemoryResult(found=False)
+
+    memory = await ctx.store.get(memory_uuid, ctx.user_id)
+    if not memory:
+        return GetMemoryResult(found=False)
+
+    memory_dict = {
+        "id": str(memory.id),
+        "type": memory.type,
+        "title": getattr(memory, "title", ""),
+        "content": getattr(memory, "content", ""),
+        "event_time": memory.event_time.isoformat() if memory.event_time else None,
+        "observed_at": memory.observed_at.isoformat() if memory.observed_at else None,
+    }
+
+    if memory.type == "note":
+        memory_dict["status"] = getattr(memory, "status", "active")
+        memory_dict["due_date"] = (
+            getattr(memory, "due_date").isoformat()
+            if getattr(memory, "due_date", None)
+            else None
+        )
+        memory_dict["note_type"] = getattr(memory, "note_type", None)
+    elif memory.type == "entity":
+        memory_dict["entity_type"] = getattr(memory, "entity_type", None)
+        memory_dict["canonical_name"] = getattr(memory, "canonical_name", "")
+        memory_dict["aliases"] = getattr(memory, "aliases", [])
+        memory_dict["description"] = getattr(memory, "description", "")
+        attrs = getattr(memory, "attributes", [])
+        memory_dict["attributes"] = [{"key": a.key, "value": a.value} for a in attrs]
+    elif memory.type == "psyche":
+        memory_dict["psyche_type"] = getattr(memory, "psyche_type", None)
+
+    return GetMemoryResult(found=True, memory=memory_dict)
+
+
+async def update_memory_handler(
+    ctx: ToolContext,
+    memory_id: str,
+    updates: Dict[str, Any],
+) -> UpdateMemoryResult:
+    """Update fields on an existing memory. Returns success status and updated fields."""
+    try:
+        memory_uuid = UUID(memory_id)
+    except ValueError:
+        logger.warning(f"Invalid memory_id format: {memory_id}")
+        return UpdateMemoryResult(success=False)
+
+    memory = await ctx.store.get(memory_uuid, ctx.user_id)
+    if not memory:
+        logger.warning(f"Memory not found: {memory_id}")
+        return UpdateMemoryResult(success=False)
+
+    allowed_fields = {"title", "content", "status", "due_date", "importance"}
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    if not filtered_updates:
+        return UpdateMemoryResult(success=False, memory_id=memory_id, updated_fields=[])
+
+    try:
+        await ctx.store.update(memory_uuid, ctx.user_id, filtered_updates)
+        return UpdateMemoryResult(
+            success=True,
+            memory_id=memory_id,
+            updated_fields=list(filtered_updates.keys()),
+        )
+    except Exception as e:
+        logger.error(f"Update failed for {memory_id}: {e}")
+        return UpdateMemoryResult(success=False, memory_id=memory_id)
+
+
 TOOL_HANDLERS = {
     "recall": recall_handler,
     "record": record_handler,
     "expand_neighbors": expand_neighbors_handler,
     "follow_relationship": follow_relationship_handler,
+    "browse": browse_handler,
+    "get_memory": get_memory_handler,
+    "update_memory": update_memory_handler,
 }

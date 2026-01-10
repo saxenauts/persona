@@ -29,8 +29,11 @@ RECALL_TOOL = {
                 },
                 "memory_types": {
                     "type": "array",
-                    "items": {"type": "string", "enum": ["episode", "psyche", "note"]},
-                    "description": "Filter by memory type. episode=events, psyche=traits/preferences, note=goals/tasks.",
+                    "items": {
+                        "type": "string",
+                        "enum": ["episode", "psyche", "note", "entity"],
+                    },
+                    "description": "Filter by memory type. episode=events, psyche=traits/preferences, note=goals/tasks, entity=people/places/things.",
                 },
                 "limit": {
                     "type": "integer",
@@ -131,10 +134,102 @@ FOLLOW_RELATIONSHIP_TOOL = {
     },
 }
 
+BROWSE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "browse",
+        "description": "Time-ordered listing of memories. Unlike recall (similarity search), browse returns memories sorted by event_time. Use for temporal questions like 'what happened last week' or 'show me memories from June 2023'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "date_start": {
+                    "type": "string",
+                    "description": "Start date (ISO 8601: YYYY-MM-DD). Only return memories from this date onward.",
+                },
+                "date_end": {
+                    "type": "string",
+                    "description": "End date (ISO 8601: YYYY-MM-DD). Only return memories up to this date.",
+                },
+                "memory_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["episode", "psyche", "note", "entity"],
+                    },
+                    "description": "Filter by memory type.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results to return. Default: 20.",
+                },
+                "order": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "Sort order by event_time. 'asc' = oldest first, 'desc' = newest first. Default: desc.",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+GET_MEMORY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_memory",
+        "description": "Fetch a single memory by ID. Returns full content (not just a snippet). Use after recall/browse to get complete details of a specific memory.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "memory_id": {
+                    "type": "string",
+                    "description": "UUID of the memory to fetch (from recall/browse results).",
+                },
+            },
+            "required": ["memory_id"],
+        },
+    },
+}
+
+UPDATE_MEMORY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "update_memory",
+        "description": "Update fields on an existing memory. Use to mark tasks complete, change due dates, edit content, etc.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "memory_id": {
+                    "type": "string",
+                    "description": "UUID of the memory to update.",
+                },
+                "updates": {
+                    "type": "object",
+                    "description": "Fields to update. Allowed: title, content, status (for notes: 'active', 'completed', 'cancelled'), due_date (ISO format), importance (0.0-1.0).",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "content": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["active", "completed", "cancelled"],
+                        },
+                        "due_date": {"type": "string"},
+                        "importance": {"type": "number"},
+                    },
+                },
+            },
+            "required": ["memory_id", "updates"],
+        },
+    },
+}
+
 
 MEMORY_TOOLS = [
     RECALL_TOOL,
     RECORD_TOOL,
+    BROWSE_TOOL,
+    GET_MEMORY_TOOL,
+    UPDATE_MEMORY_TOOL,
     EXPAND_NEIGHBORS_TOOL,
     FOLLOW_RELATIONSHIP_TOOL,
 ]
