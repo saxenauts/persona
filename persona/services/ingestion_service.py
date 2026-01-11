@@ -99,6 +99,9 @@ The episode IS the memory - make it rich and retrievable.
 - Include canonical_name and any aliases mentioned
 - Include attributes (facts) about the entity - this is where facts live!
 - Types: person, place, organization, project, tool, concept
+- CRITICAL: Only extract attributes EXPLICITLY stated in the input
+- Do NOT infer emotions, outcomes, or experiences unless directly quoted
+- Do NOT merge facts from different contexts about similar topics
 
 **Notes:** ONLY for commitments/intentions. Types: task, goal, reminder, idea, list, project.
 
