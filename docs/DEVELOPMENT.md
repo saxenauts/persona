@@ -88,6 +88,28 @@ tests/
    flake8
    ```
 
+## Evaluation Workflow (PersonaMem)
+
+Run evals from the `memory-evals` repo using the venv binary:
+```bash
+cd /Users/saxenauts/Documents/InnerNets AI Inc/persona/memory-evals
+PYTHONUNBUFFERED=1 EVAL_CLOSE_SESSIONS=false EVAL_REFRESH_MEMEPLEX=false .venv/bin/mem-eval run \
+  --benchmark personamem --adapter persona --samples 100 --seed 42 --output results
+```
+
+Monitor progress with the log and deep logs:
+```bash
+tail -f logs/full/<run>.log
+ls -lt results/run_*/deep_logs.jsonl | head -3
+```
+
+Summaries and comparisons:
+```bash
+.venv/bin/mem-eval analyze <run_id> --summary
+.venv/bin/mem-eval compare <run_a> <run_b>
+.venv/bin/mem-eval aggregate <run_id> --output-json results/<run_id>_agg.json
+```
+
 ## Testing
 
 ```bash

@@ -95,9 +95,10 @@ def _format_episodes_prose(
 ) -> str:
     lines = []
     for ep in sorted(episodes, key=lambda e: e.event_time, reverse=True):
-        date_str = ep.event_time.strftime("%B %d") if ep.event_time else "Recently"
+        # Include year in timestamp for temporal disambiguation
+        date_str = ep.event_time.strftime("%Y-%m-%d") if ep.event_time else "recent"
         content = ep.content or ep.summary or ep.title or ""
-        line = f"{date_str}: {content}"
+        line = f"[{date_str}] {content}"
         if ep.id in link_map:
             line += f" ({link_map[ep.id]})"
         lines.append(line)
