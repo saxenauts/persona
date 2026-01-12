@@ -95,6 +95,7 @@ class Neo4jVectorStore(VectorStore):
         query = f"""
         MATCH (n {{name: $node_name, UserId: $user_id}})
         SET n:{user_label}
+        WITH n
         CALL db.create.setNodeVectorProperty(n, 'embedding', $embedding)
         """
         async with self.driver.session() as session:
@@ -126,6 +127,7 @@ class Neo4jVectorStore(VectorStore):
         UNWIND $rows AS row
         MATCH (n {{name: row.node_name, UserId: $user_id}})
         SET n:{user_label}
+        WITH n, row
         CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
         """
         async with self.driver.session() as session:

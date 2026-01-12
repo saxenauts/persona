@@ -20,6 +20,7 @@ from server.dependencies import get_graph_ops
 from server.logging_config import get_logger
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, List, Any
+from datetime import datetime
 import os
 import re
 
@@ -32,6 +33,10 @@ class IngestRequest(BaseModel):
     content: str = Field(..., description="Raw text content to ingest.")
     source_type: str = Field(default="conversation")
     provider_session_id: Optional[str] = Field(default=None)
+    timestamp: Optional[datetime] = Field(
+        default=None,
+        description="Optional event timestamp for correct chronology (ISO 8601).",
+    )
     store_transcript: bool = Field(default=False)
     finalize_session: bool = Field(
         default=False,
@@ -46,6 +51,10 @@ class IngestBatchItem(BaseModel):
     content: str = Field(..., description="Raw text content to ingest.")
     source_type: str = Field(default="conversation")
     provider_session_id: Optional[str] = Field(default=None)
+    timestamp: Optional[datetime] = Field(
+        default=None,
+        description="Optional event timestamp for correct chronology (ISO 8601).",
+    )
 
 
 class IngestBatchRequest(BaseModel):
@@ -228,6 +237,7 @@ async def ingest_data(
         result = await adapter.ingest(
             content=data.content,
             source_type=data.source_type,
+            timestamp=data.timestamp,
             session_id=session_id,
             store_transcript=data.store_transcript,
             finalize_session=data.finalize_session,
@@ -314,6 +324,7 @@ async def ingest_batch_data(
             {
                 "content": item.content,
                 "source_type": item.source_type,
+                "timestamp": item.timestamp,
                 "session_id": session_id,
             }
             for item, session_id in zip(batch_data.items, session_ids)

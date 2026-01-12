@@ -92,7 +92,7 @@ poetry run pytest tests/unit -v    # Local unit tests only
 **ToolContext** (`persona/tools/context.py`): Per-request context injected at execution time. Contains `user_id`, `graph_ops`, `store`, `timezone`, and `user_card`. Injected automatically; not exposed to the LLM.
 
 **Read Tools** (`persona/tools/memory.py`):
-**recall(query, date_start?, date_end?, memory_types?, limit?)**: Semantic search with structured filters. Returns memory snippets ranked by similarity.
+**recall(query, date_start?, date_end?, memory_types?, exclude_transcripts?, limit?)**: Semantic search with structured filters. Returns memory snippets ranked by similarity. `memory_types` filters by pillar (episode/psyche/note/entity). `exclude_transcripts` (default true) filters out raw conversation transcripts.
 **browse(date_start?, date_end?, memory_types?, limit?, order?)**: Time-ordered listing of memories (order: "desc" default, "asc"). Used for chronological exploration and "what happened last week" queries.
 **get_memory(memory_id)**: Fetches full memory content including all metadata, attributes, and status. Used after search to get complete details before updating.
 **expand_neighbors(memory_id, relationship_types?)**: Graph-based expansion to find memories connected via any relationship.
@@ -218,3 +218,26 @@ This repo prioritizes **optimization work** - every layer must be transparent an
 - Include timing instrumentation (`time.time()` around operations)
 - Log to structured format (JSONL preferred)
 - Expose metrics via env var or stats dict
+
+## Current Eval-Focused Changes (WIP)
+
+This section tracks in-flight changes aimed at improving PersonaMem eval performance.
+
+**Persona Core Changes:**
+1. `server/routers/graph_api.py` - Added optional `timestamp` field to `IngestRequest` and `IngestBatchItem` for correct chronology during eval ingestion.
+2. `persona/services/persona_service.py` - Added `tool_results`, `user_card_present`, `memeplex_present`, `world_model_chars`, `user_context_chars` to stats output when `include_stats=True`.
+3. `persona/tools/runner.py` - `AgentResult.tool_results` now includes each tool's `args` and `output` for deep logging.
+4. `persona/tools/schemas.py` - Enhanced tool descriptions with WHEN TO USE / INTERPRETING RESULTS guidance; added `memory_types` and `exclude_transcripts` params to recall.
+5. `persona/llm/prompts.py` - Restructured `PERSONAL_AI_SYSTEM_PROMPT` with explicit `<retrieval_policy>`, `<answering_rules>`, `<response_selection>`, and `<disambiguation>` sections to reduce generic responses and improve evidence-anchored answers.
+6. `persona/core/backends/neo4j_vector.py` - Added missing `WITH n` clause in Cypher for `db.create.setNodeVectorProperty` calls.
+
+**memory-evals Changes (separate repo):**
+1. `PersonaAdapter` now sends `timestamp` on batch ingest, closes sessions via `/sessions/{id}/close`, and refreshes memeplex via `/memeplex/refresh`.
+2. `IngestionLog` / `RetrievalLog` schemas extended with `session_ids`, `session_close`, `memeplex_refresh`, `tool_results`, `persona_context`.
+3. Runner wires these new stats into deep logs for failure diagnosis.
+4. PersonaMem queries now formatted as MCQ prompts with `(a)/(b)/(c)/(d)` options.
+
+**Next Steps:**
+- Run full PersonaMem eval with these changes
+- Analyze deep logs for remaining failure modes (empty recall, wrong option, missing evolution)
+- Iterate on prompt or tool behavior based on findings

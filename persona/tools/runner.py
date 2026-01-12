@@ -3,7 +3,7 @@
 import json
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict, is_dataclass
 from typing import List, Dict, Any, Optional, Callable, Awaitable, Literal
 
 from persona.llm.providers.base import (
@@ -67,10 +67,19 @@ class ToolRegistry:
             result = await handler(ctx, **args)
             logger.info(f"Tool result: {tool_call.name} -> {result}")
 
-            if hasattr(result, "__dict__"):
-                content = json.dumps(result.__dict__, default=str)
+            def serialize_value(v: Any) -> Any:
+                if is_dataclass(v) and not isinstance(v, type):
+                    return asdict(v)
+                elif isinstance(v, list):
+                    return [serialize_value(item) for item in v]
+                elif isinstance(v, dict):
+                    return {k: serialize_value(val) for k, val in v.items()}
+                return v
+
+            if is_dataclass(result) and not isinstance(result, type):
+                content = json.dumps(serialize_value(result), default=str)
             elif isinstance(result, (dict, list)):
-                content = json.dumps(result, default=str)
+                content = json.dumps(serialize_value(result), default=str)
             else:
                 content = str(result)
 
@@ -179,6 +188,7 @@ class AgentResult:
     usage: Optional[Dict[str, Any]] = None
     state: Optional[str] = None
     subtask_summary: Optional[Dict[str, int]] = None
+    tool_results: Optional[List[Dict[str, Any]]] = None
 
     @property
     def can_resume(self) -> bool:
@@ -225,6 +235,7 @@ class AgentRunner:
         current_messages = list(messages)
         start_time = time.time()
         turns = 0
+        all_tool_results: List[Dict[str, Any]] = []
 
         while True:
             if timeout and (time.time() - start_time) > timeout:
@@ -283,6 +294,7 @@ class AgentRunner:
                     turns=turns,
                     usage=total_usage if total_usage else None,
                     subtask_summary=ctx.subtask_summary,
+                    tool_results=all_tool_results if all_tool_results else None,
                 )
 
             assistant_msg = ChatMessage(
@@ -301,7 +313,25 @@ class AgentRunner:
             )
             total_tool_calls += len(batch_result.results)
 
+            tool_args_by_id: Dict[str, Any] = {}
+            for tc in response.tool_calls:
+                try:
+                    tool_args_by_id[tc.id] = json.loads(tc.arguments)
+                except Exception:
+                    tool_args_by_id[tc.id] = tc.arguments
+
             for exec_result in batch_result.results:
+                all_tool_results.append(
+                    {
+                        "tool": exec_result.name,
+                        "ok": exec_result.ok,
+                        "duration_ms": exec_result.duration_ms,
+                        "args": tool_args_by_id.get(exec_result.tool_call_id),
+                        "output": exec_result.output
+                        if exec_result.ok
+                        else {"error": exec_result.error},
+                    }
+                )
                 content = (
                     json.dumps(exec_result.output, default=str)
                     if exec_result.ok

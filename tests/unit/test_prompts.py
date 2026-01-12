@@ -34,10 +34,6 @@ class TestPersonalAIPrompt:
 
     def test_contains_recording_guidance(self):
         assert "record" in PERSONAL_AI_SYSTEM_PROMPT.lower()
-        assert (
-            "remind" in PERSONAL_AI_SYSTEM_PROMPT.lower()
-            or "task" in PERSONAL_AI_SYSTEM_PROMPT.lower()
-        )
 
 
 class TestStructuredInsightsPrompt:

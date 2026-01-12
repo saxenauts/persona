@@ -11,7 +11,15 @@ RECALL_TOOL = {
     "type": "function",
     "function": {
         "name": "recall",
-        "description": "Search user's memory with optional filters. Returns matching memories ranked by relevance. Call multiple times in parallel for different slices (time periods, topics, types).",
+        "description": """Search user's memory. REQUIRED before answering questions about user's life, preferences, or experiences.
+
+WHEN TO USE: Before answering ANY user-specific question. If you answer without searching, you WILL be wrong.
+
+INTERPRETING RESULTS: 
+- Results are ranked by relevance (most relevant first)
+- Read ALL results to understand full context—user's state may have evolved
+- If results show evolution (tried X → switched to Y), base answer on latest state
+- Use specific details from results in your response""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -26,6 +34,18 @@ RECALL_TOOL = {
                 "date_end": {
                     "type": "string",
                     "description": "End date filter (ISO 8601: YYYY-MM-DD). Only return memories up to this date.",
+                },
+                "memory_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["episode", "psyche", "note", "entity"],
+                    },
+                    "description": "Filter by memory types. Use to narrow retrieval when the question is clearly about one kind of memory (e.g., preferences = psyche, tasks = note).",
+                },
+                "exclude_transcripts": {
+                    "type": "boolean",
+                    "description": "If true, exclude transcript-like memories from results (default behavior). Set to false only when you explicitly need conversational transcripts.",
                 },
                 "limit": {
                     "type": "integer",
@@ -130,7 +150,14 @@ BROWSE_TOOL = {
     "type": "function",
     "function": {
         "name": "browse",
-        "description": "Time-ordered listing of memories. Unlike recall (similarity search), browse returns memories sorted by event_time. Use for temporal questions like 'what happened last week' or 'show me memories from June 2023'.",
+        "description": """Time-ordered listing of memories. Unlike recall (semantic search), browse returns memories sorted by time.
+
+WHEN TO USE: 
+- "What happened last week/month?" 
+- "Show me memories from [date range]"
+- When you need chronological understanding of how something evolved
+
+INTERPRETING RESULTS: Results ordered by time (default: newest first). Use 'asc' order to see oldest first when tracking evolution.""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -169,7 +196,9 @@ GET_MEMORY_TOOL = {
     "type": "function",
     "function": {
         "name": "get_memory",
-        "description": "Fetch a single memory by ID. Returns full content (not just a snippet). Use after recall/browse to get complete details of a specific memory.",
+        "description": """Fetch full content of a specific memory by ID.
+
+WHEN TO USE: After recall/browse when snippet is insufficient for accurate answer. Use when you need exact details (names, dates, specific quotes).""",
         "parameters": {
             "type": "object",
             "properties": {

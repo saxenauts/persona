@@ -46,6 +46,9 @@ class PersonaService:
         user_card = await self._get_user_card(user_id, user_timezone)
         memeplex = await self._get_memeplex(user_id)
 
+        user_card_present = bool(user_card and user_card.identity_prose)
+        memeplex_present = bool(memeplex)
+
         world_model, user_context = self._build_user_context(user_card, memeplex)
         system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
             world_model=world_model, user_context=user_context
@@ -105,6 +108,11 @@ class PersonaService:
                 "turns": agent_result.turns,
                 "usage": agent_result.usage,
                 "total_ms": total_ms,
+                "tool_results": agent_result.tool_results,
+                "user_card_present": user_card_present,
+                "memeplex_present": memeplex_present,
+                "world_model_chars": len(world_model) if world_model else 0,
+                "user_context_chars": len(user_context) if user_context else 0,
             }
 
         return response
