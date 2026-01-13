@@ -13,7 +13,10 @@ from persona.core.memory_store import MemoryStore
 from persona.models.schema import UserCreate, AskRequest, AskResponse
 from persona.services.user_service import UserService
 from persona.services.persona_service import PersonaService
-from persona.services.integration_agent import run_integration_agent
+from persona.services.integration_agent import (
+    run_integration_agent,
+    run_batch_integration,
+)
 from persona.adapters import PersonaAdapter
 from persona.utils.session import get_session_id
 from server.dependencies import get_graph_ops
@@ -504,19 +507,33 @@ class IntegrateResponse(BaseModel):
 async def close_session(
     user_id: str = Path(..., description="The unique identifier for the user"),
     session_id: str = Path(..., description="The session ID to close and integrate"),
+    use_batch: bool = Query(
+        True, description="Use fast batch integration (default) or legacy agent loop"
+    ),
     graph_ops: GraphOps = Depends(get_graph_ops),
 ):
     try:
         if not await graph_ops.user_exists(user_id):
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
-        logger.info(f"Closing session {session_id} for user {user_id}")
-        result = await run_integration_agent(
-            user_id=user_id,
-            trigger_ids=[],
-            graph_ops=graph_ops,
-            session_id=session_id,
+        logger.info(
+            f"Closing session {session_id} for user {user_id} (batch={use_batch})"
         )
+
+        if use_batch:
+            result = await run_batch_integration(
+                user_id=user_id,
+                trigger_ids=[],
+                graph_ops=graph_ops,
+                session_id=session_id,
+            )
+        else:
+            result = await run_integration_agent(
+                user_id=user_id,
+                trigger_ids=[],
+                graph_ops=graph_ops,
+                session_id=session_id,
+            )
 
         return IntegrateResponse(
             status="success" if result.success else "failed",
@@ -773,14 +790,8 @@ async def get_memory_stats(
 
 class MemeplexResponse(BaseModel):
     user_id: str
-    topics: List[str] = Field(default_factory=list)
-    people: List[str] = Field(default_factory=list)
-    projects: List[str] = Field(default_factory=list)
-    places: List[str] = Field(default_factory=list)
-    concepts: List[str] = Field(default_factory=list)
-    last_week_topics: List[str] = Field(default_factory=list)
-    last_month_topics: List[str] = Field(default_factory=list)
-    recent_focus: str = ""
+    index: str = ""
+    memory_stats: Optional[Dict[str, Any]] = None
     updated_at: Optional[str] = None
 
 
@@ -805,14 +816,10 @@ async def get_memeplex(
 
         return MemeplexResponse(
             user_id=user_id,
-            topics=memeplex.topics,
-            people=memeplex.people,
-            projects=memeplex.projects,
-            places=memeplex.places,
-            concepts=memeplex.concepts,
-            last_week_topics=memeplex.last_week_topics,
-            last_month_topics=memeplex.last_month_topics,
-            recent_focus=memeplex.recent_focus,
+            index=memeplex.index,
+            memory_stats=memeplex.memory_stats.model_dump()
+            if memeplex.memory_stats
+            else None,
             updated_at=memeplex.updated_at.isoformat() if memeplex.updated_at else None,
         )
 
@@ -825,8 +832,7 @@ async def get_memeplex(
 
 class MemeplexRefreshResponse(BaseModel):
     status: str
-    topics_count: int = 0
-    entities_count: int = 0
+    index_length: int = 0
     updated_at: Optional[str] = None
 
 
@@ -851,17 +857,9 @@ async def refresh_memeplex(
         if not memeplex:
             return MemeplexRefreshResponse(status="no_data")
 
-        entities_count = (
-            len(memeplex.people)
-            + len(memeplex.projects)
-            + len(memeplex.places)
-            + len(memeplex.concepts)
-        )
-
         return MemeplexRefreshResponse(
             status="refreshed",
-            topics_count=len(memeplex.topics),
-            entities_count=entities_count,
+            index_length=len(memeplex.index),
             updated_at=memeplex.updated_at.isoformat() if memeplex.updated_at else None,
         )
 

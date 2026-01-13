@@ -6,13 +6,18 @@ Runs asynchronously after ingestion to:
 - Create causal chains (LED_TO, CAUSED_BY)
 - Flag contradictions for review
 - Merge duplicate entities
+
+Two modes:
+1. Agent loop (legacy): Multi-turn tool-based discovery
+2. Batch integration (fast): 2-call memeplex-first approach
 """
 
 import json
 import time
 import uuid
+import asyncio
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
@@ -23,6 +28,7 @@ from persona.tools.integration import (
     INTEGRATION_HANDLERS,
     GraphPatch,
     GraphPatchResult,
+    commit_patch_handler,
 )
 from persona.services.consolidation_service import maybe_run_consolidation
 from server.logging_config import get_logger
@@ -265,6 +271,25 @@ INTEGRATION_TOOLS = [
 
 
 @dataclass
+class TokenStats:
+    """Token usage statistics for a run."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
+    total_tokens: int = 0
+
+    def add(self, usage: Optional[Dict[str, Any]]) -> None:
+        """Add token counts from a ChatResponse.usage dict."""
+        if not usage:
+            return
+        self.prompt_tokens += usage.get("prompt_tokens", 0)
+        self.completion_tokens += usage.get("completion_tokens", 0)
+        self.cached_tokens += usage.get("cached_tokens", 0)
+        self.total_tokens += usage.get("total_tokens", 0)
+
+
+@dataclass
 class IntegrationResult:
     """Result of an integration agent run."""
 
@@ -278,6 +303,7 @@ class IntegrationResult:
     duration_ms: float = 0.0
     summary: str = ""
     errors: List[str] = field(default_factory=list)
+    token_stats: TokenStats = field(default_factory=TokenStats)
 
     # For resumption if interrupted
     state: Optional[str] = None
@@ -406,6 +432,7 @@ async def run_integration_agent(
         merges_performed = 0
         memories_processed = 0
         errors: List[str] = []
+        token_stats = TokenStats()
 
         while turns < config.max_turns and total_tool_calls < config.max_tool_calls:
             turns += 1
@@ -421,6 +448,14 @@ async def run_integration_agent(
                 logger.error(f"LLM call failed in integration agent: {e}")
                 errors.append(f"LLM error: {e}")
                 break
+
+            token_stats.add(response.usage)
+            if response.usage:
+                logger.debug(
+                    f"Turn {turns} tokens: prompt={response.usage.get('prompt_tokens', 0)}, "
+                    f"completion={response.usage.get('completion_tokens', 0)}, "
+                    f"cached={response.usage.get('cached_tokens', 0)}"
+                )
 
             # Check if agent is done (no tool calls)
             if response.stop_reason != "tool_use" or not response.tool_calls:
@@ -477,7 +512,9 @@ async def run_integration_agent(
         summary = (
             f"Integration run {run_id}: {memories_processed} memories processed, "
             f"{links_created} operations applied, {flags_raised} flags, {merges_performed} merges. "
-            f"{turns} turns, {total_tool_calls} tool calls, {duration_ms:.0f}ms"
+            f"{turns} turns, {total_tool_calls} tool calls, {duration_ms:.0f}ms. "
+            f"Tokens: {token_stats.total_tokens} total ({token_stats.prompt_tokens} prompt, "
+            f"{token_stats.completion_tokens} completion, {token_stats.cached_tokens} cached)"
         )
         logger.info(summary)
 
@@ -497,6 +534,286 @@ async def run_integration_agent(
             tool_calls_made=total_tool_calls,
             duration_ms=duration_ms,
             summary=summary,
+            errors=errors,
+            token_stats=token_stats,
+        )
+
+    finally:
+        if own_graph_ops and graph_ops:
+            await graph_ops.__aexit__(None, None, None)
+
+
+# =============================================================================
+# Batch Integration (Fast 2-Call Mode)
+# =============================================================================
+
+
+BATCH_INTEGRATION_PROMPT = """You are integrating new memories into a personal knowledge graph.
+
+## USER'S WORLD (Memeplex)
+{memeplex}
+
+## NEW MEMORIES TO INTEGRATE (chronological order)
+{memories}
+
+## EXISTING GRAPH CONTEXT
+{context}
+
+## YOUR TASK
+
+For each new memory, create ALL relevant connections:
+1. MENTIONS - link to entities referenced (people, places, projects from context)
+2. LED_TO/CAUSED_BY - causal chains between events
+3. NEXT/PREVIOUS - temporal sequences (same topic, adjacent in time)
+4. RELATES_TO - thematic associations (both about "career", "health", etc.)
+5. SAME_AS - entity deduplication (only when confident)
+6. CONTRADICTS - flag conflicting information
+7. Mark each memory as integrated
+
+## RELATIONSHIP TYPES
+
+| Type | When to Use | Example |
+|------|-------------|---------|
+| MENTIONS | Episode/Note references an Entity | "Met with Sarah" → Entity:Sarah |
+| LED_TO | A caused B | "Argument with boss" → "Updated resume" |
+| CAUSED_BY | B was caused by A | "Burnout" ← "3 months crunch" |
+| NEXT/PREVIOUS | Temporal sequence (not causal) | Monday meeting → Tuesday follow-up |
+| RELATES_TO | Same theme/topic | Both memories about "career" or "fitness" |
+| CONTRADICTS | Information conflicts | "Loves coffee" vs "Hates coffee" |
+| SAME_AS | Same entity, different names | "Sam" = "Samuel Chen" |
+
+## LINKING RULES
+
+**Causal chains** (LED_TO): Look for causation words ("because", "led to", "so I"), decision→action patterns.
+Example: "Had argument with boss" (10am) → "Updated resume" (2pm) = LED_TO
+
+**Temporal sequences** (NEXT/PREVIOUS): Same topic, adjacent in time, but not causal.
+Example: "Morning workout" → "Evening workout" on same day = NEXT
+
+**Thematic association** (RELATES_TO): Different events sharing a theme.
+Example: "Started meditation" and "Feeling less anxious" both RELATE_TO wellness theme.
+Example: Two memories mentioning the same project = RELATES_TO each other.
+
+**Entity deduplication** (SAME_AS): Same person/thing, different names. Be conservative.
+Signals: same name/nickname, same role, context confirms ("Sarah from Google" = "Sarah Chen" if she works there).
+
+**Contradictions** (CONTRADICTS): Conflicting facts. NOT evolution over time.
+Example: "Prefers remote" vs "Loves office" = contradiction. "Used to like X, now prefers Y" = NOT contradiction.
+
+## OUTPUT FORMAT (JSON only)
+
+```json
+{
+  "patch": {
+    "items": [
+      {"operation": "link", "source_id": "uuid", "target_id": "uuid", "relation_type": "MENTIONS", "reason": "references Sarah"},
+      {"operation": "link", "source_id": "uuid1", "target_id": "uuid2", "relation_type": "LED_TO", "reason": "caused resume update"},
+      {"operation": "link", "source_id": "uuid1", "target_id": "uuid3", "relation_type": "RELATES_TO", "reason": "both about career"},
+      {"operation": "mark_integrated", "source_id": "uuid"}
+    ],
+    "dry_run": false
+  },
+  "index_additions": "New entities/threads to add to memeplex index (free-form text with short IDs)"
+}
+```
+
+Create ALL meaningful connections. Quality matters - but don't miss obvious links."""
+
+
+@dataclass
+class BatchIntegrationResult:
+    """Result of batch integration run."""
+
+    success: bool
+    memories_processed: int = 0
+    links_created: int = 0
+    flags_raised: int = 0
+    merges_performed: int = 0
+    duration_ms: float = 0.0
+    token_stats: TokenStats = field(default_factory=TokenStats)
+    index_additions: Optional[str] = None
+    errors: List[str] = field(default_factory=list)
+
+
+async def run_batch_integration(
+    user_id: str,
+    trigger_ids: List[str],
+    session_id: Optional[str] = None,
+    graph_ops: Optional[GraphOps] = None,
+) -> BatchIntegrationResult:
+    """Fast 2-call batch integration using memeplex-first approach.
+
+    Call 1 (optional): If memeplex lacks context, fetch relevant graph nodes
+    Call 2: Generate complete GraphPatch + memeplex delta
+
+    Args:
+        user_id: User whose memories to integrate
+        trigger_ids: Memory IDs that triggered this run
+        session_id: If provided, only process memories from this session
+        graph_ops: Optional GraphOps instance
+
+    Returns:
+        BatchIntegrationResult with statistics
+    """
+    run_id = str(uuid.uuid4())[:8]
+    start_time = time.time()
+    token_stats = TokenStats()
+    errors: List[str] = []
+
+    logger.info(f"Starting batch integration {run_id} for user {user_id}")
+
+    own_graph_ops = graph_ops is None
+    if own_graph_ops:
+        graph_ops = GraphOps()
+        await graph_ops.__aenter__()
+
+    try:
+        store = MemoryStore(graph_ops.graph_db)
+        llm = get_chat_client()
+
+        # 1. Fetch memeplex
+        memeplex = await store.get_memeplex(user_id)
+        memeplex_str = memeplex.to_system_prompt() if memeplex else "No memeplex yet."
+
+        # 2. Fetch unintegrated memories (sorted by event_time)
+        all_nodes = await graph_ops.graph_db.get_all_nodes(user_id)
+        unintegrated = []
+        for node in all_nodes:
+            if node.get("type") in ("memeplex", "usercard"):
+                continue
+            if session_id and node.get("session_id") != session_id:
+                continue
+            if node.get("integrated_at") is None:
+                unintegrated.append(node)
+
+        unintegrated.sort(key=lambda n: n.get("event_time", "") or "")
+
+        if not unintegrated:
+            logger.info(f"Batch integration {run_id}: No unintegrated memories")
+            return BatchIntegrationResult(success=True, memories_processed=0)
+
+        # 3. Format memories for prompt
+        memory_lines = []
+        for i, node in enumerate(unintegrated, 1):
+            memory_lines.append(
+                f"{i}. [{node.get('type', 'unknown')}] id={node.get('name', '')} "
+                f"time={node.get('event_time', 'unknown')}\n"
+                f"   title: {node.get('title', '')}\n"
+                f"   content: {(node.get('content', '') or '')[:300]}"
+            )
+        memories_str = "\n\n".join(memory_lines)
+
+        # 4. Fetch existing entities for context (simple approach: get all entities)
+        entities = [
+            n for n in all_nodes if n.get("type") == "entity" and n.get("integrated_at")
+        ]
+        context_lines = []
+        for e in entities[:50]:  # Limit to 50 most relevant
+            context_lines.append(
+                f"- Entity id={e.get('name', '')} name={e.get('title', '')} type={e.get('entity_type', '')}"
+            )
+        context_str = (
+            "\n".join(context_lines) if context_lines else "No existing entities yet."
+        )
+
+        # 5. Single LLM call for integration
+        prompt = BATCH_INTEGRATION_PROMPT.format(
+            memeplex=memeplex_str,
+            memories=memories_str,
+            context=context_str,
+        )
+
+        try:
+            response = await llm.chat(
+                messages=[
+                    ChatMessage(
+                        role="system",
+                        content="You are a memory graph integration system. Output valid JSON only.",
+                    ),
+                    ChatMessage(role="user", content=prompt),
+                ],
+                temperature=0.2,
+                max_tokens=4096,
+                response_format={"type": "json_object"},
+            )
+            token_stats.add(response.usage)
+        except Exception as e:
+            logger.error(f"Batch integration LLM call failed: {e}")
+            return BatchIntegrationResult(success=False, errors=[str(e)])
+
+        # 6. Parse response and apply patch
+        try:
+            result_data = json.loads(response.content or "{}")
+            patch_data = result_data.get("patch", {})
+        except json.JSONDecodeError as e:
+            logger.error(f"Batch integration JSON parse failed: {e}")
+            return BatchIntegrationResult(
+                success=False, errors=[f"JSON parse error: {e}"]
+            )
+
+        # 7. Apply the patch
+        ctx = IntegrationContext(
+            user_id=user_id,
+            graph_ops=graph_ops,
+            store=store,
+            trigger_ids=trigger_ids,
+            run_id=run_id,
+            session_id=session_id,
+        )
+
+        links_created = 0
+        flags_raised = 0
+        merges_performed = 0
+        memories_processed = 0
+
+        if patch_data.get("items"):
+            patch_json = json.dumps(patch_data)
+            commit_result = await commit_patch_handler(ctx, patch_json)
+
+            if not commit_result.success:
+                errors.extend(commit_result.errors)
+
+            for item in patch_data.get("items", []):
+                op = item.get("operation")
+                if op == "link":
+                    links_created += 1
+                elif op == "flag":
+                    flags_raised += 1
+                elif op == "merge":
+                    merges_performed += 1
+                elif op == "mark_integrated":
+                    memories_processed += 1
+
+        # 8. Apply index additions if present
+        index_additions = result_data.get("index_additions")
+        if index_additions and memeplex:
+            memeplex.index = f"{memeplex.index}\n\n{index_additions}".strip()
+            await store.save_memeplex(memeplex)
+            logger.info(f"Updated memeplex index with additions")
+
+        duration_ms = (time.time() - start_time) * 1000
+
+        logger.info(
+            f"Batch integration {run_id}: {memories_processed} memories, "
+            f"{links_created} links, {duration_ms:.0f}ms, "
+            f"{token_stats.total_tokens} tokens"
+        )
+
+        if memories_processed > 0:
+            try:
+                await maybe_run_consolidation(user_id, graph_ops)
+            except Exception as e:
+                logger.warning(f"Consolidation after batch integration failed: {e}")
+
+        return BatchIntegrationResult(
+            success=len(errors) == 0,
+            memories_processed=memories_processed,
+            links_created=links_created,
+            flags_raised=flags_raised,
+            merges_performed=merges_performed,
+            duration_ms=duration_ms,
+            token_stats=token_stats,
+            index_additions=index_additions,
             errors=errors,
         )
 

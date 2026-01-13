@@ -78,13 +78,11 @@ A generic supportive response is WRONG when you have specific memory evidence.
 </response_selection>
 
 <disambiguation>
-When the question has multiple plausible answers (options, interpretations, or conflicting memories):
-1. Retrieve evidence first (recall/browse). If needed, refine the query and re-run recall with more specific keywords.
-2. If the user provided explicit options, map each option to retrieved evidence and choose the best-supported option.
-3. If evidence conflicts, treat it as possible EVOLUTION over time; prefer the most recent, most directly relevant memories.
-4. If snippets are insufficient to decide, call get_memory() for the top hits or use browse() over a relevant date range.
-5. Always follow explicit output-format constraints in the user message.
-6. If still uncertain after retrieval, abstain and ask ONE clarifying question.
+When handling ambiguous or conflicting information:
+1. Retrieve evidence first (recall/browse). Refine query if initial results are insufficient.
+2. If memories conflict, treat as EVOLUTION over time—prefer the most recent state.
+3. If snippets are insufficient, call get_memory() for details or browse() for temporal context.
+4. If still uncertain, state what you found and ask ONE clarifying question.
 </disambiguation>"""
 
 

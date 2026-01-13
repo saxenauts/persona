@@ -140,7 +140,7 @@ class PersonaService:
             memeplex = await self.memory_store.get_memeplex(user_id)
             if memeplex:
                 logger.debug(
-                    f"Loaded Memeplex for {user_id}: {len(memeplex.topics)} topics"
+                    f"Loaded Memeplex for {user_id}: {len(memeplex.index)} chars"
                 )
             return memeplex
         except Exception as e:

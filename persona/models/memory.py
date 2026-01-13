@@ -16,6 +16,29 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 
+# Short ID format: type_prefix:first_4_chars_of_uuid
+# e.g., ep:a3f2 for episode, e:b7c1 for entity
+SHORT_ID_PREFIXES = {
+    "episode": "ep",
+    "psyche": "p",
+    "entity": "e",
+    "note": "n",
+}
+
+
+def make_short_id(memory_id: UUID, memory_type: str) -> str:
+    prefix = SHORT_ID_PREFIXES.get(memory_type, "m")
+    return f"{prefix}:{str(memory_id)[:4]}"
+
+
+def parse_short_id(short_id: str) -> tuple[str, str]:
+    """Returns (prefix, id_fragment). Use id_fragment for fuzzy matching."""
+    if ":" in short_id:
+        prefix, fragment = short_id.split(":", 1)
+        return prefix, fragment
+    return "", short_id
+
+
 class BaseMemory(BaseModel):
     """Base fields for all memory units."""
 
@@ -428,118 +451,48 @@ class TemporalContext(BaseModel):
 
 
 class Memeplex(BaseModel):
-    """Per-user memory index. Stored as single JSON node in Neo4j.
+    """Per-user memory index - the hippocampal index for the memory graph.
 
-    The Memeplex is the "table of contents" for a user's memory:
-    - Topics/themes they care about (universal - everyone has these)
-    - Known entities (people, projects, places, concepts - optional)
-    - Time windows (what's been active recently)
-    - Temporal context (this week, this month)
+    A free-form index that helps the LLM know what exists in the user's memory
+    and how to navigate it. Contains short IDs for precise memory resolution.
 
-    Lives in system prompt for immediate LLM access.
-    Updated after ingestion during integration phase.
-
-    Design: Topics are universal. Entities are optional.
-    A "loner" might only have topics. A social person has both.
+    Format: type:4chars (e.g., ep:a3f2 for episode, e:b7c1 for entity)
     """
 
     user_id: str
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # === TOPICS (Universal - everyone has these) ===
-    topics: List[str] = Field(
-        default_factory=list,
-        description="Main topics/themes user cares about. Max 15. e.g. ['fitness', 'AI research', 'cooking']",
-    )
-
-    # === ENTITIES (Optional - depends on user's world) ===
-    people: List[str] = Field(
-        default_factory=list,
-        description="Known people with relationship. Max 20. e.g. ['Sarah (wife)', 'Max (colleague)']",
-    )
-    projects: List[str] = Field(
-        default_factory=list,
-        description="Active or notable projects. Max 15. e.g. ['Persona', 'Home Renovation']",
-    )
-    places: List[str] = Field(
-        default_factory=list,
-        description="Significant places. Max 10. e.g. ['SF (home)', 'Tokyo (2024 trip)']",
-    )
-    concepts: List[str] = Field(
-        default_factory=list,
-        description="Abstract concepts/philosophies. Max 10. e.g. ['stoicism', 'minimalism']",
-    )
-
-    # === TIME WINDOWS (What's been active) ===
-    last_week_topics: List[str] = Field(
-        default_factory=list,
-        description="Topics active in last 7 days. e.g. ['Persona v1', 'fitness']",
-    )
-    last_month_topics: List[str] = Field(
-        default_factory=list,
-        description="Topics active in last 30 days.",
-    )
-    recent_focus: str = Field(
+    index: str = Field(
         default="",
-        description="1-2 sentences on current focus. e.g. 'Building Memeplex for Persona v1 release'",
+        description="Free-form index of what exists in the memory graph. "
+        "Includes short IDs like [ep:a3f2] for episodes, [e:b7c1] for entities, "
+        "[p:c8d3] for psyche, [n:d4e5] for notes.",
     )
 
-    # === TEMPORAL GROUNDING ===
+    memory_stats: MemoryStats = Field(default_factory=MemoryStats)
     temporal_context: Optional[TemporalContext] = Field(default=None)
 
-    # === MEMORY STATS ===
-    memory_stats: MemoryStats = Field(default_factory=MemoryStats)
-
-    # === TIMELINE ===
-    timeline_summary: str = Field(
-        default="",
-        description="e.g. 'Active since Nov 2024, 47 sessions, 312 memories'",
-    )
-
     def to_system_prompt(self) -> str:
-        lines = ["## Your Knowledge of This User", ""]
+        lines = ["## Memory Index", ""]
 
-        if self.topics:
-            lines.append(f"**Topics**: {', '.join(self.topics)}")
-
-        if self.people:
-            lines.append(f"**People**: {', '.join(self.people)}")
-
-        if self.projects:
-            lines.append(f"**Projects**: {', '.join(self.projects)}")
-
-        if self.places:
-            lines.append(f"**Places**: {', '.join(self.places)}")
-
-        if self.concepts:
-            lines.append(f"**Concepts**: {', '.join(self.concepts)}")
-
-        lines.append("")
-
-        if self.last_week_topics:
-            lines.append(f"**Last week**: {', '.join(self.last_week_topics)}")
-
-        if self.last_month_topics:
-            lines.append(f"**Last month**: {', '.join(self.last_month_topics)}")
-
-        if self.recent_focus:
-            lines.append(f"**Current focus**: {self.recent_focus}")
+        if self.index:
+            lines.append(self.index)
+            lines.append("")
 
         if self.temporal_context:
             tc = self.temporal_context
             if tc.current_date:
                 lines.append(f"**Today**: {tc.current_date}")
+            if tc.week_summary:
+                lines.append(f"**This week**: {tc.week_summary}")
             if tc.upcoming:
                 lines.append(f"**Upcoming**: {', '.join(tc.upcoming[:3])}")
+            lines.append("")
 
-        lines.append("")
         stats = self.memory_stats
         lines.append(
-            f"*{stats.total_memories} memories | "
-            f"{stats.total_entities} entities | {stats.active_notes} active notes*"
+            f"*Stats: {stats.total_memories} memories, "
+            f"{stats.total_entities} entities, {stats.active_notes} active notes*"
         )
-
-        if self.timeline_summary:
-            lines.append(f"*{self.timeline_summary}*")
 
         return "\n".join(lines)

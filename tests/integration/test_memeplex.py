@@ -89,7 +89,7 @@ async def test_memeplex_get_or_create():
         memeplex = await store.get_or_create_memeplex(user_id)
         assert memeplex is not None
         assert memeplex.user_id == user_id
-        assert memeplex.topics == []
+        assert memeplex.index == ""
 
         memeplex_again = await store.get_or_create_memeplex(user_id)
         assert memeplex_again is not None
@@ -115,22 +115,18 @@ async def test_memeplex_update():
 
         memeplex = Memeplex(
             user_id=user_id,
-            topics=["topic1"],
-            recent_focus="Initial focus",
+            index="Initial index with topic1",
         )
         await store.save_memeplex(memeplex)
 
-        memeplex.recent_focus = "Updated focus after new session"
-        memeplex.topics = ["topic1", "topic2", "topic3"]
-        memeplex.people.append("Sarah (sister)")
+        memeplex.index = "Updated index with topic1, topic2, topic3 and Sarah (sister)"
         await store.save_memeplex(memeplex)
 
         retrieved = await store.get_memeplex(user_id)
 
         assert retrieved is not None
-        assert retrieved.recent_focus == "Updated focus after new session"
-        assert len(retrieved.topics) == 3
-        assert "Sarah (sister)" in retrieved.people
+        assert "Updated index" in retrieved.index
+        assert "Sarah (sister)" in retrieved.index
 
         print(f"\n✅ Memeplex update works for user {user_id}")
 

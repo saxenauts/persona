@@ -13,7 +13,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Tuple, Dict, Any
 from uuid import uuid4
 from pydantic import BaseModel, Field
 
@@ -145,6 +145,9 @@ class IngestionResult(BaseModel):
     embed_time_ms: Optional[float] = None
     persist_time_ms: Optional[float] = None
     total_time_ms: Optional[float] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    cached_tokens: Optional[int] = None
 
 
 # ============================================================================
@@ -190,10 +193,14 @@ class MemoryIngestionService:
 
         try:
             start_extract = time.time()
-            extraction = await self._extract(
+            extraction, usage = await self._extract(
                 raw_content, timestamp, timezone, source_type
             )
             extract_time_ms = (time.time() - start_extract) * 1000
+
+            prompt_tokens = usage.get("prompt_tokens") if usage else None
+            completion_tokens = usage.get("completion_tokens") if usage else None
+            cached_tokens = usage.get("cached_tokens") if usage else None
 
             event_time = self._parse_event_time(extraction.event_time, timestamp)
             day_id = event_time.strftime("%Y-%m-%d")
@@ -320,8 +327,13 @@ class MemoryIngestionService:
             memories = await self._add_embeddings(memories)
             embed_time_ms = (time.time() - start_embed) * 1000
 
+            token_info = ""
+            if prompt_tokens is not None:
+                token_info = f" | Tokens: {prompt_tokens}+{completion_tokens or 0}"
+                if cached_tokens:
+                    token_info += f" ({cached_tokens} cached)"
             logger.info(
-                f"Ingested {len(memories)} memories for user {user_id} | LLM: {extract_time_ms:.0f}ms | Embed: {embed_time_ms:.0f}ms"
+                f"Ingested {len(memories)} memories for user {user_id} | LLM: {extract_time_ms:.0f}ms | Embed: {embed_time_ms:.0f}ms{token_info}"
             )
 
             return IngestionResult(
@@ -330,6 +342,9 @@ class MemoryIngestionService:
                 success=True,
                 extract_time_ms=extract_time_ms,
                 embed_time_ms=embed_time_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
             )
 
         except Exception as e:
@@ -338,8 +353,11 @@ class MemoryIngestionService:
 
     async def _extract(
         self, raw_content: str, timestamp: datetime, timezone: str, source_type: str
-    ) -> IngestionOutput:
-        """Extract memories via LLM with timeout and retry logic."""
+    ) -> Tuple[IngestionOutput, Optional[Dict[str, Any]]]:
+        """Extract memories via LLM with timeout and retry logic.
+
+        Returns tuple of (extraction_output, usage_dict).
+        """
 
         user_prompt = INGESTION_USER_TEMPLATE.format(
             timestamp=timestamp.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -373,12 +391,19 @@ class MemoryIngestionService:
                 result = IngestionOutput(**data)
 
                 memory_count = 1 + len(result.psyche) + len(result.notes)
+                usage = response.usage
+                if usage:
+                    logger.debug(
+                        f"Extraction tokens: prompt={usage.get('prompt_tokens', 0)}, "
+                        f"completion={usage.get('completion_tokens', 0)}, "
+                        f"cached={usage.get('cached_tokens', 0)}"
+                    )
                 if attempt > 1:
                     logger.info(
                         f"Extraction succeeded on attempt {attempt}: {memory_count} memories"
                     )
 
-                return result
+                return result, usage
 
             except asyncio.TimeoutError:
                 last_error = f"Timeout after {EXTRACTION_TIMEOUT_SECONDS}s"
@@ -409,7 +434,7 @@ class MemoryIngestionService:
                 else raw_content,
                 content=raw_content,
             )
-        )
+        ), None
 
     def _parse_event_time(
         self, event_time_str: Optional[str], fallback: datetime

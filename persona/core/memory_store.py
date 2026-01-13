@@ -653,21 +653,18 @@ class MemoryStore:
 
         memeplex.updated_at = datetime.utcnow()
 
+        temporal_json = ""
+        if memeplex.temporal_context:
+            temporal_json = memeplex.temporal_context.model_dump_json()
+
         node_data = {
             "name": f"memeplex_{memeplex.user_id}",
             "type": "memeplex",
             "user_id": memeplex.user_id,
             "updated_at": memeplex.updated_at.isoformat(),
-            "topics": json.dumps(memeplex.topics),
-            "people": json.dumps(memeplex.people),
-            "projects": json.dumps(memeplex.projects),
-            "places": json.dumps(memeplex.places),
-            "concepts": json.dumps(memeplex.concepts),
-            "last_week_topics": json.dumps(memeplex.last_week_topics),
-            "last_month_topics": json.dumps(memeplex.last_month_topics),
-            "recent_focus": memeplex.recent_focus,
-            "memory_stats": json.dumps(memeplex.memory_stats.model_dump()),
-            "timeline_summary": memeplex.timeline_summary,
+            "index": memeplex.index,
+            "memory_stats": memeplex.memory_stats.model_dump_json(),
+            "temporal_context": temporal_json,
         }
 
         await self.graph_db.create_nodes([node_data], memeplex.user_id)
@@ -762,19 +759,25 @@ class MemoryStore:
         else:
             updated_at = datetime.utcnow()
 
+        temporal_context = None
+        temporal_raw = props.get("temporal_context", "")
+        if temporal_raw:
+            try:
+                temporal_data = (
+                    json.loads(temporal_raw)
+                    if isinstance(temporal_raw, str)
+                    else temporal_raw
+                )
+                temporal_context = TemporalContext(**temporal_data)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         return Memeplex(
             user_id=user_id,
             updated_at=updated_at,
-            topics=parse_json_list("topics"),
-            people=parse_json_list("people"),
-            projects=parse_json_list("projects"),
-            places=parse_json_list("places"),
-            concepts=parse_json_list("concepts"),
-            last_week_topics=parse_json_list("last_week_topics"),
-            last_month_topics=parse_json_list("last_month_topics"),
-            recent_focus=props.get("recent_focus", ""),
+            index=props.get("index", ""),
             memory_stats=MemoryStats(**memory_stats_data),
-            timeline_summary=props.get("timeline_summary", ""),
+            temporal_context=temporal_context,
         )
 
     def _node_to_temporal_context(self, node: Dict[str, Any]) -> TemporalContext:

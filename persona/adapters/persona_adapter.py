@@ -19,7 +19,10 @@ from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
 from persona.models.memory import EpisodeMemory
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
-from persona.services.integration_agent import run_integration_agent
+from persona.services.integration_agent import (
+    run_integration_agent,
+    run_batch_integration,
+)
 from persona.utils.session import get_session_id
 from server.logging_config import get_logger
 
@@ -128,14 +131,24 @@ class PersonaAdapter:
 
         return result
 
-    async def close_session(self, session_id: str) -> None:
-        logger.info(f"Closing session {session_id} for user {self.user_id}")
-        await run_integration_agent(
-            user_id=self.user_id,
-            trigger_ids=[],
-            session_id=session_id,
-            graph_ops=self.graph_ops,
+    async def close_session(self, session_id: str, use_batch: bool = True) -> None:
+        logger.info(
+            f"Closing session {session_id} for user {self.user_id} (batch={use_batch})"
         )
+        if use_batch:
+            await run_batch_integration(
+                user_id=self.user_id,
+                trigger_ids=[],
+                session_id=session_id,
+                graph_ops=self.graph_ops,
+            )
+        else:
+            await run_integration_agent(
+                user_id=self.user_id,
+                trigger_ids=[],
+                session_id=session_id,
+                graph_ops=self.graph_ops,
+            )
 
     async def ingest_batch(
         self, items: list[dict], persist: bool = True

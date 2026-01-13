@@ -20,6 +20,7 @@ from persona.models.memory import (
     Memory,
     Memeplex,
     MemoryStats,
+    make_short_id,
 )
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
@@ -164,35 +165,40 @@ Memories:
 Return only valid JSON."""
 
 
-MEMEPLEX_REFRESH_PROMPT = """Extract a world model index from these memories.
+MEMEPLEX_REFRESH_PROMPT = """Build a memory index for this user's graph. This index helps you navigate and retrieve memories efficiently.
 
-Current memeplex (if any):
+## CURRENT INDEX
 {current_memeplex}
 
-Recent memories:
+## MEMORIES (with short IDs)
 {memories}
 
-Entities from database:
+## ENTITIES (with short IDs)  
 {entities}
 
-Return JSON with:
-- topics: array of 5-15 main topics/themes the user cares about (e.g. "fitness", "AI research", "cooking")
-- people: array of known people with relationship context (e.g. "Sarah (wife)", "Max (colleague)")
-- projects: array of active or notable projects (e.g. "Persona", "Home Renovation")
-- places: array of significant places (e.g. "SF (home)", "Tokyo (2024 trip)")
-- concepts: array of abstract concepts/philosophies (e.g. "stoicism", "minimalism")
-- last_week_topics: topics active in last 7 days
-- last_month_topics: topics active in last 30 days
-- recent_focus: 1-2 sentences on current primary focus
+## PSYCHE SIGNALS
+{psyche}
 
-Rules:
-- Merge with existing memeplex, don't lose prior knowledge
-- Topics are UNIVERSAL - everyone has these. Entities are optional.
-- Keep lists concise: max 15 topics, 20 people, 15 projects, 10 places, 10 concepts
-- For people, include relationship context in parentheses
-- For places, include significance in parentheses
+## ACTIVE NOTES
+{notes}
 
-Return only valid JSON."""
+## YOUR TASK
+
+Write a free-form index that captures:
+1. **Key entities** with their short IDs - people [e:xxxx], places, projects, concepts
+2. **Recent episodes** with IDs [ep:xxxx] - what's been happening
+3. **Psyche signals** with IDs [p:xxxx] - traits, values, preferences  
+4. **Active notes** with IDs [n:xxxx] - open tasks, goals, reminders
+5. **Open threads** - ongoing narratives, unfinished business
+6. **Rich memory areas** - topics with deep coverage
+
+Include short IDs like [ep:a3f2] so you can reference specific memories later.
+Format for YOUR use - what would help you recall and navigate this person's life?
+
+Return JSON with single field:
+{{"index": "your free-form index text here"}}
+
+Keep it concise but comprehensive. This is your map of their memory graph."""
 
 
 @dataclass
@@ -262,11 +268,9 @@ async def run_consolidation(
             logger.info(f"Updated temporal context for {user_id}")
 
         memeplex = await refresh_memeplex(user_id, graph_ops, store)
-        if memeplex and memeplex.topics:
+        if memeplex and memeplex.index:
             result.memeplex_updated = True
-            logger.info(
-                f"Updated memeplex for {user_id}: {len(memeplex.topics)} topics"
-            )
+            logger.info(f"Updated memeplex for {user_id}: {len(memeplex.index)} chars")
 
         result.duration_ms = (time.time() - start_time) * 1000
 
@@ -461,50 +465,56 @@ async def refresh_memeplex(
     store: MemoryStore,
 ) -> Optional[Memeplex]:
     now = datetime.now(timezone.utc)
-    week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
     current_memeplex = await store.get_memeplex(user_id)
 
     episodes = await store.get_by_type("episode", user_id, limit=30)
     entities = await store.get_by_type("entity", user_id, limit=50)
+    psyche = await store.get_by_type("psyche", user_id, limit=20)
+    notes = await store.get_by_type("note", user_id, limit=20)
 
-    week_episodes = [
-        e
-        for e in episodes
-        if e.event_time and e.event_time >= week_ago.replace(tzinfo=None)
-    ]
     month_episodes = [
         e
         for e in episodes
         if e.event_time and e.event_time >= month_ago.replace(tzinfo=None)
     ]
 
-    if not month_episodes and not entities:
+    active_notes = [n for n in notes if getattr(n, "status", "active") != "COMPLETED"]
+
+    if not month_episodes and not entities and not psyche:
         return current_memeplex
 
     memory_text = "\n".join(
         [
-            f"[{e.event_time.strftime('%Y-%m-%d') if e.event_time else ''}] {e.content[:200]}"
+            f"[{make_short_id(e.id, 'episode')}] {e.event_time.strftime('%Y-%m-%d') if e.event_time else ''}: {e.title} - {e.content[:150]}"
             for e in month_episodes[:20]
         ]
     )
 
     entity_text = "\n".join(
         [
-            f"- {getattr(e, 'canonical_name', 'Unknown')} ({getattr(e, 'entity_type', 'entity')}): {getattr(e, 'description', '')[:100]}"
+            f"[{make_short_id(e.id, 'entity')}] {getattr(e, 'canonical_name', 'Unknown')} ({getattr(e, 'entity_type', 'entity')}): {getattr(e, 'description', '')[:80]}"
             for e in entities[:30]
             if hasattr(e, "canonical_name")
         ]
     )
 
-    current_text = ""
-    if current_memeplex:
-        current_text = f"Topics: {', '.join(current_memeplex.topics[:10])}\n"
-        if current_memeplex.people:
-            current_text += f"People: {', '.join(current_memeplex.people[:10])}\n"
-        if current_memeplex.projects:
-            current_text += f"Projects: {', '.join(current_memeplex.projects[:10])}\n"
+    psyche_text = "\n".join(
+        [
+            f"[{make_short_id(p.id, 'psyche')}] {getattr(p, 'psyche_type', 'trait')}: {p.content[:100]}"
+            for p in psyche[:15]
+        ]
+    )
+
+    notes_text = "\n".join(
+        [
+            f"[{make_short_id(n.id, 'note')}] {getattr(n, 'note_type', 'task')}: {n.title}"
+            for n in active_notes[:10]
+        ]
+    )
+
+    current_text = current_memeplex.index if current_memeplex else "None yet"
 
     try:
         chat_client = get_chat_client()
@@ -513,9 +523,11 @@ async def refresh_memeplex(
                 ChatMessage(
                     role="user",
                     content=MEMEPLEX_REFRESH_PROMPT.format(
-                        current_memeplex=current_text or "None",
+                        current_memeplex=current_text,
                         memories=memory_text or "No recent memories",
                         entities=entity_text or "No entities yet",
+                        psyche=psyche_text or "No psyche signals",
+                        notes=notes_text or "No active notes",
                     ),
                 )
             ],
@@ -529,14 +541,7 @@ async def refresh_memeplex(
         memeplex = Memeplex(
             user_id=user_id,
             updated_at=now,
-            topics=data.get("topics", [])[:15],
-            people=data.get("people", [])[:20],
-            projects=data.get("projects", [])[:15],
-            places=data.get("places", [])[:10],
-            concepts=data.get("concepts", [])[:10],
-            last_week_topics=data.get("last_week_topics", [])[:10],
-            last_month_topics=data.get("last_month_topics", [])[:10],
-            recent_focus=data.get("recent_focus", ""),
+            index=data.get("index", ""),
             memory_stats=stats,
         )
 
