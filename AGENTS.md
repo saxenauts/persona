@@ -102,6 +102,12 @@ poetry run pytest tests/unit -v    # Local unit tests only
 **record(text)**: Ingests new information via the integration pipeline, automatically classifying it into the 4-pillar model.
 **update_memory(memory_id, updates)**: Modifies existing memory fields. `updates` can include `title`, `content`, `status` (active/completed/cancelled), `due_date`, or `importance`. Used for marking tasks done or editing details.
 
+**CRITICAL WRITE POLICY**:
+- `record()` should ONLY be called when user explicitly asks to save/remember something ("Save this", "Remember that").
+- User statements like "I went to X" are **context for conversation**, not requests to record.
+- Agent should use `recall()` first for conversational context.
+- Respond conversationally based on what you know.
+
 **Static Registry** (`persona/tools/runner.py`): Global `REGISTRY` maps tool names to handlers. Execution is handled via `execute(tool_call, ctx)` with per-request context injection.
 
 **Bounded Execution**: Handled by `execute_tools_bounded`, providing semaphore-limited concurrency, per-tool timeouts, and partial failure capture.
@@ -122,17 +128,17 @@ poetry run pytest tests/unit -v    # Local unit tests only
 ```python
 Memeplex(
     user_id: str,
-    topics: List[str],           # Universal themes: "fitness", "AI research"
-    people: List[str],           # With context: "Sarah (wife)", "Max (colleague)"
-    projects: List[str],         # "Persona", "Home Renovation"
-    places: List[str],           # "SF (home)", "Tokyo (2024 trip)"
-    concepts: List[str],         # "stoicism", "minimalism"
-    last_week_topics: List[str], # Active in last 7 days
-    last_month_topics: List[str],# Active in last 30 days
-    recent_focus: str,           # "Building Memeplex for v1 release"
+    updated_at: datetime,
+    index: str = "",  # Free-form, LLM-maintained hippocampal index
     memory_stats: MemoryStats,
+    temporal_context: Optional[TemporalContext] = None,
 )
 ```
+
+**Short ID Format**:
+- Format: `type:4chars` (e.g., `ep:a3f2` for episode, `e:b7c1` for entity)
+- Prefixes: `ep`=episode, `e`=entity, `p`=psyche, `n`=note
+- Helper functions: `make_short_id()` and `parse_short_id()` in `persona/models/memory.py`
 
 **Key Design**: Topics are universal (everyone has them). Entities (people/projects/places) are optional - a "loner" might only have topics.
 
@@ -156,6 +162,14 @@ Ingestion → Integration → Consolidation → refresh_memeplex()
 - `persona/services/consolidation_service.py` - `refresh_memeplex()` function
 - `persona/core/memory_store.py` - `save_memeplex()` / `get_memeplex()`
 - `persona/services/persona_service.py` - Injects `{world_model}` into prompt
+
+## Batch Integration
+
+**Batch Integration** (`persona/services/integration_agent.py`): A fast 2-call integration mode designed for high-throughput memory processing.
+- `run_batch_integration()`: Uses a single LLM call instead of a 5-9 turn agent loop.
+- **Memeplex-first approach**: Uses the user's World Model (index) for context before fetching relevant graph nodes.
+- **Chronological ordering**: Processes memories in order of occurrence to maintain causal integrity.
+- **Flow**: Wired into `PersonaAdapter.close_session(use_batch=True)`.
 
 ## Environment Configuration
 
@@ -228,7 +242,7 @@ This section tracks in-flight changes aimed at improving PersonaMem eval perform
 2. `persona/services/persona_service.py` - Added `tool_results`, `user_card_present`, `memeplex_present`, `world_model_chars`, `user_context_chars` to stats output when `include_stats=True`.
 3. `persona/tools/runner.py` - `AgentResult.tool_results` now includes each tool's `args` and `output` for deep logging.
 4. `persona/tools/schemas.py` - Enhanced tool descriptions with WHEN TO USE / INTERPRETING RESULTS guidance; added `memory_types` and `exclude_transcripts` params to recall.
-5. `persona/llm/prompts.py` - Restructured `PERSONAL_AI_SYSTEM_PROMPT` with explicit `<retrieval_policy>`, `<answering_rules>`, `<response_selection>`, and `<disambiguation>` sections to reduce generic responses and improve evidence-anchored answers.
+5. `persona/llm/prompts.py` - Restructured `PERSONAL_AI_SYSTEM_PROMPT` with explicit `<retrieval_policy>`, `<answering_rules>`, `<response_selection>`, and `<disambiguation>` sections to reduce generic responses and improve evidence-anchored answers. Includes the **CRITICAL WRITE POLICY**.
 6. `persona/core/backends/neo4j_vector.py` - Added missing `WITH n` clause in Cypher for `db.create.setNodeVectorProperty` calls.
 
 **memory-evals Changes (separate repo):**
@@ -236,6 +250,11 @@ This section tracks in-flight changes aimed at improving PersonaMem eval perform
 2. `IngestionLog` / `RetrievalLog` schemas extended with `session_ids`, `session_close`, `memeplex_refresh`, `tool_results`, `persona_context`.
 3. Runner wires these new stats into deep logs for failure diagnosis.
 4. PersonaMem queries now formatted as MCQ prompts with `(a)/(b)/(c)/(d)` options.
+5. **Environment Variables**:
+   - `EVAL_CLOSE_SESSIONS`: Boolean to enable session closing.
+   - `EVAL_REFRESH_MEMEPLEX`: Boolean to enable memeplex refresh.
+   - `EVAL_MAX_CLOSE_SESSIONS`: Limit on sessions closed per run.
+6. **Judge Requirements**: The LLM judge requires `AZURE_API_KEY` and `AZURE_API_BASE` (specifically NOT `AZURE_OPENAI_API_KEY`).
 
 **Next Steps:**
 - Run full PersonaMem eval with these changes
