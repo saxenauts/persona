@@ -38,6 +38,26 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
 - Note = Things to DO (intentions): "call Sarah", "book trip to Paris"
 - Facts about entities (e.g., "Sarah's birthday is June 5") are **Entity attributes**, not Notes
 
+### Short ID Format
+
+To keep memory references concise and unambiguous, Persona uses short IDs instead of full UUIDs:
+
+**Format**: `type:4chars` where type is the memory type prefix
+- `ep:xxxx` for episodes
+- `e:xxxx` for entities  
+- `p:xxxx` for psyche
+- `n:xxxx` for notes
+
+**Examples**:
+- Episode: `ep:a3f2` → Episode #a3f2
+- Entity: `e:b7c1` → Entity #b7c1  
+- Psyche: `p:4a2b` → Psyche #4a2b
+- Note: `n:8f9c3` → Note #8f9c3
+
+**Helper Functions**: `persona/models/memory.py` provides:
+- `make_short_id(memory_type: str, full_id: str) -> str`
+- `parse_short_id(short_id: str) -> (memory_type, id_chars)`
+
 ### Key Components
 
 1. **PersonaAdapter** (`adapters/persona_adapter.py`)
@@ -51,7 +71,7 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
 3. **Tools Layer** (`tools/memory.py`)
    - **Agent-Native Design**: Tools are atomic primitives; complex features are emergent outcomes of the agent's dialectic loop.
    - **Read Tools**: `recall(query)`, `browse()` (chronological), `get_memory(id)`, `expand_neighbors(id)`, `follow_relationship(id, type)`.
-   - **Write Tools**: `record(text)` (auto-ingest), `update_memory(id, updates)` (edit status, due_date, importance).
+   - **Write Tools**: `record(text)` (explicit save/remember only), `update_memory(id, updates)` (edit status, due_date, importance).
 
 4. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories
@@ -64,9 +84,8 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Sections: `<user>`, `<recent_context>`, `<active_context>`
 
 6. **Memeplex** (`models/memory.py`)
-   - Per-user "world model index" - what the LLM knows about this user
-   - Topics (universal), people, projects, places, concepts
-   - Time windows: last_week_topics, last_month_topics
+   - Per-user "world model index" as a free-form `index` string (LLM-maintained)
+   - Short IDs (e.g., `ep:a3f2`, `e:b7c1`) keep references precise
    - Stored as JSON blob, injected into system prompt as `{world_model}`
 
 ### Services
@@ -91,19 +110,22 @@ Business logic layer between API and core:
 ## Data Flow
 
 ### Ingestion
+
 ```
 Raw Text → PersonaAdapter → MemoryIngestionService → MemoryStore → Neo4j
-                              ↓
-                         LLM extracts:
-                         - Episode (what happened)
-                         - Psyche (traits/preferences)
-                         - Entity (people/places/things)
-                         - Note (tasks/goals/reminders)
-                         
-                         Provenance tracked:
-                         - session_id (source conversation)
-                         - extraction_model (which LLM)
+                               ↓
+                          LLM extracts:
+                          - Episode (what happened)
+                          - Psyche (traits/preferences)
+                          - Entity (people/places/things)
+                          - Note (tasks/goals/reminders)
+                          
+                          Batch Integration (Fast 2-Call Mode):
+                          - Memeplex-first context
+                          - Chronological processing (event_time sorted)
+                          - Single LLM call for GraphPatch generation
 ```
+
 
 ### Retrieval (Agent Loop)
 ```

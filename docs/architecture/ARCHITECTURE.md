@@ -65,38 +65,35 @@ A **memeplex** (from memetics, Dawkins/Blackmore) is a group of memes that reinf
 
 Without Memeplex, the LLM only sees what's retrieved via `recall()`. It has no awareness of what *exists* for the user—can't proactively explore or make connections.
 
-With Memeplex, the LLM knows the user's topics, people, projects, places, concepts. It can ask better questions and surface relevant context unbidden.
+With Memeplex, the LLM has a lightweight index of what exists for the user. The index is free-form text maintained by the LLM and anchored with short IDs for precise references.
 
 ### Schema
 
 ```python
 Memeplex(
-    topics: List[str],           # Universal: "fitness", "AI research"
-    people: List[str],           # "Sarah (wife)", "Max (colleague)"
-    projects: List[str],         # "Persona", "Home Renovation"
-    places: List[str],           # "SF (home)", "Tokyo (2024 trip)"
-    concepts: List[str],         # "stoicism", "minimalism"
-    last_week_topics: List[str], # Temporal recency
-    last_month_topics: List[str],
-    recent_focus: str,           # Current attention
+    user_id: str,
+    updated_at: datetime,
+    index: str = "",  # Free-form, LLM-maintained hippocampal index
     memory_stats: MemoryStats,
+    temporal_context: Optional[TemporalContext] = None,
 )
 ```
 
 ### Key Design Decision
 
-**Topics are universal**—everyone has them. Entities (people/projects/places) are optional. A "loner" might only have topics. This respects the variance in human lives.
+**Free-form index**—the LLM can organize topics, people, projects, and places however it wants. Short IDs (e.g., `ep:a3f2`, `e:b7c1`) keep references unambiguous and easy to trace.
 
 ### How It's Used
 
-The Memeplex is refreshed during consolidation (after integration). An LLM extracts topics and entities from recent memories, merges with existing, and stores as a JSON blob in Neo4j. On each `/chat` request, PersonaService loads the Memeplex and injects it into the system prompt via `{world_model}` slot.
+The Memeplex is refreshed during consolidation (after integration) and stored as a JSON blob in Neo4j. On each `/chat` request, PersonaService injects the index into the system prompt via `{world_model}`.
 
 ```markdown
-## Your Knowledge of This User
+## Memory Index
 
-**Topics**: fitness, AI research, cooking
-**People**: Sarah (wife), Max (colleague)
-**Projects**: Persona, Home Renovation
+People: Sarah (wife) [e:b7c1], Max (colleague) [e:4a2f]
+Projects: Persona v1 [e:91ab]
+Episodes: "Dropped salsa class" [ep:3f2a]
+
 
 **Last week**: Persona v1, fitness
 **Current focus**: Building Memeplex for v1 release
@@ -137,18 +134,16 @@ MemoryIngestionService.ingest()
 
 ### Integration: Connecting the Graph
 
-After ingestion, the Integration Agent runs (background or triggered):
+After ingestion, the **Batch Integration Agent** runs (fast 2-call mode):
 
 ```
-Integration Agent
+Batch Integration
     │
-    ├── get_unintegrated() → Find new memories
+    ├── Memeplex-first context (uses world model for grounding)
+    ├── Chronological processing (sorted by event_time for causal integrity)
+    ├── single LLM call (vs 5-9 turn agent loop)
     │
-    ├── For each memory:
-    │   ├── recall() → Find related existing memories
-    │   ├── expand_neighbors() → Explore graph context
-    │   └── commit_patch() → Apply connections
-    │
+    ├── Connections: MENTIONS, LED_TO, CAUSED_BY, NEXT, SAME_AS, CONTRADICTS
     └── Consolidation triggered at end
 ```
 
@@ -162,6 +157,20 @@ Integration Agent
 - `SAME_AS`: Entity deduplication
 
 **Entity Resolution**: Integration agent detects when different names refer to same person/thing ("my wife Sarah" = "Sarah Chen"). Conservative—only merge when confident.
+
+---
+
+## Tool Protocol (Write Policy)
+
+Persona implements a **CRITICAL WRITE POLICY** to prevent cluttering the graph with redundant or irrelevant information:
+
+1. **Explicit Record**: `record()` should ONLY be called when the user explicitly asks to save or remember something ("Save this", "Remember that").
+2. **Contextual Awareness**: Statements like "I went to X" are treated as **context for conversation**, not requests to record.
+3. **Recall First**: The agent must use `recall()` first to find related memories and respond conversationally based on existing knowledge.
+
+This policy ensures the memory graph remains high-signal and focused on what the user actually wants the AI to persist.
+
+---
 
 ### Consolidation: Distilling Identity
 

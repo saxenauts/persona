@@ -359,4 +359,21 @@ For detailed API documentation, see [API.md](./API.md).
 
 ---
 
+## Memeplex: World Model Index
+
+The **Memeplex** is the user's "hippocampal index"—a free-form world model that helps the LLM understand what exists in the user's memory and how to navigate it.
+
+```python
+class Memeplex(BaseModel):
+    user_id: str
+    updated_at: datetime
+    index: str = ""  # Free-form, LLM-maintained hippocampal index
+    memory_stats: MemoryStats
+    temporal_context: Optional[TemporalContext] = None
+```
+
+The index uses **Short IDs** to reference specific memories concisely and unambiguously.
+
+---
+
 *Persona: Memory that grows with you.*
