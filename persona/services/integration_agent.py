@@ -603,18 +603,18 @@ Example: "Prefers remote" vs "Loves office" = contradiction. "Used to like X, no
 ## OUTPUT FORMAT (JSON only)
 
 ```json
-{
-  "patch": {
+{{
+  "patch": {{
     "items": [
-      {"operation": "link", "source_id": "uuid", "target_id": "uuid", "relation_type": "MENTIONS", "reason": "references Sarah"},
-      {"operation": "link", "source_id": "uuid1", "target_id": "uuid2", "relation_type": "LED_TO", "reason": "caused resume update"},
-      {"operation": "link", "source_id": "uuid1", "target_id": "uuid3", "relation_type": "RELATES_TO", "reason": "both about career"},
-      {"operation": "mark_integrated", "source_id": "uuid"}
+      {{"operation": "link", "source_id": "uuid", "target_id": "uuid", "relation_type": "MENTIONS", "reason": "references Sarah"}},
+      {{"operation": "link", "source_id": "uuid1", "target_id": "uuid2", "relation_type": "LED_TO", "reason": "caused resume update"}},
+      {{"operation": "link", "source_id": "uuid1", "target_id": "uuid3", "relation_type": "RELATES_TO", "reason": "both about career"}},
+      {{"operation": "mark_integrated", "source_id": "uuid"}}
     ],
     "dry_run": false
-  },
+  }},
   "index_additions": "New entities/threads to add to memeplex index (free-form text with short IDs)"
-}
+}}
 ```
 
 Create ALL meaningful connections. Quality matters - but don't miss obvious links."""
@@ -670,13 +670,16 @@ async def run_batch_integration(
     try:
         store = MemoryStore(graph_ops.graph_db)
         llm = get_chat_client()
+        logger.debug(f"Batch {run_id}: store and llm initialized")
 
         # 1. Fetch memeplex
         memeplex = await store.get_memeplex(user_id)
         memeplex_str = memeplex.to_system_prompt() if memeplex else "No memeplex yet."
+        logger.debug(f"Batch {run_id}: memeplex fetched, {len(memeplex_str)} chars")
 
         # 2. Fetch unintegrated memories (sorted by event_time)
         all_nodes = await graph_ops.graph_db.get_all_nodes(user_id)
+        logger.debug(f"Batch {run_id}: fetched {len(all_nodes)} total nodes")
         unintegrated = []
         for node in all_nodes:
             if node.get("type") in ("memeplex", "usercard"):
@@ -743,10 +746,16 @@ async def run_batch_integration(
 
         # 6. Parse response and apply patch
         try:
-            result_data = json.loads(response.content or "{}")
+            raw_content = response.content or "{}"
+            logger.debug(
+                f"Batch integration LLM response (first 500 chars): {raw_content[:500]}"
+            )
+            result_data = json.loads(raw_content)
             patch_data = result_data.get("patch", {})
         except json.JSONDecodeError as e:
-            logger.error(f"Batch integration JSON parse failed: {e}")
+            logger.error(
+                f"Batch integration JSON parse failed: {e}. Content: {(response.content or '')[:200]}"
+            )
             return BatchIntegrationResult(
                 success=False, errors=[f"JSON parse error: {e}"]
             )
