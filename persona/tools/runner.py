@@ -229,6 +229,7 @@ class AgentRunner:
         timeout: Optional[float] = None,
         tool_timeout: float = 30.0,
         max_tool_concurrency: int = 8,
+        auto_recall_first: bool = False,
     ) -> AgentResult:
         total_tool_calls = 0
         total_usage: Dict[str, int] = {}
@@ -236,6 +237,7 @@ class AgentRunner:
         start_time = time.time()
         turns = 0
         all_tool_results: List[Dict[str, Any]] = []
+        forced_recall_done = False
 
         while True:
             if timeout and (time.time() - start_time) > timeout:
@@ -287,6 +289,32 @@ class AgentRunner:
                         total_usage[key] = total_usage.get(key, 0) + int(val)
 
             if response.stop_reason != "tool_use" or not response.tool_calls:
+                # Auto-recall: if model skipped tools on first turn and we haven't forced recall yet
+                if auto_recall_first and turns == 1 and not forced_recall_done:
+                    forced_recall_done = True
+                    user_query = self._extract_user_query(messages)
+                    if user_query:
+                        logger.info(f"Auto-recall triggered for: {user_query[:100]}")
+                        recall_result = await self._execute_auto_recall(ctx, user_query)
+                        if recall_result:
+                            current_messages.append(
+                                ChatMessage(
+                                    role="assistant",
+                                    content="Let me check my memories first.",
+                                    tool_calls=[recall_result["tool_call"]],
+                                )
+                            )
+                            current_messages.append(
+                                ChatMessage(
+                                    role="tool",
+                                    content=recall_result["content"],
+                                    tool_call_id=recall_result["tool_call"].id,
+                                )
+                            )
+                            all_tool_results.append(recall_result["result_data"])
+                            total_tool_calls += 1
+                            continue
+
                 return AgentResult(
                     content=response.content or "",
                     status="completed",
@@ -404,3 +432,44 @@ class AgentRunner:
             if msg.role == "assistant" and msg.content:
                 return msg.content
         return ""
+
+    def _extract_user_query(self, messages: List[ChatMessage]) -> Optional[str]:
+        for msg in messages:
+            if msg.role == "user" and msg.content:
+                return msg.content
+        return None
+
+    async def _execute_auto_recall(
+        self, ctx: ToolContext, query: str
+    ) -> Optional[Dict[str, Any]]:
+        from uuid import uuid4
+
+        tool_call = ToolCall(
+            id=f"auto_{uuid4().hex[:8]}",
+            name="recall",
+            arguments=json.dumps({"query": query, "limit": 10}),
+        )
+
+        result = await self.registry.execute(tool_call, ctx)
+
+        try:
+            output = json.loads(result.content)
+            ok = "error" not in output
+        except json.JSONDecodeError:
+            output = result.content
+            ok = True
+
+        if not ok:
+            return None
+
+        return {
+            "tool_call": tool_call,
+            "content": result.content,
+            "result_data": {
+                "tool": "recall",
+                "ok": True,
+                "duration_ms": 0,
+                "args": {"query": query, "limit": 10},
+                "output": output,
+            },
+        }

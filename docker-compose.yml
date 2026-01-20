@@ -28,6 +28,7 @@ services:
       - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
       - UVICORN_RELOAD=${UVICORN_RELOAD:-true}
       - URI_NEO4J=bolt://neo4j:7687
+      - PERSONA_BENCHMARK_MODE=${PERSONA_BENCHMARK_MODE:-false}
     ports:
       - "8000:8000"
     depends_on:

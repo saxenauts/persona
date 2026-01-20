@@ -26,9 +26,20 @@ class MemoryHit:
 
 
 @dataclass
+class EvidenceSummary:
+    """Summary of retrieved evidence for decision-making."""
+
+    most_recent_time: Optional[str] = None
+    oldest_time: Optional[str] = None
+    has_conflicts: bool = False
+    conflict_note: Optional[str] = None
+
+
+@dataclass
 class RecallResult:
     items: List[MemoryHit] = field(default_factory=list)
     count: int = 0
+    evidence_summary: Optional[EvidenceSummary] = None
 
 
 @dataclass
@@ -91,6 +102,31 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
             return None
 
 
+def _compute_recency_score(
+    similarity: float, event_time: Optional[datetime], now: datetime
+) -> float:
+    return similarity
+
+
+def _detect_stance_conflicts(items: List[MemoryHit]) -> tuple[bool, Optional[str]]:
+    """Detect conflicting stances (POSITIVE vs NEGATIVE) in retrieved memories."""
+    stances = set()
+    for item in items:
+        snippet_lower = item.snippet.lower()
+        if "[stance: positive]" in snippet_lower or "positive" in snippet_lower:
+            stances.add("positive")
+        if "[stance: negative]" in snippet_lower or "negative" in snippet_lower:
+            stances.add("negative")
+        if "[stance: mixed]" in snippet_lower:
+            stances.add("mixed")
+
+    has_conflict = "positive" in stances and "negative" in stances
+    conflict_note = None
+    if has_conflict:
+        conflict_note = "CONFLICT: Found both positive and negative stances. Use most recent memory to determine current stance."
+    return has_conflict, conflict_note
+
+
 async def recall_handler(
     ctx: ToolContext,
     query: str,
@@ -113,7 +149,7 @@ async def recall_handler(
         results = await ctx.graph_ops.text_similarity_search(
             query=query,
             user_id=ctx.user_id,
-            limit=limit * 2,
+            limit=limit * 3,
             date_range=date_range,
         )
         logger.info(
@@ -123,10 +159,12 @@ async def recall_handler(
         logger.error(f"Recall failed: {e}")
         return RecallResult()
 
-    items = []
+    now = datetime.now()
+    candidates = []
+
     for r in results.get("results", []):
         node_id = r.get("nodeName")
-        score = r.get("score", 0.0)
+        similarity_score = r.get("score", 0.0)
 
         try:
             mem = await ctx.store.get(UUID(node_id), ctx.user_id)
@@ -143,15 +181,40 @@ async def recall_handler(
                 if memory_types and mem.type not in memory_types:
                     logger.info(f"Skipping type filter: {node_id} ({mem.type})")
                     continue
-                items.append(_memory_to_hit(mem, score=score))
-                if len(items) >= limit:
-                    break
+
+                event_time = getattr(mem, "event_time", None)
+                recency_score = _compute_recency_score(
+                    similarity_score, event_time, now
+                )
+                hit = _memory_to_hit(mem, score=recency_score)
+                candidates.append((hit, event_time, recency_score))
             else:
                 logger.warning(f"Memory not found: {node_id}")
         except Exception as e:
             logger.warning(f"Could not retrieve memory {node_id}: {e}")
 
-    return RecallResult(items=items, count=len(items))
+    candidates.sort(key=lambda x: x[2], reverse=True)
+
+    candidates = candidates[:limit]
+    items = [hit for hit, _, _ in candidates]
+
+    evidence_summary = None
+    if items:
+        times = [c[1] for c in candidates if c[1]]
+        has_conflicts, conflict_note = _detect_stance_conflicts(items)
+        evidence_summary = EvidenceSummary(
+            most_recent_time=max(times).isoformat() if times else None,
+            oldest_time=min(times).isoformat() if times else None,
+            has_conflicts=has_conflicts,
+            conflict_note=conflict_note,
+        )
+        logger.info(
+            f"Evidence summary: conflicts={has_conflicts}, most_recent={evidence_summary.most_recent_time}"
+        )
+
+    return RecallResult(
+        items=items, count=len(items), evidence_summary=evidence_summary
+    )
 
 
 async def record_handler(
