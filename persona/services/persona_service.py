@@ -1,6 +1,5 @@
 """Unified Persona Service for memory-augmented dialogue."""
 
-import os
 import time
 from typing import Optional, Dict, Any
 
@@ -75,21 +74,12 @@ class PersonaService:
             ChatMessage(role="user", content=query),
         ]
 
-        # Benchmark mode: lower temperature for MCQ determinism
-        benchmark_mode = os.getenv("PERSONA_BENCHMARK_MODE", "").lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        temperature = 0.0 if benchmark_mode else 0.7
-
         agent_result = await runner.run(
             messages,
             ctx=ctx,
-            temperature=temperature,
+            temperature=0.7,
             max_turns=max_turns,
             timeout=timeout,
-            auto_recall_first=benchmark_mode,  # Force recall if model skips tools
         )
 
         if output_schema and agent_result.status == "completed":

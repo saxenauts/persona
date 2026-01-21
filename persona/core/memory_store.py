@@ -204,9 +204,28 @@ class MemoryStore:
         return memories[:limit]
 
     async def get_most_recent_episode(self, user_id: str) -> Optional[Memory]:
-        """Get the most recent episode (for temporal chain linking)."""
         episodes = await self.get_by_type("episode", user_id, limit=1)
         return episodes[0] if episodes else None
+
+    async def get_temporal_predecessor(
+        self, user_id: str, target_time: datetime
+    ) -> Optional[Memory]:
+        """Find episode with event_time closest to but before target_time."""
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+
+        candidates = []
+        for node in all_nodes:
+            if node.get("type") != "episode":
+                continue
+            mem = self._node_to_memory(node, user_id)
+            if mem.event_time and mem.event_time < target_time:
+                candidates.append(mem)
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda m: m.event_time, reverse=True)
+        return candidates[0]
 
     async def link_temporal_chain(
         self, new_memory: Memory, previous_memory: Memory
@@ -323,31 +342,26 @@ class MemoryStore:
         types: Optional[List[str]] = None,
         limit: int = 10,
     ) -> List[Memory]:
-        """
-        Semantic similarity search using embeddings.
+        if not self.vector_store:
+            logger.warning("No vector_store configured for search_vector")
+            return []
 
-        Args:
-            user_id: User ID
-            query: Search query
-            types: Filter by memory types
-            limit: Maximum results
-        """
-        from persona.core.graph_ops import GraphOps
+        from persona.llm.embeddings import generate_embeddings_async
 
-        # Use GraphOps for proper vector search
-        async with GraphOps() as graph_ops:
-            search_results = await graph_ops.text_similarity_search(
-                query=query,
-                user_id=user_id,
-                limit=limit * 2,  # Get more for filtering
-            )
+        query_embeddings = await generate_embeddings_async([query])
+        if not query_embeddings or not query_embeddings[0]:
+            logger.warning(f"Failed to generate embedding for query: {query}")
+            return []
 
-        results = search_results.get("results", [])
+        results = await self.vector_store.search_similar(
+            embedding=query_embeddings[0],
+            user_id=user_id,
+            limit=limit * 2,
+        )
 
-        # Convert to memories and filter by type
         memories = []
         for result in results:
-            node = await self.graph_db.get_node(result["nodeName"], user_id)
+            node = await self.graph_db.get_node(result["node_name"], user_id)
             if node:
                 if types and node.get("type") not in types:
                     continue
@@ -534,29 +548,25 @@ class MemoryStore:
         value: str,
         evidence_id: Optional[UUID] = None,
         confidence: float = 1.0,
+        event_time: Optional[datetime] = None,
     ) -> Optional[EntityMemory]:
+        """Append versioned attribute (preserves history for temporal queries)."""
         entity = await self.get(entity_id, user_id)
         if not entity or entity.type != "entity":
             logger.warning(f"Entity {entity_id} not found for attribute upsert")
             return None
 
         entity_mem: EntityMemory = entity  # type: ignore
-        existing_idx = next(
-            (i for i, attr in enumerate(entity_mem.attributes) if attr.key == key),
-            None,
-        )
 
         new_attr = EntityAttribute(
             key=key,
             value=value,
             confidence=confidence,
             evidence_id=evidence_id,
+            updated_at=event_time or datetime.utcnow(),
         )
 
-        if existing_idx is not None:
-            entity_mem.attributes[existing_idx] = new_attr
-        else:
-            entity_mem.attributes.append(new_attr)
+        entity_mem.attributes.append(new_attr)
 
         import json
 
@@ -573,8 +583,28 @@ class MemoryStore:
             user_id,
         )
 
-        logger.info(f"Upserted attribute '{key}' on entity {entity_id}")
+        logger.info(f"Added versioned attribute '{key}' on entity {entity_id}")
         return await self.get(entity_id, user_id)  # type: ignore
+
+    def get_current_attribute(
+        self, entity: EntityMemory, key: str
+    ) -> Optional[EntityAttribute]:
+        """Get most recent value for an attribute key."""
+        matching = [a for a in entity.attributes if a.key == key]
+        if not matching:
+            return None
+        return max(matching, key=lambda a: a.updated_at)
+
+    def get_attribute_as_of(
+        self, entity: EntityMemory, key: str, as_of: datetime
+    ) -> Optional[EntityAttribute]:
+        """Get attribute value as of a specific time."""
+        matching = [
+            a for a in entity.attributes if a.key == key and a.updated_at <= as_of
+        ]
+        if not matching:
+            return None
+        return max(matching, key=lambda a: a.updated_at)
 
     async def link_memory_to_entity(
         self, memory_id: UUID, entity_id: UUID, user_id: str

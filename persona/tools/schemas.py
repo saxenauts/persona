@@ -19,6 +19,7 @@ INTERPRETING RESULTS:
 - Results are ranked by relevance (most relevant first)
 - Read ALL results to understand full context—user's state may have evolved
 - If results show evolution (tried X → switched to Y), base answer on latest state
+- If results conflict, prefer the most recent evidence by event_time and briefly explain the update
 - Use specific details from results in your response""",
         "parameters": {
             "type": "object",
@@ -50,6 +51,11 @@ INTERPRETING RESULTS:
                 "limit": {
                     "type": "integer",
                     "description": "Maximum results to return. Default: 10.",
+                },
+                "order": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "Sort by event_time instead of relevance. 'asc' = oldest first, 'desc' = newest first. Omit for relevance ranking.",
                 },
             },
             "required": ["query"],
@@ -156,6 +162,7 @@ WHEN TO USE:
 - "What happened last week/month?" 
 - "Show me memories from [date range]"
 - When you need chronological understanding of how something evolved
+- When a question asks for ordering or sequence (use order='asc' to get oldest-first)
 
 INTERPRETING RESULTS: Results ordered by time (default: newest first). Use 'asc' order to see oldest first when tracking evolution.""",
         "parameters": {
@@ -184,7 +191,7 @@ INTERPRETING RESULTS: Results ordered by time (default: newest first). Use 'asc'
                 "order": {
                     "type": "string",
                     "enum": ["asc", "desc"],
-                    "description": "Sort order by event_time. 'asc' = oldest first, 'desc' = newest first. Default: desc.",
+                    "description": "Sort order by event_time. 'asc' = oldest first (use for ordering questions), 'desc' = newest first. Default: desc.",
                 },
             },
             "required": [],

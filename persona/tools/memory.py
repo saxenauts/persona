@@ -26,20 +26,9 @@ class MemoryHit:
 
 
 @dataclass
-class EvidenceSummary:
-    """Summary of retrieved evidence for decision-making."""
-
-    most_recent_time: Optional[str] = None
-    oldest_time: Optional[str] = None
-    has_conflicts: bool = False
-    conflict_note: Optional[str] = None
-
-
-@dataclass
 class RecallResult:
     items: List[MemoryHit] = field(default_factory=list)
     count: int = 0
-    evidence_summary: Optional[EvidenceSummary] = None
 
 
 @dataclass
@@ -105,26 +94,8 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
 def _compute_recency_score(
     similarity: float, event_time: Optional[datetime], now: datetime
 ) -> float:
+    """Return pure similarity score - let LLM reason about recency from timestamps."""
     return similarity
-
-
-def _detect_stance_conflicts(items: List[MemoryHit]) -> tuple[bool, Optional[str]]:
-    """Detect conflicting stances (POSITIVE vs NEGATIVE) in retrieved memories."""
-    stances = set()
-    for item in items:
-        snippet_lower = item.snippet.lower()
-        if "[stance: positive]" in snippet_lower or "positive" in snippet_lower:
-            stances.add("positive")
-        if "[stance: negative]" in snippet_lower or "negative" in snippet_lower:
-            stances.add("negative")
-        if "[stance: mixed]" in snippet_lower:
-            stances.add("mixed")
-
-    has_conflict = "positive" in stances and "negative" in stances
-    conflict_note = None
-    if has_conflict:
-        conflict_note = "CONFLICT: Found both positive and negative stances. Use most recent memory to determine current stance."
-    return has_conflict, conflict_note
 
 
 async def recall_handler(
@@ -135,12 +106,8 @@ async def recall_handler(
     memory_types: Optional[List[str]] = None,
     limit: int = 10,
     exclude_transcripts: bool = True,
+    order: Optional[str] = None,
 ) -> RecallResult:
-    """
-    Search memories with structured filters.
-
-    LLM provides dates directly in ISO format - no parsing of natural language.
-    """
     start_date = _parse_date(date_start)
     end_date = _parse_date(date_end)
     date_range = (start_date, end_date) if start_date or end_date else None
@@ -193,28 +160,17 @@ async def recall_handler(
         except Exception as e:
             logger.warning(f"Could not retrieve memory {node_id}: {e}")
 
-    candidates.sort(key=lambda x: x[2], reverse=True)
+    if order == "asc":
+        candidates.sort(key=lambda x: x[1] or datetime.min)
+    elif order == "desc":
+        candidates.sort(key=lambda x: x[1] or datetime.min, reverse=True)
+    else:
+        candidates.sort(key=lambda x: x[2], reverse=True)
 
     candidates = candidates[:limit]
     items = [hit for hit, _, _ in candidates]
 
-    evidence_summary = None
-    if items:
-        times = [c[1] for c in candidates if c[1]]
-        has_conflicts, conflict_note = _detect_stance_conflicts(items)
-        evidence_summary = EvidenceSummary(
-            most_recent_time=max(times).isoformat() if times else None,
-            oldest_time=min(times).isoformat() if times else None,
-            has_conflicts=has_conflicts,
-            conflict_note=conflict_note,
-        )
-        logger.info(
-            f"Evidence summary: conflicts={has_conflicts}, most_recent={evidence_summary.most_recent_time}"
-        )
-
-    return RecallResult(
-        items=items, count=len(items), evidence_summary=evidence_summary
-    )
+    return RecallResult(items=items, count=len(items))
 
 
 async def record_handler(

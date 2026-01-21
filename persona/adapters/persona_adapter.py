@@ -102,7 +102,6 @@ class PersonaAdapter:
         persist_time_ms = 0.0
         if persist:
             persist_start = time.time()
-            previous_episode = await self.store.get_most_recent_episode(self.user_id)
 
             for memory in result.memories:
                 memory_links = [l for l in result.links if l.source_id == memory.id]
@@ -112,11 +111,15 @@ class PersonaAdapter:
                     await self.store.create(memory, links=memory_links)
 
             episode = next((m for m in result.memories if m.type == "episode"), None)
-            if episode and previous_episode and previous_episode.id != episode.id:
-                await self.store.link_temporal_chain(episode, previous_episode)
-                logger.info(
-                    f"Linked episode '{episode.title}' -> '{previous_episode.title}'"
+            if episode and episode.event_time:
+                predecessor = await self.store.get_temporal_predecessor(
+                    self.user_id, episode.event_time
                 )
+                if predecessor and predecessor.id != episode.id:
+                    await self.store.link_temporal_chain(episode, predecessor)
+                    logger.info(
+                        f"Linked episode '{episode.title}' -> '{predecessor.title}'"
+                    )
 
             persist_time_ms = (time.time() - persist_start) * 1000
 
@@ -205,8 +208,12 @@ class PersonaAdapter:
         final_results = []
 
         previous_episode = None
-        if persist:
-            previous_episode = await self.store.get_most_recent_episode(self.user_id)
+        if persist and sorted_results:
+            first_timestamp = sorted_results[0][2]
+            if first_timestamp:
+                previous_episode = await self.store.get_temporal_predecessor(
+                    self.user_id, first_timestamp
+                )
 
         for idx, result, timestamp, session_id in sorted_results:
             if not result.success:
