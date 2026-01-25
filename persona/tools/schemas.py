@@ -378,14 +378,36 @@ RESOLVE_DATE_RANGE_TOOL = {
         "name": "resolve_date_range",
         "description": """Convert natural-language time reference into ISO date range for recall()/browse().
 
-WHEN TO USE: User references relative time ("last week", "past 3 days", "in January", "before X event").
+WHEN TO USE: User references relative time ("last week", "past 3 days", "in January") or event-anchored time ("before my wedding", "after the conference").
+
+TIMEZONE NOTE: All dates are interpreted in the user's timezone (from context). Returns ISO 8601 format (YYYY-MM-DD).
+
+EVENT-ANCHORED WORKFLOW (CRITICAL):
+For queries like "before my wedding" or "after X event":
+1. FIRST: Call recall("wedding") to find the event and extract its date
+2. THEN: Call resolve_date_range("before 2024-06-15") with the extracted date
+3. FINALLY: Use the resolved date_start/date_end with recall() or browse()
+
+Example: User asks "What did I do before my wedding?"
+→ recall("wedding") → finds event with event_time: 2024-06-15
+→ resolve_date_range("before 2024-06-15") → returns date_start: null, date_end: 2024-06-15
+→ browse(date_end="2024-06-15") → shows memories before wedding
+
+RELATIVE TIME EXAMPLES:
+- "last week" → past 7 days
+- "yesterday" → single day
+- "past 3 days" → last 3 days
+- "January 2024" → entire month
+- "last month" → past 30 days
+- "last year" → past 365 days
+
 OUTPUT: { "date_start": "YYYY-MM-DD", "date_end": "YYYY-MM-DD", "explanation": "..." }""",
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The time reference to resolve, e.g. 'last week', 'January 2024'.",
+                    "description": "The time reference to resolve. Can be relative ('last week', 'past 3 days', 'January 2024') or event-anchored with explicit dates ('before 2024-06-15', 'after 2024-01-01'). For event-anchored queries, you must extract the event date via recall() first.",
                 },
             },
             "required": ["query"],
