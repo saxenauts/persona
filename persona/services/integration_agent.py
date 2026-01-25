@@ -12,7 +12,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
@@ -21,10 +21,11 @@ from persona.llm.providers.base import ChatMessage, ToolCall, ToolResult
 from persona.tools.integration import (
     IntegrationContext,
     INTEGRATION_HANDLERS,
-    GraphPatch,
-    GraphPatchResult,
 )
-from persona.services.consolidation_service import maybe_run_consolidation
+from persona.services.consolidation_service import (
+    maybe_run_consolidation,
+    generate_session_digest,
+)
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -486,6 +487,12 @@ async def run_integration_agent(
                 await maybe_run_consolidation(user_id, graph_ops)
             except Exception as e:
                 logger.warning(f"Consolidation after integration failed: {e}")
+
+        if session_id:
+            try:
+                await generate_session_digest(user_id, session_id, graph_ops, store)
+            except Exception as e:
+                logger.warning(f"Session digest generation failed: {e}")
 
         return IntegrationResult(
             success=len(errors) == 0,

@@ -19,7 +19,7 @@ from persona.models.memory import (
     TemporalContext,
     Memory,
     Memeplex,
-    MemoryStats,
+    EpisodeMemory,
 )
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
@@ -555,6 +555,113 @@ async def maybe_run_consolidation(
     """Trigger consolidation after integration."""
     logger.info(f"Triggering consolidation for {user_id}")
     return await run_consolidation(user_id, graph_ops)
+
+
+# =============================================================================
+# Session Digest Generation
+# =============================================================================
+
+SESSION_DIGEST_PROMPT = """Summarize this session into a compact digest.
+
+Session memories:
+{memories}
+
+Return JSON with:
+- summary: 2-3 sentences capturing the main thread of conversation
+- open_loops: array of unresolved topics, questions, or tasks mentioned but not completed
+- decisions: array of decisions made or conclusions reached
+- next_actions: array of explicit next steps mentioned (not inferred)
+
+Rules:
+- Be specific, not generic. Include names, dates, and details mentioned.
+- open_loops: Only include things explicitly left open, not everything discussed.
+- decisions: Only explicit decisions, not interpretations.
+- next_actions: Only things the user explicitly said they would do.
+- If a category is empty, return an empty array.
+
+Return only valid JSON."""
+
+
+async def generate_session_digest(
+    user_id: str,
+    session_id: str,
+    graph_ops: GraphOps,
+    store: MemoryStore,
+) -> Optional[EpisodeMemory]:
+    """Generate a SessionDigest episode from a session's memories.
+
+    Called at session close. Creates an Episode with kind='session_digest'
+    that captures: summary, open_loops, decisions, next_actions.
+
+    Returns the created EpisodeMemory or None if no memories in session.
+    """
+    from uuid import uuid4
+
+    episodes = await store.get_by_session(user_id, session_id, limit=50)
+
+    if not episodes:
+        logger.info(f"No episodes in session {session_id}, skipping digest")
+        return None
+
+    memory_text = "\n".join(
+        [
+            f"[{e.event_time.strftime('%H:%M') if e.event_time else ''}] {e.content[:300]}"
+            for e in episodes
+            if e.type == "episode" and getattr(e, "kind", None) != "session_digest"
+        ]
+    )
+
+    if not memory_text.strip():
+        logger.info(f"No episode content in session {session_id}")
+        return None
+
+    try:
+        chat_client = get_chat_client()
+        response = await chat_client.chat(
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content=SESSION_DIGEST_PROMPT.format(memories=memory_text),
+                )
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        data = json.loads(response.content or "{}")
+
+        now = datetime.now(timezone.utc)
+        covered_ids = [str(e.id) for e in episodes if e.type == "episode"]
+
+        digest = EpisodeMemory(
+            id=uuid4(),
+            title=f"Session Digest: {session_id[:8]}",
+            content=data.get("summary", "Session completed."),
+            kind="session_digest",
+            event_time=now,
+            observed_at=now,
+            day_id=now.strftime("%Y-%m-%d"),
+            session_id=session_id,
+            source_type="session_digest",
+            user_id=user_id,
+            properties={
+                "covers": covered_ids,
+                "open_loops": data.get("open_loops", []),
+                "decisions": data.get("decisions", []),
+                "next_actions": data.get("next_actions", []),
+            },
+        )
+
+        await store.create(digest, links=[])
+        logger.info(
+            f"Created session digest for {session_id}: "
+            f"{len(data.get('open_loops', []))} open loops, "
+            f"{len(data.get('decisions', []))} decisions"
+        )
+        return digest
+
+    except Exception as e:
+        logger.warning(f"Session digest generation failed: {e}")
+        return None
 
 
 async def get_or_generate_usercard(
