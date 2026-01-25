@@ -273,9 +273,30 @@ GET_MEMORY_TOOL = {
     "type": "function",
     "function": {
         "name": "get_memory",
-        "description": """Fetch full content of a specific memory by ID.
+        "description": """Fetch full content of a specific memory by ID. Returns complete memory with all metadata, attributes, and relationships.
 
-WHEN TO USE: After recall/browse when snippet is insufficient for accurate answer. Use when you need exact details (names, dates, specific quotes).""",
+WHEN TO USE: After recall/browse when snippet is insufficient for accurate answer. Use when you need exact details (names, dates, specific quotes, full context, or relationship information).
+
+INTERPRETING RESULTS:
+- Returns full memory object with id, type, title, content, timestamps, and type-specific fields
+- For NOTES: Includes status (active/completed/cancelled), due_date, note_type, importance
+- For ENTITIES: Includes entity_type, canonical_name, aliases, description, and attributes (key-value facts with update timestamps)
+- For EPISODES/PSYCHE: Includes title, content, event_time, observed_at
+- event_time = when the event/fact occurred; observed_at = when it was recorded
+- Use full content to cite exact details in your response (quotes, specific facts, dates)
+- Use attributes on entities to answer "what do we know about X?" questions
+- Use status on notes to understand task state (active = pending, completed = done, cancelled = abandoned)
+
+WHEN TO STOP vs CONTINUE:
+- STOP (have enough info): You have exact details needed to answer the question accurately
+- CONTINUE (need more context): Memory references other entities/events → use expand_neighbors() or follow_relationship() to trace connections
+- EXAMPLE: User asks "What did Sarah say about the project?" → get_memory() shows Sarah mentioned, but content is vague → use expand_neighbors(MENTIONS) to find all Sarah-related memories
+
+COMMON WORKFLOWS:
+1. After recall() snippet insufficient: get_memory(id) to get full content for accurate citation
+2. Before update_memory(): get_memory(id) to verify correct memory and see current state
+3. To understand entity context: get_memory(entity_id) to see all attributes and relationships
+4. To trace narrative: get_memory(id) then expand_neighbors() to find connected events""",
         "parameters": {
             "type": "object",
             "properties": {
