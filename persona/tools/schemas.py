@@ -251,17 +251,46 @@ UPDATE_MEMORY_TOOL = {
     "type": "function",
     "function": {
         "name": "update_memory",
-        "description": "Update fields on an existing memory. Use to mark tasks complete, change due dates, edit content, etc.",
+        "description": """Modify fields on an existing memory. Use to mark tasks complete, edit content, update due dates, or correct mistakes.
+
+WHEN TO USE:
+- Mark a note/task as done: status='completed' when user finishes something
+- Mark a note/task as cancelled: status='cancelled' when user abandons it
+- Edit memory content/title: Fix mistakes or add clarifications to existing memories
+- Update importance: Adjust priority (0.0-1.0) for notes/tasks
+- Update due_date: Change deadline for notes/tasks (ISO format: YYYY-MM-DD)
+
+WORKFLOW (CRITICAL - ALWAYS FOLLOW):
+1. FIND the memory: Use recall() or browse() to locate the memory
+2. VERIFY the memory: Use get_memory(memory_id) to confirm correct memory before editing
+3. UPDATE: Call update_memory() with memory_id and updates
+4. NEVER update based on recall() snippets alone - always get_memory() first
+
+PILLAR-SPECIFIC SEMANTICS:
+- NOTES (tasks/goals): Can update status (active/completed/cancelled), due_date, importance, content
+- EPISODES (events): Can update content/title only (append-only principle - prefer creating new memories)
+- PSYCHE (traits/beliefs): Can update content/title only (consolidate via new memories, not edits)
+- ENTITY (people/places/things): Can update content/title only (facts evolve via new memories)
+
+SAFETY NOTES:
+- Prefer creating new memories over editing old ones (append-only principle for Episodes/Psyche/Entity)
+- Only Notes should have status changes - Episodes/Psyche/Entity don't have status
+- Always verify memory_id before updating - wrong ID will corrupt unrelated memory
+
+INTERPRETING RESULTS:
+- Success: Returns {success: true, memory_id: "...", updated_fields: ["field1", "field2"]}
+- Failure: Returns {success: false} - check that memory_id exists and is valid UUID
+- Verify changes: After update, you can get_memory(memory_id) to confirm changes took effect""",
         "parameters": {
             "type": "object",
             "properties": {
                 "memory_id": {
                     "type": "string",
-                    "description": "UUID of the memory to update.",
+                    "description": "UUID of the memory to update (get this from recall/browse/get_memory results).",
                 },
                 "updates": {
                     "type": "object",
-                    "description": "Fields to update. Allowed: title, content, status (for notes: 'active', 'completed', 'cancelled'), due_date (ISO format), importance (0.0-1.0).",
+                    "description": "Fields to update. Allowed: title, content, status (for notes: 'active', 'completed', 'cancelled'), due_date (ISO format: YYYY-MM-DD), importance (0.0-1.0).",
                     "properties": {
                         "title": {"type": "string"},
                         "content": {"type": "string"},
