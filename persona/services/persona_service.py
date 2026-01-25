@@ -50,8 +50,14 @@ class PersonaService:
         memeplex_present = bool(memeplex)
 
         world_model, user_context = self._build_user_context(user_card, memeplex)
+        from datetime import datetime
+
+        today_date = datetime.now().strftime("%Y-%m-%d")
         system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
-            world_model=world_model, user_context=user_context
+            world_model=world_model,
+            user_context=user_context,
+            today_date=today_date,
+            user_timezone=user_timezone,
         )
 
         adapter = PersonaAdapter(user_id=user_id, graph_ops=self.graph_ops)
@@ -103,12 +109,26 @@ class PersonaService:
             response["state"] = agent_result.state
 
         if include_stats:
+            # Aggregate tool_results by tool name
+            tool_summary: Dict[str, Dict[str, int]] = {}
+            if agent_result.tool_results:
+                for tool_result in agent_result.tool_results:
+                    tool_name = tool_result.get("tool", "unknown")
+                    duration_ms = tool_result.get("duration_ms", 0)
+
+                    if tool_name not in tool_summary:
+                        tool_summary[tool_name] = {"count": 0, "total_ms": 0}
+
+                    tool_summary[tool_name]["count"] += 1
+                    tool_summary[tool_name]["total_ms"] += duration_ms
+
             response["stats"] = {
                 "tool_calls_made": agent_result.tool_calls_made,
                 "turns": agent_result.turns,
                 "usage": agent_result.usage,
                 "total_ms": total_ms,
                 "tool_results": agent_result.tool_results,
+                "tool_summary": tool_summary,
                 "user_card_present": user_card_present,
                 "memeplex_present": memeplex_present,
                 "world_model_chars": len(world_model) if world_model else 0,
