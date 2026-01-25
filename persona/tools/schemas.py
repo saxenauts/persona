@@ -113,7 +113,26 @@ EXPAND_NEIGHBORS_TOOL = {
     "type": "function",
     "function": {
         "name": "expand_neighbors",
-        "description": "Explore graph connections from a memory node. Returns neighbors linked by relationships. Use after recall() to explore interesting connections.",
+        "description": """Explore graph connections from a memory node. Returns neighbors linked by relationships. Use after recall() to explore interesting connections.
+
+WHEN TO USE: After finding a relevant memory via recall(), use to discover related context through graph connections. Useful for understanding causality chains, temporal sequences, or entity mentions.
+
+RELATIONSHIP TYPES:
+- **LED_TO**: Causal chain (X led to Y happening). Example: "Started exercising" LED_TO "Improved energy levels"
+- **CAUSED_BY**: Reverse causal (Y was caused by X). Example: "Missed deadline" CAUSED_BY "Unexpected illness"
+- **NEXT**: Temporal sequence (what happened after). Example: "Dinner with Sarah" NEXT "Watched movie together"
+- **PREVIOUS**: Temporal sequence (what happened before). Example: "Job interview" PREVIOUS "Received offer"
+- **RELATES_TO**: General association (connected but not causal/temporal). Example: "AI research" RELATES_TO "Philosophy of mind"
+- **MENTIONS**: Entity reference (memory mentions a person/place/thing). Example: "Team meeting" MENTIONS "Sarah"
+
+INTERPRETING RESULTS:
+- Results show neighbors with their relationship type and content snippet
+- Use relationship type to understand connection: causal (LED_TO/CAUSED_BY), temporal (NEXT/PREVIOUS), associative (RELATES_TO), or reference (MENTIONS)
+- Graph expansions can be noisy—filter by specific relationship_types if you need focused results
+- For narrative continuity: Use NEXT/PREVIOUS to trace chronological chains
+- For causality: Use LED_TO/CAUSED_BY to understand cause-effect relationships
+- For entity context: Use MENTIONS to find all memories referencing a person/place/thing
+- If results are too broad, try follow_relationship() instead (more targeted, single relationship type)""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -134,7 +153,7 @@ EXPAND_NEIGHBORS_TOOL = {
                             "MENTIONS",
                         ],
                     },
-                    "description": "Filter by relationship types. If omitted, returns all.",
+                    "description": "Filter by relationship types. If omitted, returns all. Use to narrow results: e.g., ['NEXT', 'PREVIOUS'] for temporal chains, ['LED_TO', 'CAUSED_BY'] for causality.",
                 },
                 "limit": {
                     "type": "integer",
@@ -150,13 +169,36 @@ FOLLOW_RELATIONSHIP_TOOL = {
     "type": "function",
     "function": {
         "name": "follow_relationship",
-        "description": "Trace a specific relationship chain from a memory. More targeted than expand_neighbors - follows one relationship type.",
+        "description": """Trace a specific relationship chain from a memory. More targeted than expand_neighbors - follows one relationship type.
+
+WHEN TO USE: When you need to trace a specific chain (e.g., "what happened next?" or "what caused this?"). More focused than expand_neighbors because it follows only one relationship type.
+
+RELATIONSHIP TYPES:
+- **LED_TO**: Causal chain (X led to Y happening). Example: "Started exercising" LED_TO "Improved energy levels" LED_TO "Joined gym"
+- **CAUSED_BY**: Reverse causal (Y was caused by X). Example: "Missed deadline" CAUSED_BY "Unexpected illness" CAUSED_BY "Flu outbreak"
+- **NEXT**: Temporal sequence (what happened after). Example: "Dinner with Sarah" NEXT "Watched movie" NEXT "Went home"
+- **PREVIOUS**: Temporal sequence (what happened before). Example: "Job interview" PREVIOUS "Prepared resume" PREVIOUS "Updated LinkedIn"
+- **RELATES_TO**: General association (connected but not causal/temporal). Example: "AI research" RELATES_TO "Philosophy of mind" RELATES_TO "Ethics"
+- **MENTIONS**: Entity reference (memory mentions a person/place/thing). Example: "Team meeting" MENTIONS "Sarah" MENTIONS "Project Alpha"
+
+INTERPRETING RESULTS:
+- Results show a chain of memories connected by the specified relationship type
+- Order reflects the chain direction: LED_TO shows forward causality, CAUSED_BY shows backward causality
+- NEXT/PREVIOUS show temporal sequences (use NEXT for "what happened after", PREVIOUS for "what came before")
+- MENTIONS chains show all memories referencing the same entity
+- Use this when you need a focused narrative chain (e.g., "trace the cause-effect chain" or "show me the sequence of events")
+- Compare to expand_neighbors: expand_neighbors shows all connections at once (broader), follow_relationship traces one type (deeper)
+
+COMMON PATTERNS:
+- Narrative continuity: follow_relationship(source_id, "NEXT") to trace "what happened next"
+- Causality chains: follow_relationship(source_id, "LED_TO") to trace "what did this lead to"
+- Entity mentions: follow_relationship(source_id, "MENTIONS") to find all memories about a person/place""",
         "parameters": {
             "type": "object",
             "properties": {
                 "source_id": {
                     "type": "string",
-                    "description": "UUID of the starting memory.",
+                    "description": "UUID of the starting memory (get this from recall() or expand_neighbors() results).",
                 },
                 "relation_type": {
                     "type": "string",
@@ -168,7 +210,7 @@ FOLLOW_RELATIONSHIP_TOOL = {
                         "RELATES_TO",
                         "MENTIONS",
                     ],
-                    "description": "The relationship type to follow.",
+                    "description": "The relationship type to follow. Choose based on what you're tracing: LED_TO/CAUSED_BY for causality, NEXT/PREVIOUS for temporal sequence, MENTIONS for entity references.",
                 },
                 "limit": {
                     "type": "integer",
