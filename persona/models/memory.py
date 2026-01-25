@@ -69,9 +69,19 @@ class BaseMemory(BaseModel):
 
 
 class EpisodeMemory(BaseMemory):
-    """Narrative memory of an event."""
+    """Narrative memory of an event.
+
+    The `kind` field distinguishes special episode types:
+    - None: Regular episode (default)
+    - "session_digest": Summary of a session with open_loops, decisions, next_actions
+    - "transcript": Raw conversation transcript
+    """
 
     type: Literal["episode"] = Field(default="episode")
+    kind: Optional[str] = Field(
+        default=None,
+        description="Episode subtype: None (regular), 'session_digest', 'transcript'",
+    )
     summary: Optional[str] = None
 
 

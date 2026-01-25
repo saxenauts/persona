@@ -163,45 +163,69 @@ class MemoryStore:
         self, memory_type: str, user_id: str, limit: int = 50
     ) -> List[Memory]:
         """Get all memories of a specific type."""
-        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        if hasattr(self.graph_db, "get_nodes_by_type"):
+            nodes = await self.graph_db.get_nodes_by_type(user_id, memory_type, limit)
+        else:
+            all_nodes = await self.graph_db.get_all_nodes(user_id)
+            nodes = [n for n in all_nodes if n.get("type") == memory_type]
+            nodes.sort(key=lambda n: n.get("event_time", ""), reverse=True)
+            nodes = nodes[:limit]
 
-        memories = [
-            self._node_to_memory(n, user_id)
-            for n in all_nodes
-            if n.get("type") == memory_type
-        ]
-
-        # Sort by timestamp descending (most recent first)
-        memories.sort(key=lambda m: m.event_time, reverse=True)
-        return memories[:limit]
+        return [self._node_to_memory(n, user_id) for n in nodes]
 
     async def get_by_day(self, day_id: str, user_id: str) -> List[Memory]:
         """Get all memories for a specific day."""
-        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        if hasattr(self.graph_db, "get_nodes_by_day"):
+            nodes = await self.graph_db.get_nodes_by_day(user_id, day_id)
+        else:
+            all_nodes = await self.graph_db.get_all_nodes(user_id)
+            nodes = []
+            for node in all_nodes:
+                props = node.get("properties", {})
+                if props.get("day_id") == day_id or node.get("day_id") == day_id:
+                    nodes.append(node)
+            nodes.sort(key=lambda n: n.get("event_time", ""))
 
-        memories = []
-        for node in all_nodes:
-            props = node.get("properties", {})
-            if props.get("day_id") == day_id:
-                memories.append(self._node_to_memory(node, user_id))
+        return [self._node_to_memory(n, user_id) for n in nodes]
 
-        memories.sort(key=lambda m: m.event_time)
-        return memories
+    async def get_by_session(
+        self, user_id: str, session_id: str, limit: int = 100
+    ) -> List[Memory]:
+        """Get all memories from a specific session."""
+        if hasattr(self.graph_db, "get_nodes_by_session"):
+            nodes = await self.graph_db.get_nodes_by_session(user_id, session_id, limit)
+        else:
+            all_nodes = await self.graph_db.get_all_nodes(user_id)
+            nodes = []
+            for node in all_nodes:
+                props = node.get("properties", {})
+                if (
+                    props.get("session_id") == session_id
+                    or node.get("session_id") == session_id
+                ):
+                    nodes.append(node)
+            nodes.sort(key=lambda n: n.get("event_time", ""))
+            nodes = nodes[:limit]
+
+        return [self._node_to_memory(n, user_id) for n in nodes]
 
     async def get_recent(
         self, user_id: str, memory_type: Optional[str] = None, limit: int = 20
     ) -> List[Memory]:
         """Get recent memories, optionally filtered by type."""
-        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        if hasattr(self.graph_db, "get_recent_nodes"):
+            nodes = await self.graph_db.get_recent_nodes(user_id, memory_type, limit)
+        else:
+            all_nodes = await self.graph_db.get_all_nodes(user_id)
+            nodes = []
+            for node in all_nodes:
+                if memory_type and node.get("type") != memory_type:
+                    continue
+                nodes.append(node)
+            nodes.sort(key=lambda n: n.get("event_time", ""), reverse=True)
+            nodes = nodes[:limit]
 
-        memories = []
-        for node in all_nodes:
-            if memory_type and node.get("type") != memory_type:
-                continue
-            memories.append(self._node_to_memory(node, user_id))
-
-        memories.sort(key=lambda m: m.event_time, reverse=True)
-        return memories[:limit]
+        return [self._node_to_memory(n, user_id) for n in nodes]
 
     async def get_most_recent_episode(self, user_id: str) -> Optional[Memory]:
         episodes = await self.get_by_type("episode", user_id, limit=1)
@@ -211,8 +235,16 @@ class MemoryStore:
         self, user_id: str, target_time: datetime
     ) -> Optional[Memory]:
         """Find episode with event_time closest to but before target_time."""
-        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        if hasattr(self.graph_db, "get_temporal_predecessor"):
+            target_time_str = target_time.isoformat()
+            node = await self.graph_db.get_temporal_predecessor(
+                user_id, target_time_str
+            )
+            if node:
+                return self._node_to_memory(node, user_id)
+            return None
 
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
         candidates = []
         for node in all_nodes:
             if node.get("type") != "episode":
@@ -308,15 +340,11 @@ class MemoryStore:
         types: Optional[List[str]] = None,
         limit: int = 10,
     ) -> List[Memory]:
-        """
-        Keyword-based text search on title and content.
+        """Keyword-based text search on title and content."""
+        if hasattr(self.graph_db, "search_text_nodes"):
+            nodes = await self.graph_db.search_text_nodes(user_id, query, types, limit)
+            return [self._node_to_memory(n, user_id) for n in nodes]
 
-        Args:
-            user_id: User ID
-            query: Search query string
-            types: Filter by memory types (episode, psyche, note)
-            limit: Maximum results
-        """
         all_nodes = await self.graph_db.get_all_nodes(user_id)
         query_lower = query.lower()
 
@@ -325,7 +353,6 @@ class MemoryStore:
             if types and node.get("type") not in types:
                 continue
 
-            # Check title and content for query match
             props = node.get("properties", node)
             title = str(props.get("title", "")).lower()
             content = str(props.get("content", "")).lower()
@@ -359,9 +386,16 @@ class MemoryStore:
             limit=limit * 2,
         )
 
+        if not results:
+            return []
+
+        node_names = [r["node_name"] for r in results]
+        nodes = await self.graph_db.get_nodes_by_ids(node_names, user_id)
+        node_map = {n.get("name"): n for n in nodes}
+
         memories = []
         for result in results:
-            node = await self.graph_db.get_node(result["node_name"], user_id)
+            node = node_map.get(result["node_name"])
             if node:
                 if types and node.get("type") not in types:
                     continue
@@ -512,6 +546,13 @@ class MemoryStore:
     async def get_entity_by_name(
         self, name: str, user_id: str, include_aliases: bool = True
     ) -> Optional[EntityMemory]:
+        if hasattr(self.graph_db, "get_entity_by_name"):
+            node = await self.graph_db.get_entity_by_name(user_id, name)
+            if node:
+                return self._node_to_memory(node, user_id)  # type: ignore
+            if not include_aliases:
+                return None
+
         all_nodes = await self.graph_db.get_all_nodes(user_id)
         name_lower = name.lower()
 
@@ -642,17 +683,22 @@ class MemoryStore:
     async def get_entities_by_type(
         self, entity_type: str, user_id: str, limit: int = 50
     ) -> List[EntityMemory]:
-        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        if hasattr(self.graph_db, "get_entities_by_type"):
+            nodes = await self.graph_db.get_entities_by_type(
+                user_id, entity_type, limit
+            )
+        else:
+            all_nodes = await self.graph_db.get_all_nodes(user_id)
+            nodes = []
+            for node in all_nodes:
+                if node.get("type") != "entity":
+                    continue
+                if node.get("entity_type") == entity_type:
+                    nodes.append(node)
+            nodes.sort(key=lambda n: n.get("event_time", ""), reverse=True)
+            nodes = nodes[:limit]
 
-        entities = []
-        for node in all_nodes:
-            if node.get("type") != "entity":
-                continue
-            if node.get("entity_type") == entity_type:
-                entities.append(self._node_to_memory(node, user_id))
-
-        entities.sort(key=lambda e: e.event_time, reverse=True)
-        return entities[:limit]  # type: ignore
+        return [self._node_to_memory(n, user_id) for n in nodes]  # type: ignore
 
     # ========== Memeplex Methods ==========
 

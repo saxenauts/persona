@@ -311,3 +311,156 @@ class Neo4jGraphDatabase(GraphDatabase):
             await session.run(query1, user_id=user_id)
             await session.run(query2, user_id=user_id)
         logger.info(f"User {user_id} and all associated nodes deleted successfully.")
+
+    async def get_nodes_by_type(
+        self, user_id: str, memory_type: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: $memory_type})
+        RETURN n
+        ORDER BY n.event_time DESC
+        LIMIT $limit
+        """
+        async with self.driver.session() as session:
+            result = await session.run(
+                query, user_id=user_id, memory_type=memory_type, limit=limit
+            )
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_nodes_by_day(self, user_id: str, day_id: str) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, day_id: $day_id})
+        RETURN n
+        ORDER BY n.event_time ASC
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, user_id=user_id, day_id=day_id)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_nodes_by_session(
+        self, user_id: str, session_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, session_id: $session_id})
+        RETURN n
+        ORDER BY n.event_time ASC
+        LIMIT $limit
+        """
+        async with self.driver.session() as session:
+            result = await session.run(
+                query, user_id=user_id, session_id=session_id, limit=limit
+            )
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_recent_nodes(
+        self, user_id: str, memory_type: Optional[str] = None, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        if memory_type:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id, type: $memory_type})
+            RETURN n
+            ORDER BY n.event_time DESC
+            LIMIT $limit
+            """
+            params = {"user_id": user_id, "memory_type": memory_type, "limit": limit}
+        else:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id})
+            RETURN n
+            ORDER BY n.event_time DESC
+            LIMIT $limit
+            """
+            params = {"user_id": user_id, "limit": limit}
+
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_temporal_predecessor(
+        self, user_id: str, target_time: str
+    ) -> Optional[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: 'episode'})
+        WHERE n.event_time < $target_time
+        RETURN n
+        ORDER BY n.event_time DESC
+        LIMIT 1
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, user_id=user_id, target_time=target_time)
+            record = await result.single()
+            if record:
+                return dict(record["n"])
+            return None
+
+    async def get_entities_by_type(
+        self, user_id: str, entity_type: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: 'entity', entity_type: $entity_type})
+        RETURN n
+        ORDER BY n.event_time DESC
+        LIMIT $limit
+        """
+        async with self.driver.session() as session:
+            result = await session.run(
+                query, user_id=user_id, entity_type=entity_type, limit=limit
+            )
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_entity_by_name(
+        self, user_id: str, name: str
+    ) -> Optional[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: 'entity'})
+        WHERE toLower(n.canonical_name) = toLower($name)
+        RETURN n
+        LIMIT 1
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, user_id=user_id, name=name)
+            record = await result.single()
+            if record:
+                return dict(record["n"])
+            return None
+
+    async def search_text_nodes(
+        self,
+        user_id: str,
+        query_text: str,
+        types: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        query_lower = query_text.lower()
+        if types:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id})
+            WHERE n.type IN $types
+              AND (toLower(n.title) CONTAINS $query_text OR toLower(n.content) CONTAINS $query_text)
+            RETURN n
+            LIMIT $limit
+            """
+            params = {
+                "user_id": user_id,
+                "types": types,
+                "query_text": query_lower,
+                "limit": limit,
+            }
+        else:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id})
+            WHERE toLower(n.title) CONTAINS $query_text OR toLower(n.content) CONTAINS $query_text
+            RETURN n
+            LIMIT $limit
+            """
+            params = {"user_id": user_id, "query_text": query_lower, "limit": limit}
+
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]

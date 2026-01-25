@@ -24,7 +24,7 @@ Status: Protocols defined. Graph-based implementation deferred to v2.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import List, Optional, Set, Dict, Any, Protocol
+from typing import List, Optional, Set, Dict, Protocol
 from uuid import UUID
 
 

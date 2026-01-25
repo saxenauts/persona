@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Sequence
 from uuid import UUID
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from persona.models.memory import (
     Memory,
     MemoryLink,
