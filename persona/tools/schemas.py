@@ -73,13 +73,35 @@ RECORD_TOOL = {
     "type": "function",
     "function": {
         "name": "record",
-        "description": "Store information to user's memory. System infers memory type and creates links automatically.",
+        "description": """Store information to user's memory. System infers memory type and creates links automatically.
+
+WHEN TO USE:
+- User states a preference, value, or belief ("I prefer X", "I believe Y", "I'm interested in Z")
+- User provides biographical facts ("My birthday is...", "I work at...", "I live in...")
+- User commits to a task or goal ("I want to...", "I need to...", "I'm planning to...")
+- User explicitly asks to remember something ("Remember that...", "Save this...", "Don't forget...")
+- Information is durable and worth long-term retention (not ephemeral chat)
+
+WHEN NOT TO USE:
+- NEVER record secrets: API keys, passwords, credentials, tokens, private keys
+- NEVER record system text: tool outputs, error messages, internal logs, code snippets
+- NEVER record ephemeral chat: casual conversation, temporary thoughts, one-off comments
+- NEVER record if user says "don't save this" or "off the record"
+- NEVER record raw transcripts or unprocessed conversation dumps
+- NEVER record sensitive personal data without explicit consent
+
+INTERPRETING RESULTS:
+- Success: Returns list of memory IDs (e.g., [{"id": "uuid", "type": "psyche"}])
+- Each stored item has an id (UUID) and type (episode/psyche/note/entity)
+- If empty list: Information was not stored (may be filtered as ephemeral or invalid)
+- If record fails: Check that text is not empty and doesn't contain secrets
+- Confirmation: After recording, you can recall() the same topic to verify it was saved""",
         "parameters": {
             "type": "object",
             "properties": {
                 "text": {
                     "type": "string",
-                    "description": "The information to store, in natural language.",
+                    "description": "The information to store, in natural language. Should be durable, meaningful information (not ephemeral chat).",
                 },
             },
             "required": ["text"],
