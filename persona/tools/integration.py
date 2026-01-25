@@ -11,7 +11,6 @@ from uuid import UUID
 from enum import Enum
 from pydantic import BaseModel, Field
 
-from persona.tools.context import ToolContext
 from persona.tools.memory import recall_handler, expand_neighbors_handler, MemoryHit
 from persona.models.memory import MemoryLink
 from server.logging_config import get_logger

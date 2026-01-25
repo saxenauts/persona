@@ -18,9 +18,15 @@ WHEN TO USE: Before answering ANY user-specific question. If you answer without 
 INTERPRETING RESULTS: 
 - Results are ranked by relevance (most relevant first)
 - Read ALL results to understand full context—user's state may have evolved
-- If results show evolution (tried X → switched to Y), base answer on latest state
-- If results conflict, prefer the most recent evidence by event_time and briefly explain the update
-- Use specific details from results in your response""",
+- Check timestamps (event_time, age_days) to identify chronological order
+- If results show evolution: Look for explicit change signals ("changed", "now prefer", "switched to")
+- If results conflict without resolution: Note both, cite the more recent, ask if clarification needed
+- Use specific details from results in your response
+
+IF RESULTS ARE THIN OR MIXED:
+- Try broader query (remove specific terms)
+- Try related concepts or entity names from initial results
+- Use expand_neighbors() on promising results to find connections""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -252,9 +258,81 @@ UPDATE_MEMORY_TOOL = {
 }
 
 
+RESOLVE_DATE_RANGE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "resolve_date_range",
+        "description": """Convert natural-language time reference into ISO date range for recall()/browse().
+
+WHEN TO USE: User references relative time ("last week", "past 3 days", "in January", "before X event").
+OUTPUT: { "date_start": "YYYY-MM-DD", "date_end": "YYYY-MM-DD", "explanation": "..." }""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The time reference to resolve, e.g. 'last week', 'January 2024'.",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+TIMELINE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "timeline",
+        "description": """Trace a subject through time in CHRONOLOGICAL ORDER (oldest first).
+
+WHEN TO USE:
+- Questions about ORDER or SEQUENCE: "In what order did I...", "What came first..."
+- Questions about EVOLUTION: "How did X change over time...", "When did I first/last..."
+- Any question needing chronological understanding of events
+
+DIFFERENCE FROM recall():
+- recall() ranks by RELEVANCE (best match first)
+- timeline() sorts by TIME (oldest first) - use this when order matters
+
+INTERPRETING RESULTS: Items are sorted oldest-to-newest. The sequence reflects when events occurred.""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "What to trace through time. Can be a topic, person, project, concept.",
+                },
+                "date_start": {
+                    "type": "string",
+                    "description": "Start date filter (ISO 8601: YYYY-MM-DD).",
+                },
+                "date_end": {
+                    "type": "string",
+                    "description": "End date filter (ISO 8601: YYYY-MM-DD).",
+                },
+                "memory_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["episode", "psyche", "note", "entity"],
+                    },
+                    "description": "Filter by memory type.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results to return. Default: 20.",
+                },
+            },
+            "required": ["subject"],
+        },
+    },
+}
+
 MEMORY_TOOLS = [
     RECALL_TOOL,
     RECORD_TOOL,
+    RESOLVE_DATE_RANGE_TOOL,
+    TIMELINE_TOOL,
     BROWSE_TOOL,
     GET_MEMORY_TOOL,
     UPDATE_MEMORY_TOOL,

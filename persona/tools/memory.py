@@ -21,7 +21,9 @@ class MemoryHit:
     type: str
     title: str
     snippet: str
-    event_time: str
+    event_time: str  # ISO 8601 string
+    timestamp: str = ""  # Explicit ISO timestamp alias
+    age_days: Optional[int] = None  # Days since event_time (for recency reasoning)
     score: float = 0.0
 
 
@@ -44,10 +46,22 @@ class ExpandResult:
     count: int = 0
 
 
-def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
+def _memory_to_hit(
+    memory: Any, score: float = 0.0, now: Optional[datetime] = None
+) -> MemoryHit:
     title = getattr(memory, "title", "") or ""
     ts = getattr(memory, "event_time", None)
-    timestamp_str = ts.isoformat() if ts else ""
+    timestamp_iso = ts.isoformat() if ts else ""
+
+    now = now or datetime.utcnow()
+    age_days: Optional[int] = None
+    if ts:
+        try:
+            age_days = (now.date() - ts.date()).days
+        except Exception:
+            age_days = None
+
+    snippet_chars = 400
 
     if memory.type == "entity":
         parts = [
@@ -61,19 +75,34 @@ def _memory_to_hit(memory: Any, score: float = 0.0) -> MemoryHit:
             parts.append(desc)
         attrs = getattr(memory, "attributes", [])
         if attrs:
-            attr_strs = [f"{a.key}: {a.value}" for a in attrs[:10]]
+            attr_strs: List[str] = []
+            for a in attrs[:8]:
+                updated_at = getattr(a, "updated_at", None)
+                updated_at_str = (
+                    updated_at.date().isoformat()
+                    if isinstance(updated_at, datetime)
+                    else (updated_at.isoformat() if updated_at else "")
+                )
+                if updated_at_str:
+                    attr_strs.append(f"{a.key}: {a.value} (updated {updated_at_str})")
+                else:
+                    attr_strs.append(f"{a.key}: {a.value}")
             parts.append("Facts: " + "; ".join(attr_strs))
         snippet = " | ".join(parts)
     else:
-        content = getattr(memory, "content", "") or ""
-        snippet = content[:200] + "..." if len(content) > 200 else content
+        content = (getattr(memory, "content", "") or "").strip()
+        snippet = (
+            content[:snippet_chars] + "..." if len(content) > snippet_chars else content
+        )
 
     return MemoryHit(
         id=str(memory.id),
         type=memory.type,
         title=title,
         snippet=snippet,
-        event_time=timestamp_str,
+        event_time=timestamp_iso,
+        timestamp=timestamp_iso,
+        age_days=age_days,
         score=score,
     )
 
@@ -306,6 +335,72 @@ class UpdateMemoryResult:
     updated_fields: List[str] = field(default_factory=list)
 
 
+@dataclass
+class TimelineResult:
+    items: List[MemoryHit] = field(default_factory=list)
+    count: int = 0
+    subject: str = ""
+
+
+async def timeline_handler(
+    ctx: ToolContext,
+    subject: str,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    memory_types: Optional[List[str]] = None,
+    limit: int = 20,
+) -> TimelineResult:
+    """Trace a subject through time in chronological order.
+
+    This is a specialized retrieval for ordering/sequence questions.
+    Unlike recall() which ranks by similarity, timeline() always returns
+    results sorted by event_time (oldest first) to show how things evolved.
+    """
+    start_date = _parse_date(date_start)
+    end_date = _parse_date(date_end)
+    date_range = (start_date, end_date) if start_date or end_date else None
+
+    try:
+        results = await ctx.graph_ops.text_similarity_search(
+            query=subject,
+            user_id=ctx.user_id,
+            limit=limit * 4,
+            date_range=date_range,
+        )
+        logger.info(
+            f"Timeline search returned {len(results.get('results', []))} results for subject: {subject[:50]}..."
+        )
+    except Exception as e:
+        logger.error(f"Timeline failed: {e}")
+        return TimelineResult(subject=subject)
+
+    now = datetime.now()
+    candidates = []
+
+    for r in results.get("results", []):
+        node_id = r.get("nodeName")
+        similarity_score = r.get("score", 0.0)
+
+        try:
+            mem = await ctx.store.get(UUID(node_id), ctx.user_id)
+            if mem:
+                if memory_types and mem.type not in memory_types:
+                    continue
+
+                event_time = getattr(mem, "event_time", None)
+                hit = _memory_to_hit(mem, score=similarity_score)
+                candidates.append((hit, event_time))
+        except Exception as e:
+            logger.warning(f"Could not retrieve memory {node_id}: {e}")
+
+    # Chronological sort (oldest first) - distinguishes timeline from recall()
+    candidates.sort(key=lambda x: x[1] or datetime.min)
+    candidates = candidates[:limit]
+    items = [hit for hit, _ in candidates]
+
+    return TimelineResult(items=items, count=len(items), subject=subject)
+
+
 async def browse_handler(
     ctx: ToolContext,
     date_start: Optional[str] = None,
@@ -424,12 +519,95 @@ async def update_memory_handler(
         return UpdateMemoryResult(success=False, memory_id=memory_id)
 
 
+@dataclass
+class DateRangeResult:
+    date_start: str = ""
+    date_end: str = ""
+    explanation: str = ""
+
+
+async def resolve_date_range_handler(
+    ctx: ToolContext,
+    query: str,
+) -> DateRangeResult:
+    """Resolve natural language time reference to ISO date range."""
+    from datetime import timedelta
+    import re
+
+    now = datetime.now()
+    today = now.date()
+    query_lower = query.lower().strip()
+
+    date_start = None
+    date_end = today
+
+    if "today" in query_lower:
+        date_start = today
+        date_end = today
+    elif "yesterday" in query_lower:
+        date_start = today - timedelta(days=1)
+        date_end = today - timedelta(days=1)
+    elif "last week" in query_lower:
+        date_start = today - timedelta(days=7)
+        date_end = today
+    elif "last month" in query_lower:
+        date_start = today - timedelta(days=30)
+        date_end = today
+    elif "last year" in query_lower:
+        date_start = today - timedelta(days=365)
+        date_end = today
+    elif m := re.search(r"past (\d+) days?", query_lower):
+        days = int(m.group(1))
+        date_start = today - timedelta(days=days)
+        date_end = today
+    elif m := re.search(r"past (\d+) weeks?", query_lower):
+        weeks = int(m.group(1))
+        date_start = today - timedelta(weeks=weeks)
+        date_end = today
+    elif m := re.search(
+        r"(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?",
+        query_lower,
+    ):
+        month_names = [
+            "january",
+            "february",
+            "march",
+            "april",
+            "may",
+            "june",
+            "july",
+            "august",
+            "september",
+            "october",
+            "november",
+            "december",
+        ]
+        month_num = month_names.index(m.group(1)) + 1
+        year = int(m.group(2)) if m.group(2) else today.year
+        date_start = date(year, month_num, 1)
+        next_month = month_num + 1 if month_num < 12 else 1
+        next_year = year if month_num < 12 else year + 1
+        date_end = date(next_year, next_month, 1) - timedelta(days=1)
+    else:
+        return DateRangeResult(
+            explanation=f"Could not parse '{query}'. Use recall/browse with explicit YYYY-MM-DD dates."
+        )
+
+    return DateRangeResult(
+        date_start=date_start.isoformat() if date_start else "",
+        date_end=date_end.isoformat() if date_end else "",
+        explanation=f"'{query}' → {date_start} to {date_end}",
+    )
+
+
 TOOL_HANDLERS = {
     "recall": recall_handler,
     "record": record_handler,
+    "resolve_date_range": resolve_date_range_handler,
     "expand_neighbors": expand_neighbors_handler,
     "follow_relationship": follow_relationship_handler,
     "browse": browse_handler,
     "get_memory": get_memory_handler,
     "update_memory": update_memory_handler,
+    "timeline": timeline_handler,
 }
