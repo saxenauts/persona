@@ -156,3 +156,76 @@ Persona's approach (vector search + graph traversal + tool-based retrieval) is f
 
 Document created: Jan 18, 2026
 Decision updated: keep minimal production prompt, keep benchmark-mode optional, and focus improvements on ingestion and retrieval quality.
+
+---
+
+## Update: Jan 25, 2026 - Benchmark Quality Issues & Failed Experiments
+
+### Experiments That Failed
+
+#### Experiment 4: tool_choice="required" (Forced Retrieval)
+Hypothesis: Forcing the model to call `recall()` on every turn would ensure evidence-grounded answers.
+Changes: Set `tool_choice="required"` in PersonaService.run_agent().
+Result: **Regression** (54.5% vs 66.7% baseline on same questions).
+Learning: Forcing retrieval doesn't help when the model's single query is suboptimal. The model wasn't iterating despite prompt guidance.
+
+#### Experiment 5: Verbose Retrieval Protocol
+Hypothesis: Detailed `<retrieval_protocol>` section with iteration rules would teach multi-turn retrieval.
+Changes: Added 24-line retrieval protocol with ITERATE/STOP conditions, conflict resolution rules.
+Result: **No improvement**, slight regression.
+Learning: Verbose prompts hurt capable models ("Prompting Inversion" effect). Simpler is better.
+
+### PersonaMem Benchmark Quality Issues
+
+#### Issue 1: Duplicate Options (4 questions affected)
+Some questions have **identical answer options**, making them impossible to answer correctly:
+
+| Question ID | Duplicated Options |
+|-------------|-------------------|
+| personamem_32k_80 | (c) = (d) |
+| personamem_32k_108 | (b) = (d) |
+| personamem_32k_180 | (c) = (d) |
+| personamem_32k_549 | (a) = (d) |
+
+#### Issue 2: Consistently Failing Questions (6 questions, 0% success across 10-30 runs)
+These questions **never** succeed regardless of approach:
+
+| Question ID | Attempts | Success Rate |
+|-------------|----------|--------------|
+| personamem_32k_80 | 30 | 0% |
+| personamem_32k_494 | 26 | 0% |
+| personamem_32k_78 | 17 | 0% |
+| personamem_32k_158 | 12 | 0% |
+| personamem_32k_483 | 10 | 0% |
+| personamem_32k_214 | 10 | 0% |
+
+#### Issue 3: Gold Label vs Evidence Conflicts
+Example: `personamem_32k_80` asks about mind maps.
+- **Memory extracted**: "Visually engaging but left her feeling **scattered and overwhelmed**"
+- **Gold answer (c)**: "...mind maps... which you found **engaging**" (emphasizes positive)
+- **Our answer (a)**: "...mind maps to be quite **overwhelming**" (matches memory!)
+- **Result**: Marked wrong, but our answer is more evidence-aligned.
+
+### Adjusted Ceiling Estimate
+
+Given benchmark issues, the **true ceiling** for PersonaMem may be:
+- 6 impossible questions (0% success) = ~1% penalty on 589 questions
+- 4 duplicate-option questions = another ~0.7% penalty
+- **Effective ceiling**: ~98% (not 100%)
+
+Current 66.7% → realistic target might be **75-80%** after fixing extraction quality.
+
+### Rollback Summary
+
+| Change | Status | Why |
+|--------|--------|-----|
+| `tool_choice="required"` | ROLLED BACK | Caused regression |
+| Verbose `<retrieval_protocol>` | ROLLED BACK | No improvement |
+| Simpler baseline prompt | KEPT | Best performing |
+
+### Next Steps (Recommended)
+
+1. **Report benchmark bugs** to PersonaMem maintainers (duplicate options)
+2. **Exclude known-bad questions** from evaluation scoring
+3. **Focus on extraction fidelity** - the "mind maps" example shows we lose nuance during ingestion
+4. **Consider embedding model** - some failures may be retrieval ranking issues

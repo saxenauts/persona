@@ -399,15 +399,19 @@ async def generate_temporal_context(
 
     episodes = await store.get_by_type("episode", user_id, limit=20)
 
+    def _normalize_tz(dt: datetime) -> datetime:
+        """Normalize naive datetime to UTC."""
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
     week_episodes = [
         e
         for e in episodes
-        if e.event_time and e.event_time >= week_start.replace(tzinfo=None)
+        if e.event_time and _normalize_tz(e.event_time) >= week_start
     ]
     month_episodes = [
         e
         for e in episodes
-        if e.event_time and e.event_time >= month_start.replace(tzinfo=None)
+        if e.event_time and _normalize_tz(e.event_time) >= month_start
     ]
 
     if not month_episodes:
@@ -469,15 +473,14 @@ async def refresh_memeplex(
     episodes = await store.get_by_type("episode", user_id, limit=30)
     entities = await store.get_by_type("entity", user_id, limit=50)
 
+    def _normalize_tz(dt: datetime) -> datetime:
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
     week_episodes = [
-        e
-        for e in episodes
-        if e.event_time and e.event_time >= week_ago.replace(tzinfo=None)
+        e for e in episodes if e.event_time and _normalize_tz(e.event_time) >= week_ago
     ]
     month_episodes = [
-        e
-        for e in episodes
-        if e.event_time and e.event_time >= month_ago.replace(tzinfo=None)
+        e for e in episodes if e.event_time and _normalize_tz(e.event_time) >= month_ago
     ]
 
     if not month_episodes and not entities:

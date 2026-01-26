@@ -15,6 +15,8 @@ RECALL_TOOL = {
 
 WHEN TO USE: Before answering ANY user-specific question. If you answer without searching, you WILL be wrong.
 
+STOP CONDITION: You have 2+ supporting memories that answer the question, OR you've tried 3+ different query formulations without finding relevant information.
+
 INTERPRETING RESULTS: 
 - Results are ranked by relevance (most relevant first)
 - Read ALL results to understand full context—user's state may have evolved
@@ -23,10 +25,11 @@ INTERPRETING RESULTS:
 - If results conflict without resolution: Note both, cite the more recent, ask if clarification needed
 - Use specific details from results in your response
 
-IF RESULTS ARE THIN OR MIXED:
-- Try broader query (remove specific terms)
-- Try related concepts or entity names from initial results
-- Use expand_neighbors() on promising results to find connections""",
+ITERATION PROTOCOL (if first recall returns thin results):
+1. Rephrase with broader terms (remove specifics)
+2. Use entity names found in initial results as new search terms
+3. Use expand_neighbors() on the most promising result
+4. If asking about time periods: chain with resolve_date_range() and browse()""",
         "parameters": {
             "type": "object",
             "properties": {

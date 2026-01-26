@@ -189,6 +189,7 @@ class AgentResult:
     state: Optional[str] = None
     subtask_summary: Optional[Dict[str, int]] = None
     tool_results: Optional[List[Dict[str, Any]]] = None
+    iteration_stats: Optional[Dict[str, Any]] = None
 
     @property
     def can_resume(self) -> bool:
@@ -225,11 +226,12 @@ class AgentRunner:
         ctx: ToolContext,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        max_turns: Optional[int] = None,
+        max_turns: Optional[int] = 10,
         timeout: Optional[float] = None,
         tool_timeout: float = 30.0,
         max_tool_concurrency: int = 8,
         auto_recall_first: bool = False,
+        tool_choice: Optional[str] = None,
     ) -> AgentResult:
         total_tool_calls = 0
         total_usage: Dict[str, int] = {}
@@ -238,6 +240,14 @@ class AgentRunner:
         turns = 0
         all_tool_results: List[Dict[str, Any]] = []
         forced_recall_done = False
+
+        # Iteration tracking for observability
+        iteration_stats: Dict[str, Any] = {
+            "recall_count": 0,
+            "browse_count": 0,
+            "expand_count": 0,
+            "unique_queries": [],
+        }
 
         while True:
             if timeout and (time.time() - start_time) > timeout:
@@ -249,6 +259,7 @@ class AgentRunner:
                     usage=total_usage if total_usage else None,
                     state=self._serialize_state(current_messages),
                     subtask_summary=ctx.subtask_summary,
+                    iteration_stats=iteration_stats,
                 )
 
             if max_turns and turns >= max_turns:
@@ -260,14 +271,21 @@ class AgentRunner:
                     usage=total_usage if total_usage else None,
                     state=self._serialize_state(current_messages),
                     subtask_summary=ctx.subtask_summary,
+                    iteration_stats=iteration_stats,
                 )
 
             try:
+                # Use tool_choice on first turn only, then auto
+                effective_tool_choice = (
+                    tool_choice if (turns == 0 and tool_choice) else None
+                )
+
                 response = await self.llm.chat(
                     messages=current_messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     tools=self.tools,
+                    tool_choice=effective_tool_choice,
                 )
             except Exception as e:
                 logger.error(f"LLM call failed: {e}")
@@ -279,6 +297,7 @@ class AgentRunner:
                     usage=total_usage if total_usage else None,
                     state=self._serialize_state(current_messages),
                     subtask_summary=ctx.subtask_summary,
+                    iteration_stats=iteration_stats,
                 )
 
             turns += 1
@@ -323,6 +342,7 @@ class AgentRunner:
                     usage=total_usage if total_usage else None,
                     subtask_summary=ctx.subtask_summary,
                     tool_results=all_tool_results if all_tool_results else None,
+                    iteration_stats=iteration_stats,
                 )
 
             assistant_msg = ChatMessage(
@@ -349,6 +369,16 @@ class AgentRunner:
                     tool_args_by_id[tc.id] = tc.arguments
 
             for exec_result in batch_result.results:
+                if exec_result.name == "recall":
+                    iteration_stats["recall_count"] += 1
+                    args = tool_args_by_id.get(exec_result.tool_call_id, {})
+                    if args.get("query"):
+                        iteration_stats["unique_queries"].append(args["query"])
+                elif exec_result.name == "browse":
+                    iteration_stats["browse_count"] += 1
+                elif exec_result.name in ("expand_neighbors", "follow_relationship"):
+                    iteration_stats["expand_count"] += 1
+
                 all_tool_results.append(
                     {
                         "tool": exec_result.name,

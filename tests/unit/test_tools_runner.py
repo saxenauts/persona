@@ -228,7 +228,7 @@ class TestAgentRunner:
         messages = [ChatMessage(role="user", content="Do lots of work")]
         ctx = make_mock_ctx()
 
-        result = await runner.run(messages, ctx=ctx)
+        result = await runner.run(messages, ctx=ctx, max_turns=None)
 
         assert result.status == "completed"
         assert result.turns == 21

@@ -40,6 +40,8 @@ class PersonaService:
         max_turns: Optional[int] = None,
         timeout: Optional[float] = None,
         output_schema: Optional[dict] = None,
+        tool_choice: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
 
@@ -50,14 +52,9 @@ class PersonaService:
         memeplex_present = bool(memeplex)
 
         world_model, user_context = self._build_user_context(user_card, memeplex)
-        from datetime import datetime
-
-        today_date = datetime.now().strftime("%Y-%m-%d")
         system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
             world_model=world_model,
             user_context=user_context,
-            today_date=today_date,
-            user_timezone=user_timezone,
         )
 
         adapter = PersonaAdapter(user_id=user_id, graph_ops=self.graph_ops)
@@ -83,9 +80,10 @@ class PersonaService:
         agent_result = await runner.run(
             messages,
             ctx=ctx,
-            temperature=0.7,
+            temperature=temperature if temperature is not None else 0.7,
             max_turns=max_turns,
             timeout=timeout,
+            tool_choice=tool_choice,
         )
 
         if output_schema and agent_result.status == "completed":
@@ -133,6 +131,7 @@ class PersonaService:
                 "memeplex_present": memeplex_present,
                 "world_model_chars": len(world_model) if world_model else 0,
                 "user_context_chars": len(user_context) if user_context else 0,
+                "iteration_stats": agent_result.iteration_stats,
             }
 
         return response
