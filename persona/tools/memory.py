@@ -393,8 +393,8 @@ async def timeline_handler(
         except Exception as e:
             logger.warning(f"Could not retrieve memory {node_id}: {e}")
 
-    # Chronological sort (oldest first) - distinguishes timeline from recall()
-    candidates.sort(key=lambda x: x[1] or datetime.min)
+    # Chronological sort (oldest first) with ID tie-breaker for determinism
+    candidates.sort(key=lambda x: (x[1] or datetime.min, x[0].id))
     candidates = candidates[:limit]
     items = [hit for hit, _ in candidates]
 

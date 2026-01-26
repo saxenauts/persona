@@ -192,13 +192,23 @@ class MemoryIngestionService:
             )
             extract_time_ms = (time.time() - start_extract) * 1000
 
-            event_time = self._parse_event_time(extraction.event_time, timestamp)
-            day_id = event_time.strftime("%Y-%m-%d")
+            base_event_time = self._parse_event_time(extraction.event_time, timestamp)
+            day_id = base_event_time.strftime("%Y-%m-%d")
 
             extraction_model = config.MACHINE_LEARNING.LLM_SERVICE or "unknown"
 
             memories: List[Memory] = []
             links: List[MemoryLink] = []
+
+            # Sequence counter for unique event_time per memory (microsecond offsets)
+            # This preserves extraction order for timeline queries
+            memory_seq = 0
+
+            def next_event_time() -> datetime:
+                nonlocal memory_seq
+                et = base_event_time + timedelta(microseconds=memory_seq)
+                memory_seq += 1
+                return et
 
             episode_id = uuid4()
             from persona.models.memory import EpisodeMemory, PsycheMemory, NoteMemory
@@ -207,7 +217,7 @@ class MemoryIngestionService:
                 id=episode_id,
                 title=extraction.episode.title,
                 content=extraction.episode.content,
-                event_time=event_time,
+                event_time=next_event_time(),
                 observed_at=observed_at,
                 day_id=day_id,
                 session_id=session_id,
@@ -225,7 +235,7 @@ class MemoryIngestionService:
                     psyche_type=p.type,
                     title=p.type,
                     content=p.content,
-                    event_time=event_time,
+                    event_time=next_event_time(),
                     observed_at=observed_at,
                     day_id=day_id,
                     session_id=session_id,
@@ -249,7 +259,7 @@ class MemoryIngestionService:
                     title=n.title,
                     content=n.content,
                     status=n.status,
-                    event_time=event_time,
+                    event_time=next_event_time(),
                     observed_at=observed_at,
                     day_id=day_id,
                     session_id=session_id,
@@ -295,7 +305,7 @@ class MemoryIngestionService:
                         for attr in e.attributes
                     ],
                     mentioned_in=[episode_id],
-                    event_time=event_time,
+                    event_time=next_event_time(),
                     observed_at=observed_at,
                     day_id=day_id,
                     session_id=session_id,
