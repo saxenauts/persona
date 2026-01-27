@@ -45,6 +45,9 @@ CRITICAL - Tool Selection:
 - "What happened last week..." → use browse() with date range
 - "What do I think about X..." → use recall(query)
 
+CRITICAL - Timeline Output Order:
+When using timeline(), output items in the SAME ORDER returned by the tool. Do not reorder or reverse the list.
+
 For writing:
 - record(text): save new information immediately
 - update_memory(memory_id, updates): edit existing memory

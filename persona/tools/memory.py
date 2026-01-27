@@ -388,15 +388,16 @@ async def timeline_handler(
                     continue
 
                 event_time = getattr(mem, "event_time", None)
+                observed_at = getattr(mem, "observed_at", None)
                 hit = _memory_to_hit(mem, score=similarity_score)
-                candidates.append((hit, event_time))
+                candidates.append((hit, event_time, observed_at))
         except Exception as e:
             logger.warning(f"Could not retrieve memory {node_id}: {e}")
 
-    # Chronological sort (oldest first) with ID tie-breaker for determinism
-    candidates.sort(key=lambda x: (x[1] or datetime.min, x[0].id))
+    # Chronological sort: event_time, then observed_at (ingest order), then ID for determinism
+    candidates.sort(key=lambda x: (x[1] or datetime.min, x[2] or datetime.min, x[0].id))
     candidates = candidates[:limit]
-    items = [hit for hit, _ in candidates]
+    items = [hit for hit, _, _ in candidates]
 
     return TimelineResult(items=items, count=len(items), subject=subject)
 
