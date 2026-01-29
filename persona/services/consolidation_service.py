@@ -475,7 +475,9 @@ async def refresh_memeplex(
     entities = await store.get_by_type("entity", user_id, limit=50)
 
     def _normalize_tz(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
 
     week_episodes = [
         e for e in episodes if e.event_time and _normalize_tz(e.event_time) >= week_ago
@@ -530,9 +532,12 @@ async def refresh_memeplex(
 
         stats = await store.compute_memory_stats(user_id)
 
+        # Ensure now is timezone-aware UTC for consistent serialization
+        now_utc = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+
         memeplex = Memeplex(
             user_id=user_id,
-            updated_at=now,
+            updated_at=now_utc,
             topics=data.get("topics", [])[:15],
             people=data.get("people", [])[:20],
             projects=data.get("projects", [])[:15],
