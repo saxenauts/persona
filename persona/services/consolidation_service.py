@@ -463,8 +463,9 @@ async def refresh_memeplex(
     user_id: str,
     graph_ops: GraphOps,
     store: MemoryStore,
+    as_of: Optional[datetime] = None,
 ) -> Optional[Memeplex]:
-    now = datetime.now(timezone.utc)
+    now = as_of or datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 

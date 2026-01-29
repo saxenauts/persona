@@ -837,6 +837,9 @@ class MemeplexRefreshResponse(BaseModel):
 )
 async def refresh_memeplex(
     user_id: str = Path(..., description="The unique identifier for the user"),
+    as_of: Optional[str] = Query(
+        None, description="ISO 8601 timestamp to anchor memeplex refresh (for eval use)"
+    ),
     graph_ops: GraphOps = Depends(get_graph_ops),
 ):
     from persona.services.consolidation_service import refresh_memeplex as do_refresh
@@ -846,7 +849,15 @@ async def refresh_memeplex(
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
         store = MemoryStore(graph_ops.graph_db, graph_ops.vector_store)
-        memeplex = await do_refresh(user_id, graph_ops, store)
+        as_of_dt = None
+        if as_of:
+            try:
+                as_of_dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid as_of timestamp: {as_of}"
+                )
+        memeplex = await do_refresh(user_id, graph_ops, store, as_of=as_of_dt)
 
         if not memeplex:
             return MemeplexRefreshResponse(status="no_data")
