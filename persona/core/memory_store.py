@@ -742,7 +742,7 @@ class MemoryStore:
             "last_week_topics": json.dumps(memeplex.last_week_topics),
             "last_month_topics": json.dumps(memeplex.last_month_topics),
             "recent_focus": memeplex.recent_focus,
-            "memory_stats": json.dumps(memeplex.memory_stats.model_dump()),
+            "memory_stats": json.dumps(memeplex.memory_stats.model_dump(mode="json")),
             "timeline_summary": memeplex.timeline_summary,
         }
 
