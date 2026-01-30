@@ -13,7 +13,8 @@ import asyncio
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Optional, List
+from difflib import SequenceMatcher
+from typing import Optional, List, Dict, Any
 from uuid import uuid4
 from pydantic import BaseModel, Field
 
@@ -49,24 +50,31 @@ INGESTION_SYSTEM_PROMPT = """You are a memory ingestion system for a personal kn
 3. **Entity**: What/who exists (people, places, things). Extract referents with their attributes/facts.
 4. **Note**: What to do (tasks, goals). ONLY when explicit intention/trigger is present.
 
-## PSYCHE EXTRACTION (BE VERY SELECTIVE)
+## PSYCHE EXTRACTION (CAPTURE THE WHY)
 
-Psyche represents WHO THE PERSON IS at their core. Most sessions don't reveal new psyche.
+Psyche represents what drives behavior - preferences, values, beliefs, and identity.
+Extract Psyche when you see evaluative language revealing the person's inner landscape.
 
-**ONLY extract psyche when you see SIGNIFICANT identity signals:**
-- Core values being stated: "Family comes first for me", "I believe in..."
-- Fundamental preferences: "I'm a morning person", "I've always loved..."
-- Personality traits: "I tend to be introverted", "I'm risk-averse"
-- Life philosophy: "I live by the rule...", "My approach to life is..."
+**EXTRACT psyche when you see:**
+- Preferences: "I like/love/hate/prefer...", "I enjoy/dread..."
+- Identity: "I'm the kind of person who...", "I always/never..."
+- Values/beliefs: "I value...", "I believe...", "What matters to me is..."
+- Reactions revealing preference: "That was amazing/terrible", "I had so much fun"
+- Recurring patterns with sentiment: doing something repeatedly AND expressing feeling about it
 
 **DO NOT extract psyche for:**
-- Temporary preferences: "I want pizza tonight" (this is just episode context)
-- Situational feelings: "I'm stressed about the deadline" (episode, not psyche)
-- One-time opinions: "That movie was good" (episode context)
-- Facts about activities: "I went running" (episode, maybe entity for 'running')
+- Neutral activity descriptions: "I went to the store" (no sentiment = Episode only)
+- Situational states: "I'm tired today" (temporary, not identity)
+- Single mentions without evaluative language
 
-**Rule of thumb**: If you're unsure, DON'T extract psyche. Episodes capture the detail.
-Most sessions should have 0 psyche. Only 1 psyche per 5-10 sessions is normal.
+**Psyche types:**
+- trait: personality characteristics ("I'm introverted")
+- preference: likes/dislikes ("I love hiking")
+- value: what matters to them ("Family comes first")
+- belief: worldview ("I believe in hard work")
+
+**Guideline**: 1-2 Psyche per session is healthy if evaluative language is present.
+Skip Psyche only when the session is purely factual narration.
 
 ## Entity vs Note (CRITICAL DISTINCTION)
 
@@ -124,6 +132,123 @@ INGESTION_USER_TEMPLATE = """Process this input and extract memories:
 {raw_content}"""
 
 
+ENTITY_DEDUP_THRESHOLD = 0.9
+
+
+def normalize_entity_name(name: str) -> str:
+    """Lowercase, strip whitespace, normalize separators to spaces."""
+    return name.lower().strip().replace("-", " ").replace("_", " ")
+
+
+def fuzzy_match(str1: str, str2: str) -> float:
+    """Return similarity score 0-1 using SequenceMatcher."""
+    return SequenceMatcher(None, str1, str2).ratio()
+
+
+def find_matching_entity(
+    entity_name: str,
+    existing_entities: Dict[str, Any],
+) -> Optional[str]:
+    """Find matching entity by normalized name or fuzzy match (>0.9 threshold)."""
+    normalized = normalize_entity_name(entity_name)
+
+    if normalized in existing_entities:
+        return normalized
+
+    for existing_norm in existing_entities:
+        if fuzzy_match(normalized, existing_norm) >= ENTITY_DEDUP_THRESHOLD:
+            return existing_norm
+
+    return None
+
+
+def merge_entity_attributes(
+    existing: Dict[str, Any],
+    new_entity: Dict[str, Any],
+) -> None:
+    """Merge aliases, attributes, and description from new_entity into existing."""
+    existing_aliases = set(existing.get("aliases", []) or [])
+    new_aliases = set(new_entity.get("aliases", []) or [])
+    new_canonical = new_entity.get("canonical_name", "")
+    if (
+        new_canonical
+        and new_canonical.lower() != existing.get("canonical_name", "").lower()
+    ):
+        new_aliases.add(new_canonical)
+    existing["aliases"] = list(existing_aliases | new_aliases)
+
+    existing_attrs = existing.get("attributes", []) or []
+    new_attrs = new_entity.get("attributes", []) or []
+    for attr in new_attrs:
+        key_val = (attr.get("key"), attr.get("value"))
+        if not any((a.get("key"), a.get("value")) == key_val for a in existing_attrs):
+            existing_attrs.append(attr)
+    existing["attributes"] = existing_attrs
+
+    new_desc = new_entity.get("description", "")
+    existing_desc = existing.get("description", "")
+    if new_desc and len(new_desc) > len(existing_desc):
+        existing["description"] = new_desc
+
+
+def deduplicate_entities(
+    entities: List[Any],
+) -> tuple[List[Any], Dict[str, Any]]:
+    """Deduplicate entities using fuzzy matching (>0.9 threshold), merging attributes."""
+    if not entities:
+        return [], {
+            "entities_before": 0,
+            "entities_after": 0,
+            "merges_applied": 0,
+            "dedup_rate": 0.0,
+        }
+
+    entities_before = len(entities)
+    seen: Dict[str, Dict[str, Any]] = {}
+
+    for entity in entities:
+        if hasattr(entity, "model_dump"):
+            entity_dict = entity.model_dump()
+        elif hasattr(entity, "__dict__"):
+            entity_dict = vars(entity).copy()
+        else:
+            entity_dict = dict(entity)
+
+        canonical = entity_dict.get("canonical_name", "")
+        if not canonical:
+            continue
+
+        match_key = find_matching_entity(canonical, seen)
+
+        if match_key:
+            merge_entity_attributes(seen[match_key], entity_dict)
+        else:
+            seen[normalize_entity_name(canonical)] = entity_dict
+
+    deduplicated = []
+    if entities and hasattr(entities[0], "model_validate"):
+        model_cls = type(entities[0])
+        for entity_dict in seen.values():
+            try:
+                deduplicated.append(model_cls.model_validate(entity_dict))
+            except Exception:
+                deduplicated.append(type(entities[0])(**entity_dict))
+    else:
+        deduplicated = list(seen.values())
+
+    entities_after = len(deduplicated)
+    merges_applied = entities_before - entities_after
+
+    return deduplicated, {
+        "entities_before": entities_before,
+        "entities_after": entities_after,
+        "merges_applied": merges_applied,
+        "dedup_rate": round(merges_applied / entities_before, 3)
+        if entities_before > 0
+        else 0.0,
+    }
+
+
 # ============================================================================
 # Ingestion Result
 # ============================================================================
@@ -142,6 +267,7 @@ class IngestionResult(BaseModel):
     embed_time_ms: Optional[float] = None
     persist_time_ms: Optional[float] = None
     total_time_ms: Optional[float] = None
+    dedup_metrics: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================
@@ -278,7 +404,14 @@ class MemoryIngestionService:
 
             from persona.models.memory import EntityMemory, EntityAttribute
 
-            for e in extraction.entities:
+            deduped_entities, dedup_metrics = deduplicate_entities(extraction.entities)
+            if dedup_metrics["merges_applied"] > 0:
+                logger.info(
+                    f"Entity dedup: {dedup_metrics['entities_before']} -> {dedup_metrics['entities_after']} "
+                    f"({dedup_metrics['merges_applied']} merged, rate={dedup_metrics['dedup_rate']})"
+                )
+
+            for e in deduped_entities:
                 # Build rich content that includes attributes for better vector search
                 content_parts = [f"{e.entity_type}: {e.canonical_name}"]
                 if e.aliases:
@@ -330,7 +463,9 @@ class MemoryIngestionService:
             embed_time_ms = (time.time() - start_embed) * 1000
 
             logger.info(
-                f"Ingested {len(memories)} memories for user {user_id} | LLM: {extract_time_ms:.0f}ms | Embed: {embed_time_ms:.0f}ms"
+                f"Ingested {len(memories)} memories for user {user_id} | "
+                f"LLM: {extract_time_ms:.0f}ms | Embed: {embed_time_ms:.0f}ms | "
+                f"Entities: {dedup_metrics['entities_after']} (deduped from {dedup_metrics['entities_before']})"
             )
 
             return IngestionResult(
@@ -339,6 +474,7 @@ class MemoryIngestionService:
                 success=True,
                 extract_time_ms=extract_time_ms,
                 embed_time_ms=embed_time_ms,
+                dedup_metrics=dedup_metrics,
             )
 
         except Exception as e:
