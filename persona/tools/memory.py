@@ -414,23 +414,23 @@ async def browse_handler(
     start_date = _parse_date(date_start)
     end_date = _parse_date(date_end)
 
+    start_datetime = (
+        datetime.combine(start_date, datetime.min.time()) if start_date else None
+    )
+    end_datetime = datetime.combine(end_date, datetime.max.time()) if end_date else None
+
     all_memories = []
     types_to_fetch = memory_types or ["episode", "psyche", "note", "entity"]
 
     for mem_type in types_to_fetch:
-        memories = await ctx.store.get_by_type(mem_type, ctx.user_id, limit=limit * 2)
+        memories = await ctx.store.get_by_type(
+            mem_type,
+            ctx.user_id,
+            limit=limit,
+            date_start=start_datetime,
+            date_end=end_datetime,
+        )
         all_memories.extend(memories)
-
-    if start_date:
-        all_memories = [
-            m
-            for m in all_memories
-            if m.event_time and m.event_time.date() >= start_date
-        ]
-    if end_date:
-        all_memories = [
-            m for m in all_memories if m.event_time and m.event_time.date() <= end_date
-        ]
 
     reverse = order.lower() == "desc"
     all_memories.sort(key=lambda m: m.event_time or datetime.min, reverse=reverse)

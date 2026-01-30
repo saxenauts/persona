@@ -1,10 +1,11 @@
 """Unified Persona Service for memory-augmented dialogue."""
 
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast, Tuple
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
+from persona.core.retrieval import Retriever
 from persona.adapters.persona_adapter import PersonaAdapter
 from persona.models.memory import UserCard, Memeplex
 from persona.services.consolidation_service import get_or_generate_usercard
@@ -51,7 +52,21 @@ class PersonaService:
         user_card_present = bool(user_card and user_card.identity_prose)
         memeplex_present = bool(memeplex)
 
-        world_model, user_context = self._build_user_context(user_card, memeplex)
+        retriever = Retriever(
+            user_id=user_id,
+            store=self.memory_store,
+            graph_ops=self.graph_ops,
+        )
+        result = await retriever.get_working_memory(
+            user_card=user_card,
+            user_timezone=user_timezone,
+            collect_stats=True,
+        )
+        working_memory, retriever_stats = cast(Tuple[str, Dict[str, Any]], result)
+
+        world_model, user_context = self._build_user_context(
+            user_card, memeplex, working_memory
+        )
         system_prompt = PERSONAL_AI_SYSTEM_PROMPT.format(
             world_model=world_model,
             user_context=user_context,
@@ -131,6 +146,8 @@ class PersonaService:
                 "memeplex_present": memeplex_present,
                 "world_model_chars": len(world_model) if world_model else 0,
                 "user_context_chars": len(user_context) if user_context else 0,
+                "working_memory_chars": retriever_stats["working_memory_chars"],  # type: ignore
+                "retriever": retriever_stats,  # type: ignore
                 "iteration_stats": agent_result.iteration_stats,
             }
 
@@ -167,8 +184,11 @@ class PersonaService:
             return None
 
     def _build_user_context(
-        self, user_card: Optional[UserCard], memeplex: Optional[Memeplex]
-    ) -> tuple[str, str]:
+        self,
+        user_card: Optional[UserCard],
+        memeplex: Optional[Memeplex],
+        working_memory: str = "",
+    ) -> Tuple[str, str]:
         world_model = ""
         user_context = ""
 
@@ -177,6 +197,9 @@ class PersonaService:
 
         if user_card and user_card.identity_prose:
             user_context = f"## Who They Are\n\n{user_card.identity_prose}"
+
+        if working_memory:
+            user_context += f"\n\n## Recent Context\n\n{working_memory}"
 
         return world_model, user_context
 

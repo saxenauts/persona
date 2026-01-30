@@ -67,6 +67,66 @@ async def test_persona_service_run_agent_success(mock_graph_ops):
 
 
 @pytest.mark.asyncio
+async def test_persona_service_run_agent_includes_working_memory(mock_graph_ops):
+    """Test that run_agent calls Retriever and includes working_memory_chars in stats."""
+    service = PersonaService(mock_graph_ops)
+
+    mock_runner = AsyncMock()
+    mock_runner.run = AsyncMock(
+        return_value=AgentResult(
+            content="Agent response with working memory context",
+            tool_calls_made=2,
+            turns=1,
+            usage={"prompt_tokens": 150, "completion_tokens": 75},
+        )
+    )
+
+    mock_retriever = AsyncMock()
+    mock_retriever.get_working_memory = AsyncMock(
+        return_value=(
+            "Recent episode: User went for a run yesterday",
+            {
+                "episode_count": 1,
+                "psyche_count": 0,
+                "note_count": 0,
+                "link_count": 0,
+                "working_memory_chars": 45,
+                "config": {"episode_window_days": 7, "psyche_window_days": 30},
+            },
+        )
+    )
+
+    with patch.object(service, "_get_user_card", return_value=None):
+        with patch.object(service, "_get_memeplex", return_value=None):
+            with patch("persona.services.persona_service.Retriever") as MockRetriever:
+                MockRetriever.return_value = mock_retriever
+                with patch(
+                    "persona.services.persona_service.AgentRunner"
+                ) as MockRunner:
+                    MockRunner.return_value = mock_runner
+
+                    result = await service.run_agent(
+                        user_id="test_user",
+                        query="What did I do yesterday?",
+                        include_stats=True,
+                    )
+
+                    assert (
+                        result["answer"] == "Agent response with working memory context"
+                    )
+                    assert "stats" in result
+                    stats = result["stats"]
+
+                    assert "working_memory_chars" in stats
+                    assert stats["working_memory_chars"] == 45
+
+                    assert "retriever" in stats
+                    assert stats["retriever"]["episode_count"] == 1
+
+                    mock_retriever.get_working_memory.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_persona_service_ask_success(mock_graph_ops):
     service = PersonaService(mock_graph_ops)
 
@@ -86,18 +146,37 @@ async def test_persona_service_ask_success(mock_graph_ops):
     )
     mock_llm.supports_json_mode = MagicMock(return_value=True)
 
+    mock_retriever = AsyncMock()
+    mock_retriever.get_working_memory = AsyncMock(
+        return_value=(
+            "",
+            {
+                "episode_count": 0,
+                "psyche_count": 0,
+                "note_count": 0,
+                "link_count": 0,
+                "working_memory_chars": 0,
+                "config": {},
+            },
+        )
+    )
+
     with patch.object(service, "_get_user_card", return_value=None):
         with patch.object(service, "_get_memeplex", return_value=None):
-            with patch("persona.services.persona_service.AgentRunner") as MockRunner:
-                MockRunner.return_value = mock_runner
+            with patch("persona.services.persona_service.Retriever") as MockRetriever:
+                MockRetriever.return_value = mock_retriever
                 with patch(
-                    "persona.services.persona_service.get_chat_client",
-                    return_value=mock_llm,
-                ):
-                    result = await service.ask(
-                        user_id="test_user",
-                        query="What are user preferences?",
-                        output_schema={"preferences": []},
-                    )
+                    "persona.services.persona_service.AgentRunner"
+                ) as MockRunner:
+                    MockRunner.return_value = mock_runner
+                    with patch(
+                        "persona.services.persona_service.get_chat_client",
+                        return_value=mock_llm,
+                    ):
+                        result = await service.ask(
+                            user_id="test_user",
+                            query="What are user preferences?",
+                            output_schema={"preferences": []},
+                        )
 
-                    assert "result" in result
+                        assert "result" in result

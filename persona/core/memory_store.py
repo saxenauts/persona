@@ -160,14 +160,37 @@ class MemoryStore:
         return [self._node_to_memory(n, user_id) for n in nodes]
 
     async def get_by_type(
-        self, memory_type: str, user_id: str, limit: int = 50
+        self,
+        memory_type: str,
+        user_id: str,
+        limit: int = 50,
+        date_start: Optional[datetime] = None,
+        date_end: Optional[datetime] = None,
     ) -> List[Memory]:
-        """Get all memories of a specific type."""
+        """Get all memories of a specific type, optionally filtered by date range."""
         if hasattr(self.graph_db, "get_nodes_by_type"):
-            nodes = await self.graph_db.get_nodes_by_type(user_id, memory_type, limit)
+            nodes = await self.graph_db.get_nodes_by_type(
+                user_id, memory_type, limit, date_start, date_end
+            )
         else:
             all_nodes = await self.graph_db.get_all_nodes(user_id)
             nodes = [n for n in all_nodes if n.get("type") == memory_type]
+
+            if date_start:
+                nodes = [
+                    n
+                    for n in nodes
+                    if n.get("event_time")
+                    and datetime.fromisoformat(n["event_time"]) >= date_start
+                ]
+            if date_end:
+                nodes = [
+                    n
+                    for n in nodes
+                    if n.get("event_time")
+                    and datetime.fromisoformat(n["event_time"]) <= date_end
+                ]
+
             nodes.sort(key=lambda n: n.get("event_time", ""), reverse=True)
             nodes = nodes[:limit]
 

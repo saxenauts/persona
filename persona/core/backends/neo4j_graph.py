@@ -1,6 +1,7 @@
 """Neo4j implementation of the GraphDatabase interface."""
 
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from neo4j import AsyncGraphDatabase, basic_auth
 import asyncio
 import time
@@ -313,18 +314,38 @@ class Neo4jGraphDatabase(GraphDatabase):
         logger.info(f"User {user_id} and all associated nodes deleted successfully.")
 
     async def get_nodes_by_type(
-        self, user_id: str, memory_type: str, limit: int = 50
+        self,
+        user_id: str,
+        memory_type: str,
+        limit: int = 50,
+        date_start: Optional[datetime] = None,
+        date_end: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
-        query = """
-        MATCH (n:NodeName {UserId: $user_id, type: $memory_type})
+        # Build WHERE clause for date filtering
+        where_clauses = []
+        params = {"user_id": user_id, "memory_type": memory_type, "limit": limit}
+
+        if date_start:
+            where_clauses.append("n.event_time >= $date_start")
+            params["date_start"] = date_start.isoformat()
+
+        if date_end:
+            where_clauses.append("n.event_time <= $date_end")
+            params["date_end"] = date_end.isoformat()
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "AND " + " AND ".join(where_clauses)
+
+        query = f"""
+        MATCH (n:NodeName {{UserId: $user_id, type: $memory_type}})
+        WHERE true {where_clause}
         RETURN n
         ORDER BY n.event_time DESC
         LIMIT $limit
         """
         async with self.driver.session() as session:
-            result = await session.run(
-                query, user_id=user_id, memory_type=memory_type, limit=limit
-            )
+            result = await session.run(query, **params)
             records = await result.data()
             return [dict(record["n"]) for record in records]
 
