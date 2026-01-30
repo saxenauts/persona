@@ -57,7 +57,7 @@ class UserCardService:
         episodes = await self.store.get_by_type("episode", user_id, limit=15)
 
         active_notes = [
-            n for n in notes if getattr(n, "status", "active") != "COMPLETED"
+            n for n in notes if getattr(n, "status", "active").lower() != "completed"
         ]
 
         if not psyche and not active_notes and not episodes:

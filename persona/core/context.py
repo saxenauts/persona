@@ -117,7 +117,7 @@ def _format_psyche_prose(psyche: List[PsycheMemory]) -> str:
 def _format_notes_prose(notes: List[NoteMemory]) -> str:
     if not notes:
         return ""
-    active = [n for n in notes if n.status != "COMPLETED"]
+    active = [n for n in notes if n.status.lower() != "completed"]
     if not active:
         return ""
 
