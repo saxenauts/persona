@@ -1,0 +1,119 @@
+version: "1.0"
+date: "2026-01-30"
+description: "Baseline v1: PersonaMem evaluation with entity dedup enabled"
+
+# Model configuration
+llm:
+  service: "foundry/gpt-5.2"
+  temperature: 0.7  # Production default
+  temperature_eval: 0.0  # Eval override
+
+embedding:
+  service: "foundry/text-embedding-3-small"
+
+# Database
+neo4j:
+  uri: "bolt://neo4j:7687"
+
+# Eval configuration
+eval:
+  personamem:
+    accuracy: 65.3%
+    accuracy_decimal: 0.653
+    ci_95: [0.58, 0.72]  # Approximate 95% CI from per-seed variance
+    seeds: [42, 123, 456]
+    questions: 150
+    methodology: "3 seeds × 50 questions, recall_user_shared_facts type only"
+    source: "competitor_full/persona_personamem/run_20260129_173442/"
+    per_seed_breakdown:
+      seed_42:
+        questions: 50
+        correct: 32
+        accuracy: 0.64
+      seed_123:
+        questions: 50
+        correct: 29
+        accuracy: 0.58
+      seed_456:
+        questions: 50
+        correct: 37
+        accuracy: 0.74
+    date_run: "2026-01-29"
+    audit_reference: ".opencode/AUDIT_RECONCILIATION.md"
+
+  longmemeval:
+    accuracy: 78.8%
+    accuracy_decimal: 0.788
+    ci_95: [0.75, 0.82]
+    seeds: [42, 123, 456]
+    status: "reference benchmark"
+
+# Component status
+components:
+  memeplex:
+    status: "enabled"
+    description: "World model index providing user context summary"
+    ablation_status: "infrastructure ready, not yet measured"
+    ablation_runner: "scripts/ablation_runner.py --component memeplex"
+
+  entity_dedup:
+    status: "enabled"
+    description: "Cross-session entity deduplication at persist time"
+    implementation: "fuzzy matching with normalized names and aliases"
+    threshold: 0.9
+    location: "persona/adapters/persona_adapter.py"
+    function: "_find_existing_entity_match"
+    metrics:
+      entities_checked: "tracked during ingestion"
+      entities_merged: "tracked during ingestion"
+      entities_created: "tracked during ingestion"
+
+  session_close:
+    status: "enabled"
+    description: "Post-ingest consolidation and memeplex refresh"
+    ablation_status: "infrastructure ready, not yet measured"
+    ablation_runner: "scripts/ablation_runner.py --component session_close"
+
+  entity_retrieval:
+    status: "enabled"
+    description: "Entity nodes included in recall results"
+    ablation_status: "infrastructure ready, not yet measured"
+    ablation_runner: "scripts/ablation_runner.py --component entity_retrieval"
+
+  graph_features:
+    status: "not exercised in eval"
+    links_created: 0
+    reason: "integration agent not running in eval"
+    note: "Full benchmark (589 questions) shows per-type breakdown; eval uses subset"
+
+# Ablation results (pending)
+ablation:
+  status: "pending"
+  note: "Infrastructure exists but not yet run. Use scripts/ablation_runner.py"
+  components_to_measure:
+    - memeplex
+    - session_close
+    - entity_retrieval
+  expected_output: "ablation_results.json with McNemar test results"
+
+# Git reference
+git:
+  commit: "d5ccc4d24ead781f56c07a8f6162a07992b7a094"
+  tag: "baseline-v1"
+  tag_message: "Baseline v1: 65.3% PersonaMem with entity dedup enabled"
+
+# Configuration sources
+sources:
+  audit: ".opencode/AUDIT_RECONCILIATION.md"
+  adapter: "persona/adapters/persona_adapter.py"
+  ablation_runner: "scripts/ablation_runner.py"
+  config: "server/config.py"
+
+# Notes
+notes:
+  - "65.3% is authoritative per AUDIT_RECONCILIATION.md (150 questions, 3 seeds)"
+  - "Smaller sample (90q) achieved 70.0%; larger sample (150q) is primary claim"
+  - "Full benchmark (589q, 1 seed) achieved 66.2% with per-type breakdown"
+  - "Entity dedup threshold 0.9 applied at persist time for cross-session matching"
+  - "Ablation infrastructure ready; pending execution for component impact measurement"
+  - "Temperature set to 0.0 for eval runs (deterministic); 0.7 for production"

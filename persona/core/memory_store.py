@@ -700,6 +700,73 @@ class MemoryStore:
 
         return [self._node_to_memory(n, user_id) for n in nodes]  # type: ignore
 
+    async def get_all_entities(
+        self, user_id: str, limit: int = 500
+    ) -> List[EntityMemory]:
+        """Get all entities for a user (for cross-session dedup)."""
+        all_nodes = await self.graph_db.get_all_nodes(user_id)
+        nodes = [n for n in all_nodes if n.get("type") == "entity"]
+        nodes.sort(key=lambda n: n.get("event_time", ""), reverse=True)
+        nodes = nodes[:limit]
+        return [self._node_to_memory(n, user_id) for n in nodes]  # type: ignore
+
+    async def merge_entity_attributes(
+        self,
+        existing_entity: EntityMemory,
+        new_entity: EntityMemory,
+        evidence_id: Optional[UUID] = None,
+    ) -> EntityMemory:
+        """Merge attributes from new_entity into existing_entity and persist."""
+        import json
+
+        existing_aliases = set(existing_entity.aliases or [])
+        new_aliases = set(new_entity.aliases or [])
+        if (
+            new_entity.canonical_name
+            and new_entity.canonical_name.lower()
+            != existing_entity.canonical_name.lower()
+        ):
+            new_aliases.add(new_entity.canonical_name)
+        existing_entity.aliases = list(existing_aliases | new_aliases)
+
+        existing_attr_keys = {(a.key, a.value) for a in existing_entity.attributes}
+        for attr in new_entity.attributes:
+            key_val = (attr.key, attr.value)
+            if key_val not in existing_attr_keys:
+                if evidence_id:
+                    attr.evidence_id = evidence_id
+                existing_entity.attributes.append(attr)
+                existing_attr_keys.add(key_val)
+
+        existing_mentions = set(existing_entity.mentioned_in or [])
+        new_mentions = set(new_entity.mentioned_in or [])
+        existing_entity.mentioned_in = list(existing_mentions | new_mentions)
+
+        if new_entity.description and (
+            not existing_entity.description
+            or len(new_entity.description) > len(existing_entity.description)
+        ):
+            existing_entity.description = new_entity.description
+
+        node_data = {
+            "name": str(existing_entity.id),
+            "type": "entity",
+            "aliases": json.dumps(existing_entity.aliases),
+            "attributes": json.dumps(
+                [attr.model_dump(mode="json") for attr in existing_entity.attributes]
+            ),
+            "mentioned_in": json.dumps(
+                [str(mid) for mid in existing_entity.mentioned_in]
+            ),
+            "description": existing_entity.description or "",
+        }
+        await self.graph_db.create_nodes([node_data], existing_entity.user_id)
+
+        logger.info(
+            f"Merged entity '{new_entity.canonical_name}' into '{existing_entity.canonical_name}'"
+        )
+        return existing_entity
+
     # ========== Memeplex Methods ==========
 
     async def get_memeplex(self, user_id: str) -> Optional[Memeplex]:

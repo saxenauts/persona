@@ -12,18 +12,54 @@ Usage:
 """
 
 from datetime import datetime
-from typing import Optional, List, Tuple, Any
+from difflib import SequenceMatcher
+from typing import Optional, List, Tuple, Any, Dict
 from uuid import uuid4
 import time
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.models.memory import EpisodeMemory
+from persona.models.memory import EpisodeMemory, EntityMemory
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
 from persona.services.integration_agent import run_integration_agent
 from persona.utils.session import get_session_id
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+CROSS_SESSION_DEDUP_THRESHOLD = 0.9
+
+
+def _normalize_name(name: str) -> str:
+    return name.lower().strip().replace("-", " ").replace("_", " ")
+
+
+def _fuzzy_match(str1: str, str2: str) -> float:
+    return SequenceMatcher(None, str1, str2).ratio()
+
+
+def _find_existing_entity_match(
+    new_entity: EntityMemory,
+    existing_entities: List[EntityMemory],
+) -> Optional[EntityMemory]:
+    new_name = _normalize_name(new_entity.canonical_name)
+
+    for existing in existing_entities:
+        existing_name = _normalize_name(existing.canonical_name)
+
+        if new_name == existing_name:
+            return existing
+
+        if _fuzzy_match(new_name, existing_name) >= CROSS_SESSION_DEDUP_THRESHOLD:
+            return existing
+
+        for alias in existing.aliases or []:
+            alias_norm = _normalize_name(alias)
+            if new_name == alias_norm:
+                return existing
+            if _fuzzy_match(new_name, alias_norm) >= CROSS_SESSION_DEDUP_THRESHOLD:
+                return existing
+
+    return None
 
 
 class PersonaAdapter:
@@ -98,15 +134,43 @@ class PersonaAdapter:
             f"Extracted {len(result.memories)} memories, {len(result.links)} links"
         )
 
-        # Step 2: Persist
         persist_time_ms = 0.0
+        cross_session_dedup_metrics: Dict[str, Any] = {
+            "entities_checked": 0,
+            "entities_merged": 0,
+            "entities_created": 0,
+        }
+
         if persist:
             persist_start = time.time()
 
+            existing_entities = await self.store.get_all_entities(self.user_id)
+            episode_id = None
+
             for memory in result.memories:
                 memory_links = [l for l in result.links if l.source_id == memory.id]
-                if memory.type == "entity":
-                    await self.store.create_entity(memory)  # type: ignore
+
+                if memory.type == "episode":
+                    episode_id = memory.id
+                    await self.store.create(memory, links=memory_links)
+
+                elif memory.type == "entity":
+                    entity_mem: EntityMemory = memory  # type: ignore
+                    cross_session_dedup_metrics["entities_checked"] += 1
+
+                    existing_match = _find_existing_entity_match(
+                        entity_mem, existing_entities
+                    )
+
+                    if existing_match:
+                        await self.store.merge_entity_attributes(
+                            existing_match, entity_mem, evidence_id=episode_id
+                        )
+                        cross_session_dedup_metrics["entities_merged"] += 1
+                    else:
+                        await self.store.create_entity(entity_mem)
+                        existing_entities.append(entity_mem)
+                        cross_session_dedup_metrics["entities_created"] += 1
                 else:
                     await self.store.create(memory, links=memory_links)
 
@@ -122,6 +186,13 @@ class PersonaAdapter:
                     )
 
             persist_time_ms = (time.time() - persist_start) * 1000
+
+            if cross_session_dedup_metrics["entities_merged"] > 0:
+                logger.info(
+                    f"Cross-session entity dedup: {cross_session_dedup_metrics['entities_checked']} checked, "
+                    f"{cross_session_dedup_metrics['entities_merged']} merged, "
+                    f"{cross_session_dedup_metrics['entities_created']} created"
+                )
 
         result.persist_time_ms = persist_time_ms
         result.total_time_ms = (time.time() - start_total) * 1000
@@ -226,9 +297,43 @@ class PersonaAdapter:
 
             if persist:
                 persist_start = time.time()
+
+                existing_entities = await self.store.get_all_entities(self.user_id)
+                episode_id = None
+
+                non_entity_memories = []
+                entity_memories = []
+                for m in result.memories:
+                    if m.type == "entity":
+                        entity_memories.append(m)
+                    else:
+                        non_entity_memories.append(m)
+                        if m.type == "episode":
+                            episode_id = m.id
+
+                non_entity_links = [
+                    l
+                    for l in result.links
+                    if l.source_id not in {e.id for e in entity_memories}
+                ]
                 await self.store.create_many(
-                    result.memories, result.links, self.user_id
+                    non_entity_memories, non_entity_links, self.user_id
                 )
+
+                for entity_mem in entity_memories:
+                    existing_match = _find_existing_entity_match(
+                        entity_mem,
+                        existing_entities,  # type: ignore
+                    )
+                    if existing_match:
+                        await self.store.merge_entity_attributes(
+                            existing_match,
+                            entity_mem,
+                            evidence_id=episode_id,  # type: ignore
+                        )
+                    else:
+                        await self.store.create_entity(entity_mem)  # type: ignore
+                        existing_entities.append(entity_mem)  # type: ignore
 
                 episode = next(
                     (m for m in result.memories if m.type == "episode"), None
