@@ -534,8 +534,11 @@ async def resolve_date_range_handler(
     """Resolve natural language time reference to ISO date range."""
     from datetime import timedelta
     import re
+    from zoneinfo import ZoneInfo
 
-    now = datetime.now()
+    # Use user's timezone, not server's
+    tz = ZoneInfo(ctx.user_timezone)
+    now = datetime.now(tz=tz)
     today = now.date()
     query_lower = query.lower().strip()
 

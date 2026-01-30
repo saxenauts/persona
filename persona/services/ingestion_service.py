@@ -328,9 +328,9 @@ class MemoryIngestionService:
 
             # Sequence counter for unique event_time per memory (microsecond offsets)
             # This preserves extraction order for timeline queries
-            # Seed with observed_at.microsecond * 1000 to avoid cross-ingest collisions
+            # Seed with observed_at.microsecond to avoid cross-ingest collisions
             # when multiple ingests happen in the same second
-            memory_seq = observed_at.microsecond * 1000
+            memory_seq = observed_at.microsecond
 
             def next_event_time() -> datetime:
                 nonlocal memory_seq
