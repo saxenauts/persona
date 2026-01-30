@@ -414,7 +414,7 @@ Extract Psyche entries that capture user preferences and values, enabling the mo
 
 ---
 
-- [ ] 4. Run Validation Eval
+- [x] 4. Run Validation Eval
 
   **What to do**:
   - Run PersonaMem 50-question eval
