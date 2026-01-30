@@ -164,7 +164,7 @@ Extract Psyche entries that capture user preferences and values, enabling the mo
 
 ---
 
-- [ ] 2. Add Consolidation Psyche Inference Function
+- [x] 2. Add Consolidation Psyche Inference Function
 
   **What to do**:
   - Open `persona/services/consolidation_service.py`
@@ -359,7 +359,7 @@ Extract Psyche entries that capture user preferences and values, enabling the mo
 
 ---
 
-- [ ] 3. Integrate Inference into refresh_memeplex()
+- [x] 3. Integrate Inference into refresh_memeplex()
 
   **What to do**:
   - In `refresh_memeplex()` function, add call to `infer_psyche_from_patterns()` before the return

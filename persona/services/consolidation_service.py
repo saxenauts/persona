@@ -10,7 +10,8 @@ import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Any
+from uuid import uuid5, NAMESPACE_DNS
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
@@ -20,6 +21,7 @@ from persona.models.memory import (
     Memory,
     Memeplex,
     EpisodeMemory,
+    PsycheMemory,
 )
 from persona.llm.client_factory import get_chat_client
 from persona.llm.providers.base import ChatMessage
@@ -550,11 +552,148 @@ async def refresh_memeplex(
         )
 
         await store.save_memeplex(memeplex)
+
+        # Infer Psyche from behavioral patterns
+        await infer_psyche_from_patterns(user_id, store, month_episodes)
+
         return memeplex
 
     except Exception as e:
         logger.warning(f"Memeplex refresh failed: {e}")
         return current_memeplex
+
+
+# ============================================================================
+# Psyche Inference from Behavioral Patterns
+# ============================================================================
+
+PSYCHE_INFERENCE_PROMPT = """Analyze these episodes for recurring behavioral patterns that reveal preferences or interests.
+
+Episodes:
+{episodes}
+
+For each activity/topic that appears 3+ times OR has clear positive/negative sentiment:
+1. Identify the entity/activity
+2. Determine engagement type based on evidence:
+   - "often engages with" (neutral - repeated but no clear sentiment)
+   - "enjoys" (positive sentiment detected: "fun", "love", "excited", "great")
+   - "dislikes" (negative sentiment: "hate", "dread", "boring", "awful")
+3. Cite the supporting evidence (episode snippets)
+
+Return JSON:
+{{
+  "inferred_preferences": [
+    {{
+      "entity": "mock trial competitions",
+      "engagement_type": "enjoys",
+      "confidence": 0.85,
+      "evidence": ["participated in mock trial - had a great time", "won regional competition"]
+    }}
+  ]
+}}
+
+Only include preferences with clear behavioral evidence. Skip if uncertain.
+"""
+
+
+async def infer_psyche_from_patterns(
+    user_id: str,
+    store: MemoryStore,
+    episodes: List[Any],
+) -> int:
+    """
+    Infer Psyche entries from behavioral patterns across Episodes.
+
+    Called from refresh_memeplex() after memeplex is built.
+    Uses deterministic IDs (uuid5) for idempotent upserts.
+
+    Returns count of Psyche entries created/updated.
+    """
+    if len(episodes) < 3:
+        return 0  # Not enough data for pattern inference
+
+    # Format episodes for LLM
+    episode_text = "\n".join(
+        [
+            f"[{e.event_time.strftime('%Y-%m-%d') if e.event_time else 'unknown'}] {e.content[:300]}"
+            for e in episodes[:30]  # Limit to 30 most recent
+        ]
+    )
+
+    try:
+        chat_client = get_chat_client()
+        response = await chat_client.chat(
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content=PSYCHE_INFERENCE_PROMPT.format(episodes=episode_text),
+                )
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        data = json.loads(response.content or "{}")
+        preferences = data.get("inferred_preferences", [])
+
+        if not preferences:
+            return 0
+
+        created_count = 0
+        now = datetime.now(timezone.utc)
+
+        for pref in preferences:
+            entity = pref.get("entity", "").strip()
+            engagement = pref.get("engagement_type", "often engages with")
+            confidence = pref.get("confidence", 0.7)
+            evidence = pref.get("evidence", [])
+
+            if not entity or confidence < 0.6:
+                continue
+
+            # Deterministic ID for idempotent upsert
+            stable_key = f"{user_id}:preference:{entity.lower().replace(' ', '_')}"
+            psyche_id = uuid5(NAMESPACE_DNS, stable_key)
+
+            # Format content based on engagement type
+            if engagement == "enjoys":
+                content = f"Enjoys {entity}"
+            elif engagement == "dislikes":
+                content = f"Dislikes {entity}"
+            else:
+                content = f"Often engages with {entity}"
+
+            psyche = PsycheMemory(
+                id=psyche_id,
+                psyche_type="preference",
+                title="preference",
+                content=content,
+                user_id=user_id,
+                event_time=now,
+                observed_at=now,
+                day_id=now.strftime("%Y-%m-%d"),
+                properties={
+                    "source": "behavioral_inference",
+                    "confidence": confidence,
+                    "evidence_count": len(evidence),
+                    "evidence_snippets": evidence[:3],
+                },
+            )
+
+            # Create (Neo4j MERGE handles duplicates via name field)
+            try:
+                await store.create(psyche, links=[])
+                created_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to create inferred psyche: {e}")
+
+        if created_count > 0:
+            logger.info(f"Inferred {created_count} Psyche entries for user {user_id}")
+
+        return created_count
+
+    except Exception as e:
+        logger.warning(f"Psyche inference failed for {user_id}: {e}")
+        return 0
 
 
 async def maybe_run_consolidation(
