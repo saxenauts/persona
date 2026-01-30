@@ -43,10 +43,10 @@ Extract Psyche entries that capture user preferences and values, enabling the mo
 - Integration call in `refresh_memeplex()`
 
 ### Definition of Done
-- [ ] Ingestion prompt no longer says "1 per 5-10 sessions"
-- [ ] Consolidation infers Psyche from 3+ repeated behaviors
-- [ ] `python -c "from persona.services.consolidation_service import infer_psyche_from_patterns"` works
-- [ ] PersonaMem 50q validation shows improvement
+- [x] Ingestion prompt no longer says "1 per 5-10 sessions"
+- [x] Consolidation infers Psyche from 3+ repeated behaviors
+- [x] `python -c "from persona.services.consolidation_service import infer_psyche_from_patterns"` works
+- [x] PersonaMem 50q validation shows improvement
 
 ### Must Have
 - Evaluative language triggers Psyche extraction in ingestion
@@ -463,10 +463,10 @@ Extract Psyche entries that capture user preferences and values, enabling the mo
 ## Success Criteria
 
 ### Quantitative
-- [ ] PersonaMem accuracy > 65% (current baseline)
+- [x] PersonaMem accuracy > 65% (current baseline)
 - [ ] Psyche entries per user increases from ~2 to ~5-10
 
 ### Qualitative
-- [ ] Ingestion prompt captures preferences from evaluative language
-- [ ] Consolidation infers preferences from behavioral patterns
+- [x] Ingestion prompt captures preferences from evaluative language
+- [x] Consolidation infers preferences from behavioral patterns
 - [ ] Model picks personalized MCQ options instead of generic ones
