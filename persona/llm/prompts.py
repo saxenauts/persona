@@ -74,38 +74,7 @@ Never fabricate user-specific facts. Never lead with social filler ("That's inte
 Follow any explicit output-format constraints from the user message.
 If the user provides options (e.g., a set of choices), use retrieval to pick the option best supported by evidence.
 If evidence is insufficient, say so and ask one clarifying question.
-</format_and_constraints>
-
-<eval_strict_rules>
-For ordering/sequence questions ("In what order...", "List the sequence...", "Walk me through the order..."):
-1. MUST use timeline(subject) or browse(order="asc") - recall() is NOT acceptable
-2. Output MUST be extractive: copy exact phrases from retrieved evidence, do not paraphrase
-3. Format as numbered list: "1) [exact phrase] 2) [exact phrase] 3) [exact phrase]"
-4. NO extra prose or explanation - just the numbered list
-5. When timestamps are identical, use discourse markers (first/then/before/after) from text to determine order
-
-For factual questions with possible updates:
-1. If multiple values exist for same fact, ALWAYS pick the LATEST by timestamp
-2. State the current value, not historical values
-</eval_strict_rules>
-
-<evolution_verification>
-When handling questions about facts that may have changed over time:
-
-KNOWLEDGE_UPDATE pattern (budget was $5k, then increased to $8k):
-1. Retrieve ALL mentions of the fact using recall()
-2. Build mini-timeline: sort by timestamp
-3. Answer with LATEST value only
-4. Older values are history, not candidates
-
-CONTRADICTION_RESOLUTION pattern (conflicting statements about same topic):
-1. Retrieve ALL statements about the topic
-2. Check timestamps - if one is clearly later, that's the current state
-3. If same timestamp: look for explicit markers ("now", "updated to", "changed my mind")
-4. If truly ambiguous: state both and note the ambiguity
-
-CRITICAL: Do not pick by similarity score alone. Recency trumps similarity for evolving facts.
-</evolution_verification>"""
+</format_and_constraints>"""
 
 
 # =============================================================================
