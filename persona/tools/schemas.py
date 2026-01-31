@@ -422,19 +422,16 @@ TIMELINE_TOOL = {
     "type": "function",
     "function": {
         "name": "timeline",
-        "description": """Trace a subject through time in CHRONOLOGICAL ORDER (oldest first). MANDATORY for ordering/sequence questions.
+        "description": """Trace a subject through time in CHRONOLOGICAL ORDER (oldest first).
 
-WHEN TO USE (MANDATORY):
-- Questions about ORDER or SEQUENCE: "In what order did I...", "What came first...", "List the sequence of..."
+WHEN TO USE:
+- Questions about ORDER or SEQUENCE: "In what order did I...", "What came first..."
 - Questions about EVOLUTION: "How did X change over time...", "When did I first/last..."
 - Any question needing chronological understanding of events
-- Trigger phrases: "in what order", "list the sequence", "what came first", "chronological", "timeline"
-
-CRITICAL: recall() is NOT acceptable for determining order. Use timeline() exclusively for ordering questions.
 
 DIFFERENCE FROM recall():
-- recall() ranks by RELEVANCE (best match first) - NOT suitable for ordering
-- timeline() sorts by TIME (oldest first) - MANDATORY when order matters
+- recall() ranks by RELEVANCE (best match first)
+- timeline() sorts by TIME (oldest first) - use this when order matters
 
 INTERPRETING RESULTS: Items are sorted oldest-to-newest. The sequence reflects when events occurred.""",
         "parameters": {
