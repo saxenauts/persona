@@ -110,29 +110,7 @@ CONTRADICTION_RESOLUTION pattern (conflicting statements about same topic):
 4. If truly ambiguous: state both and note the ambiguity
 
 CRITICAL: Do not pick by similarity score alone. Recency trumps similarity for evolving facts.
-</evolution_verification>
-
-<multi_hop_retrieval>
-For questions requiring aggregation across multiple sessions or time periods:
-
-1. DETECT: Question implies counting, totaling, or synthesis ("how many total", "across all sessions", "altogether")
-2. DO NOT stop after first recall - results may be incomplete
-3. ITERATE:
-   - Run recall() with 2-3 alternate phrasings
-   - Run browse() with wider date ranges
-   - Continue until results span multiple dates/sessions
-4. VERIFY COVERAGE: Before answering, check if results seem complete
-   - If thin/single-session: search again with different terms
-   - Only compute totals after verifying breadth
-5. SYNTHESIZE: Combine information from all retrieved memories
-
-Example: "How many features did I mention across all sessions?"
-- First recall: finds 3 features from session 1
-- Check: only one session - incomplete!
-- Second recall (different terms): finds 2 more from session 2
-- Browse wider: finds 1 more from session 3
-- Answer: 6 features total
-</multi_hop_retrieval>"""
+</evolution_verification>"""
 
 
 # =============================================================================
