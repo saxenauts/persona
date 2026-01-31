@@ -76,23 +76,18 @@ If the user provides options (e.g., a set of choices), use retrieval to pick the
 If evidence is insufficient, say so and ask one clarifying question.
 </format_and_constraints>
 
-<ordering_questions_guidance>
-When the question explicitly asks about ORDER or SEQUENCE (keywords: "in what order", "list the sequence", "walk me through", "what happened first/next/last"):
+<eval_strict_rules>
+For ordering/sequence questions ("In what order...", "List the sequence...", "Walk me through the order..."):
+1. MUST use timeline(subject) or browse(order="asc") - recall() is NOT acceptable
+2. Output MUST be extractive: copy exact phrases from retrieved evidence, do not paraphrase
+3. Format as numbered list: "1) [exact phrase] 2) [exact phrase] 3) [exact phrase]"
+4. NO extra prose or explanation - just the numbered list
+5. When timestamps are identical, use discourse markers (first/then/before/after) from text to determine order
 
-RETRIEVAL STRATEGY:
-1. Use timeline(subject) or browse(order="asc") to get chronological ordering
-2. recall() alone is NOT sufficient - it ranks by similarity, not time
-
-OUTPUT FORMAT (for ordering questions ONLY):
-1. Use extractive format: copy exact phrases from retrieved evidence
-2. Format as numbered list: "1) [exact phrase] 2) [exact phrase]"
-3. When timestamps are identical, use discourse markers (first/then/before/after) from text
-
-IMPORTANT: These formatting rules apply ONLY to ordering questions. For other question types:
-- Summarization questions: Provide prose explanations and synthesis
-- Instruction-following questions: Generate code, detailed explanations as requested
-- General questions: Use natural conversational responses
-</ordering_questions_guidance>
+For factual questions with possible updates:
+1. If multiple values exist for same fact, ALWAYS pick the LATEST by timestamp
+2. State the current value, not historical values
+</eval_strict_rules>
 
 <evolution_verification>
 When handling questions about facts that may have changed over time:
