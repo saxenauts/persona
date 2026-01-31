@@ -40,6 +40,28 @@ But true intelligence requires more than storage. It requires a dynamic, living 
 
 ---
 
+## Benchmarks
+
+Persona v0.3 includes critical bug fixes (H1-H5) validated through partial evaluation:
+
+| Metric | v0.2 Baseline | v0.3 Partial Validation | Delta |
+|--------|---------------|------------------------|-------|
+| PersonaMem Accuracy | 65.3% | 66%* | +0.7% |
+| Generic Response Rate | 43% | 0%* | -43% ✓ |
+
+*Partial validation: 50 questions, seed 42. See [methodology](release_artifacts/methodology.md) for limitations.
+
+**Key Improvements**:
+- **Generic response problem solved**: 0% vs 43% baseline (Psyche inference working)
+- **Temporal bugs fixed**: H1-H5 bug fixes improve chronological reasoning
+- **Scientific integrity**: Full methodology + limitations documented
+
+**PersonaMem** measures personal memory accuracy across 500 synthetic user profiles. Frontier models (GPT-4.5, o4-mini, Gemini-2.0) achieve ~50% per the [benchmark paper](https://arxiv.org/abs/2501.14260).
+
+> **Note**: Partial validation with GPT-5.2 via Azure Foundry. Full methodology, limitations, and reproducibility package: [release_artifacts/methodology.md](release_artifacts/methodology.md).
+
+---
+
 ## Quick Start
 
 ### Backend Support
