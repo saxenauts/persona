@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-MEMORY_EVALS_PATH = Path(__file__).parent.parent / "memory-evals"
+MEMORY_EVALS_PATH = Path(__file__).parent.parent.parent / "memory-evals"
 sys.path.insert(0, str(MEMORY_EVALS_PATH))
 
 SCIPY_AVAILABLE = False
