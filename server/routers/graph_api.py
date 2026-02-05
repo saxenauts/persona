@@ -489,10 +489,14 @@ async def persona_ask(
 
 class IntegrateResponse(BaseModel):
     status: str
+    memories_processed: int = 0
     links_created: int = 0
     merges_applied: int = 0
     derived_created: int = 0
     conflicts_flagged: int = 0
+    turns: int = 0
+    tool_calls_made: int = 0
+    duration_ms: float = 0.0
     errors: List[str] = Field(default_factory=list)
 
 
@@ -511,19 +515,24 @@ async def close_session(
             raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
         logger.info(f"Closing session {session_id} for user {user_id}")
+        normalized_session_id = None if session_id.lower() in {"all", "*"} else session_id
         result = await run_integration_agent(
             user_id=user_id,
             trigger_ids=[],
             graph_ops=graph_ops,
-            session_id=session_id,
+            session_id=normalized_session_id,
         )
 
         return IntegrateResponse(
             status="success" if result.success else "failed",
+            memories_processed=result.memories_processed,
             links_created=result.links_created,
             merges_applied=result.merges_performed,
             derived_created=0,
             conflicts_flagged=result.flags_raised,
+            turns=result.turns,
+            tool_calls_made=result.tool_calls_made,
+            duration_ms=float(result.duration_ms or 0.0),
             errors=result.errors,
         )
 

@@ -201,8 +201,10 @@ async def get_unintegrated_handler(
             if memory_types and node_type not in memory_types:
                 continue
 
-            if ctx.session_id and node.get("session_id") != ctx.session_id:
-                continue
+            if ctx.session_id:
+                session_filter = ctx.session_id.lower()
+                if session_filter not in {"all", "*"} and node.get("session_id") != ctx.session_id:
+                    continue
 
             integrated_at = node.get("integrated_at")
             if integrated_at is None:
@@ -253,11 +255,19 @@ async def commit_patch_handler(
 
     try:
         # Parse and validate the patch
-        patch_data = json.loads(patch_json)
+        if isinstance(patch_json, str):
+            patch_data = json.loads(patch_json)
+        elif isinstance(patch_json, dict):
+            patch_data = patch_json
+        else:
+            raise TypeError(f"patch_json must be str or dict, got {type(patch_json).__name__}")
         patch = GraphPatch.model_validate(patch_data)
     except json.JSONDecodeError as e:
         logger.error(f"Invalid patch JSON: {e}")
         return CommitResult(success=False, errors=[f"Invalid JSON: {e}"])
+    except TypeError as e:
+        logger.error(f"Invalid patch type: {e}")
+        return CommitResult(success=False, errors=[str(e)])
     except Exception as e:
         logger.error(f"Patch validation failed: {e}")
         return CommitResult(success=False, errors=[f"Validation error: {e}"])
