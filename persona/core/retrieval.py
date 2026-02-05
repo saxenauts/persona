@@ -4,7 +4,7 @@ No query expansion. No vector search for base context.
 Just time-windowed fetch of recent memories with links, formatted as prose.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Sequence
 from uuid import UUID
 
@@ -26,6 +26,14 @@ from server.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _to_utc(dt: Optional[datetime]) -> datetime:
+    if not dt:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 class Retriever:
     """Retrieves working memory for LLM via time-windowed fetch + prose formatting."""
 
@@ -44,7 +52,7 @@ class Retriever:
     ) -> str | tuple[str, Dict[str, Any]]:
         """Get prose-formatted working memory for a dialog turn."""
         cfg = config or DEFAULT_WORKING_MEMORY_CONFIG
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stats: Dict[str, Any] = {}
 
         episodes = await self._get_recent_episodes(now, cfg)
@@ -105,8 +113,15 @@ class Retriever:
             memories = await self.store.get_by_type(
                 "episode", self.user_id, limit=cfg.max_episodes
             )
-            recent = [m for m in memories if m.event_time and m.event_time >= since]
-            recent.sort(key=lambda m: m.event_time, reverse=True)
+            recent = []
+            for m in memories:
+                if not m.event_time:
+                    continue
+                event_time = _to_utc(m.event_time)
+                if event_time >= since:
+                    recent.append(m)
+
+            recent.sort(key=lambda m: _to_utc(m.event_time), reverse=True)
             return [
                 m for m in recent[: cfg.max_episodes] if isinstance(m, EpisodeMemory)
             ]
@@ -122,8 +137,15 @@ class Retriever:
             memories = await self.store.get_by_type(
                 "psyche", self.user_id, limit=cfg.max_psyche
             )
-            recent = [m for m in memories if m.event_time and m.event_time >= since]
-            recent.sort(key=lambda m: m.event_time, reverse=True)
+            recent = []
+            for m in memories:
+                if not m.event_time:
+                    continue
+                event_time = _to_utc(m.event_time)
+                if event_time >= since:
+                    recent.append(m)
+
+            recent.sort(key=lambda m: _to_utc(m.event_time), reverse=True)
             return [m for m in recent[: cfg.max_psyche] if isinstance(m, PsycheMemory)]
         except Exception as e:
             logger.warning(f"Failed to get psyche: {e}")
@@ -139,7 +161,7 @@ class Retriever:
                 for n in notes
                 if getattr(n, "status", "active").lower() != "completed"
             ]
-            active.sort(key=lambda n: n.event_time, reverse=True)
+            active.sort(key=lambda n: _to_utc(n.event_time), reverse=True)
             return [
                 n for n in active[: cfg.max_active_notes] if isinstance(n, NoteMemory)
             ]
