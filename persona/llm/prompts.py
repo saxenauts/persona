@@ -12,7 +12,7 @@ Centralized prompt definitions for all LLM interactions.
 #
 # DESIGN PHILOSOPHY:
 # - Minimal, generalizable guidance
-# - No benchmark-specific hacks (see docs/LEARNINGS_PERSONAMEM_EVAL.md)
+# - No benchmark-specific hacks (see .opencode/eval/EVALUATION_RESULTS_2026-01.md)
 # - Trust the model with good tools and clear evidence hierarchy
 
 PERSONAL_AI_SYSTEM_PROMPT = """<role>
