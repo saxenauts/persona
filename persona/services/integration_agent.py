@@ -140,9 +140,12 @@ SIGNALS for LED_TO:
 1. Start with get_unintegrated() - process oldest first (causal ordering)
 2. For each memory, search for potential connections with recall()
 3. Quality over quantity - don't over-link. 2-3 strong links > 10 weak ones
-4. Always mark_integrated after processing
-5. Batch operations in single commit_patch when possible
-6. Stop when all memories are processed - report summary
+4. Prefer explicit temporal links (NEXT/PREVIOUS) when two episodes are adjacent
+   in time or clearly ordered within the same session
+5. If facts conflict, create CONTRADICTS (do not resolve silently)
+6. Always mark_integrated after processing
+7. Batch operations in single commit_patch when possible
+8. Stop when all memories are processed - report summary
 
 When done, summarize: "Processed N memories. Created X links, Y merges, Z flags.\""""
 
@@ -403,6 +406,7 @@ async def run_integration_agent(
         total_tool_calls = 0
         turns = 0
         links_created = 0
+        operations_applied = 0
         flags_raised = 0
         merges_performed = 0
         memories_processed = 0
@@ -454,30 +458,44 @@ async def run_integration_agent(
                 if tool_call.name == "commit_patch":
                     try:
                         result_data = json.loads(result.content)
-                        if result_data.get("success"):
-                            applied = result_data.get("applied", 0)
-                            links_created += applied
+                        if not result_data.get("success"):
+                            errors.append(
+                                f"commit_patch failed: {result_data.get('errors', 'unknown error')}"
+                            )
+                        else:
+                            operations_applied += result_data.get("applied", 0)
 
-                            # Parse the patch to count specific operations
-                            args = json.loads(tool_call.arguments)
-                            patch_json = args.get("patch_json", "{}")
+                        # Parse the patch to count specific operations
+                        args = json.loads(tool_call.arguments)
+                        patch_json = args.get("patch_json", {})
+                        if isinstance(patch_json, str):
                             patch_data = json.loads(patch_json)
+                        elif isinstance(patch_json, dict):
+                            patch_data = patch_json
+                        else:
+                            patch_data = {}
+
+                        # Only count operations if commit_patch reported success
+                        if result_data.get("success"):
                             for item in patch_data.get("items", []):
                                 op = item.get("operation")
-                                if op == "flag":
+                                if op == "link":
+                                    links_created += 1
+                                elif op == "flag":
                                     flags_raised += 1
                                 elif op == "merge":
                                     merges_performed += 1
                                 elif op == "mark_integrated":
                                     memories_processed += 1
-                    except (json.JSONDecodeError, KeyError):
-                        pass
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        errors.append("commit_patch result parsing failed")
 
         duration_ms = (time.time() - start_time) * 1000
 
         summary = (
             f"Integration run {run_id}: {memories_processed} memories processed, "
-            f"{links_created} operations applied, {flags_raised} flags, {merges_performed} merges. "
+            f"{links_created} links, {operations_applied} operations applied, "
+            f"{flags_raised} flags, {merges_performed} merges. "
             f"{turns} turns, {total_tool_calls} tool calls, {duration_ms:.0f}ms"
         )
         logger.info(summary)
