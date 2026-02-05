@@ -99,6 +99,8 @@ You MUST extract `event_time` - when the event ACTUALLY happened, not when it wa
 
 **Episodes:** Write as narrative prose, preserve emotional context and specifics. Title 2-10 words.
 The episode IS the memory - make it rich and retrievable.
+If the input contains an explicit sequence, optionally append a compact line:
+\"Ordered mentions: 1) ... 2) ... 3) ...\" (only when clear; not required).
 
 **Entities:** Extract people, places, organizations, projects, tools, concepts.
 - Include canonical_name and any aliases mentioned
@@ -107,6 +109,11 @@ The episode IS the memory - make it rich and retrievable.
 - CRITICAL: Only extract attributes EXPLICITLY stated in the input
 - Do NOT infer emotions, outcomes, or experiences unless directly quoted
 - Do NOT merge facts from different contexts about similar topics
+ - Anti-bloat rule: Only create entities for stable referents likely to matter across sessions
+   (people, orgs, projects, places, recurring tools/concepts). If a noun is a one-off or
+   minor detail, keep it inside the Episode instead of creating a separate Entity.
+ - When many related items appear, prefer 1 umbrella entity + attributes (facts) instead of
+   many atomic entities.
 
 **Notes:** ONLY for commitments/intentions. Types: task, goal, reminder, idea, list, project.
 
