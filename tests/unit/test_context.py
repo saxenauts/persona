@@ -134,6 +134,40 @@ class TestFormatWorkingMemoryProse:
         older_pos = result.find("Started the project")
         assert recent_pos < older_pos
 
+    def test_episode_links_rendered(self):
+        """Test that link context is appended to episodes."""
+        now = datetime.now()
+        current = EpisodeMemory(
+            id=uuid4(),
+            user_id="test",
+            type="episode",
+            title="Current Episode",
+            content="Wrapped up the sprint",
+            event_time=now,
+        )
+        previous = EpisodeMemory(
+            id=uuid4(),
+            user_id="test",
+            type="episode",
+            title="Previous Episode",
+            content="Started the sprint",
+            event_time=now - timedelta(days=1),
+        )
+        link = MemoryLink(
+            source_id=current.id,
+            target_id=previous.id,
+            relation="PREVIOUS",
+        )
+        result = format_working_memory_prose(
+            user_card=None,
+            episodes=[current, previous],
+            psyche=[],
+            active_notes=[],
+            links=[link],
+        )
+        assert "preceded by" in result
+        assert "Previous Episode" in result
+
     def test_psyche_in_active_context(self, sample_psyche):
         """Test psyche appears in active_context section."""
         result = format_working_memory_prose(
