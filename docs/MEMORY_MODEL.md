@@ -12,6 +12,12 @@ Persona exists to change this.
 
 We're building a memory layer that doesn't just *store* information but *understands* it. Not a database of facts, but a living graph of experiences, identity, and intention that evolves with each interaction.
 
+## Design Principle: LLM-First
+
+- No manual routing, keyword gates, or heuristic decision trees in the query path.
+- The model decides which tools to call and how to synthesize answers.
+- The memory model stays minimal: Episode, Psyche, Entity, Note.
+
 ---
 
 ## The Four Pillars of Personal Memory
@@ -23,6 +29,8 @@ Human memory isn't a filing cabinet. Cognitive science distinguishes several mem
 Episodic memory is autobiographical—the record of lived experience. When you recall "the time I presented at the conference" or "yesterday's conversation with Sarah," you're accessing episodic memory. These memories are anchored in time and place, rich with context.
 
 In Persona, an **Episode** captures a narrative unit: something that happened, was discussed, or occurred. Episodes have timestamps, summaries, and the raw content of what transpired. They form the backbone of "what do you remember about X?" queries.
+
+If a session explicitly contains a sequence, the Episode may include a compact "Ordered mentions" line inside the narrative (optional, not required).
 
 ```
 Episode: "Had a difficult conversation with my manager about the promotion timeline.
@@ -92,6 +100,30 @@ Entity: "Project Alpha"
 - **Facts** = Entity ATTRIBUTES: "Sarah's birthday is June 5" → attribute on the Sarah entity, NOT a Note
 
 Notes are created only when there's an intention signal ("remind me", "I need to", due dates).
+
+---
+
+## Sessions and Summaries
+
+A session is product-defined (idle timeouts, context size, open/close). Long sessions can accumulate a compounding summary that feeds the Episode, so the Episode remains a coherent narrative of the session rather than a raw transcript.
+
+---
+
+## Working Memory and Memeplex
+
+Persona injects a compact working memory into the system prompt:
+- `<user>`: UserCard identity prose (stable anchor)
+- `<recent_context>`: recent Episodes
+- `<active_context>`: Psyche + active Notes
+
+The Memeplex is injected separately as a world-model index of topics, people, projects, places, and concepts.
+
+---
+
+## Future: Quantification and Dreaming
+
+- **Quantification** (frequency/recency/saliency) is a later-phase upgrade to improve ranking and consolidation.
+- **Dreaming** (async consolidation) is a planned background process for deeper linking and cleanup while the user is idle.
 
 ---
 

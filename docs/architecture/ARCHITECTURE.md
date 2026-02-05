@@ -18,6 +18,8 @@ We're not building a database with LLM wrappers. We're building a **memetic orga
 
 Other AIs have unique abilities. Persona has context. That's the edge.
 
+**LLM-first principle**: no manual routers, keyword gates, or heuristic thresholds in the query path. The model chooses tools; we keep memory primitives minimal.
+
 ---
 
 ## The Four Pillars of Personal Memory
@@ -36,6 +38,8 @@ Human memory isn't a filing cabinet. Cognitive science distinguishes several mem
 Episodic memory is autobiographical—the record of lived experience. When you recall "the time I presented at the conference" or "yesterday's conversation with Sarah," you're accessing episodic memory.
 
 Episodes form the backbone of "what do you remember about X?" queries. They carry the texture of experience—not just facts, but feelings, context, narrative.
+
+If a session explicitly contains a sequence, the Episode may include a compact "Ordered mentions" line inside the narrative (optional, not required).
 
 ### Psyche: Who I Am
 
@@ -117,11 +121,12 @@ Raw Content (conversation, note, import)
     │
     ▼
 PersonaAdapter.ingest()
+    │   (sessions are product-defined: idle, context size, close)
     │
     ▼
 MemoryIngestionService.ingest()
     ├── LLM Extraction (structured output)
-    │   ├── Episode: What happened (always 1)
+    │   ├── Episode: What happened (always 1, narrative summary)
     │   ├── Entity: People, places, things mentioned
     │   ├── Psyche: Identity signals (RARE)
     │   └── Note: Intentions with triggers (RARE)
@@ -131,7 +136,7 @@ MemoryIngestionService.ingest()
     └── MemoryStore.create() → Neo4j
 ```
 
-**Extraction Prompt** (`persona/services/ingestion_service.py`): The LLM is instructed to be **selective**—most sessions have 0 Psyche, Notes only with explicit intention signals. The Episode IS the memory; make it rich and retrievable.
+**Extraction Prompt** (`persona/services/ingestion_service.py`): The LLM is instructed to be **selective**—most sessions have 0 Psyche, Notes only with explicit intention signals. The Episode IS the memory; make it rich and retrievable. If the input contains an explicit sequence, the Episode may include a compact "Ordered mentions" line (optional, not required).
 
 **Temporal Extraction**: LLM resolves relative time ("yesterday", "last week") to actual dates using provided current time and timezone.
 
@@ -182,6 +187,8 @@ Consolidation Service
 
 **UserCard**: Compact identity anchor placed first in context (primacy effect). Contains `identity_prose`—natural language summary of who this person IS right now.
 
+**Future (Dreaming)**: Async consolidation can run while the user is idle to deepen linking, clean up, and refresh the Memeplex.
+
 ---
 
 ## The Query Path
@@ -199,7 +206,10 @@ PersonaService.run_agent()
     │
     ├── Build System Prompt
     │   ├── {world_model} ← Memeplex.to_system_prompt()
-    │   └── {user_context} ← UserCard.identity_prose
+    │   └── {user_context} ← Working memory prose
+    │       - <user> UserCard identity prose
+    │       - <recent_context> recent Episodes
+    │       - <active_context> Psyche + active Notes
     │
     ├── Agent Loop (with tools)
     │   ├── recall(query, ...) → Semantic similarity search
@@ -328,6 +338,8 @@ The UserCard provides stability across sessions. While individual memories come 
 - **Temporal Anchor Resolution**: "Year after my wedding" → date range
 - **Link Reinforcement**: Fire-together-wire-together dynamics
 - **Multi-pass Ingestion**: 2-day context window for richer extraction
+- **Quantification**: Frequency/recency/saliency weights to improve ranking
+- **Dreaming**: Async consolidation for deeper linking while the user is idle
 
 ---
 

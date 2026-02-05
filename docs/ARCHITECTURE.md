@@ -1,5 +1,13 @@
 # Persona Architecture
 
+## Design Principles
+
+- **LLM-first**: no manual routing or keyword gates in the query path; tool choice stays model-driven.
+- **Minimal primitives**: four memory types only (Episode, Psyche, Entity, Note).
+- **Chronology-first**: ingestion captures `event_time` and preserves temporal order.
+- **Working memory**: a compact, human-analog context (UserCard + recent episodes + active psyche/notes).
+- **Future-ready**: quantification (frequency/recency/saliency) and async consolidation ("dreaming") are planned upgrades, not required for v1.
+
 ## System Overview
 
 ```
@@ -65,6 +73,7 @@ Raw Content (conversation, note, etc.)
 │ 1. PersonaAdapter.ingest()                                  │
 │    - Entry point for all data ingestion                     │
 │    - Optional: store raw transcript as Episode              │
+│    - Sessions are product-defined (idle, context, close)    │
 └─────────────────────────────────────────────────────────────┘
          │
          ▼
@@ -73,6 +82,8 @@ Raw Content (conversation, note, etc.)
 │    - LLM extracts 4-pillar memories (Episode, Psyche,       │
 │      Entity, Note) with structured output                   │
 │    - Generates embeddings for each memory                   │
+│    - Episode is narrative; if sequence is explicit, it may  │
+│      include a compact "Ordered mentions" line (optional)   │
 │    - Returns IngestionResult with memories + links          │
 └─────────────────────────────────────────────────────────────┘
          │
@@ -99,6 +110,7 @@ Raw Content (conversation, note, etc.)
 │    - Refreshes UserCard (identity prose)                    │
 │    - Refreshes Memeplex (world model index)                 │
 │    - Stores as JSON blobs in Neo4j                          │
+│    - Future: async consolidation ("dreaming")               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -141,6 +153,18 @@ User Query ("What did I do last week?")
 │    - Optional: structured output via output_schema          │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Working Memory Composition
+
+Persona injects a compact, human-analog working memory into the system prompt:
+
+- `<user>`: UserCard identity prose (stable anchor)
+- `<recent_context>`: recent Episodes (chronological narrative)
+- `<active_context>`: active Psyche + Notes (preferences + commitments)
+
+The Memeplex is injected separately as `{world_model}` (table-of-contents for the user's world).
 
 ---
 
