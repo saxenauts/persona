@@ -195,11 +195,11 @@ class PersonaService:
         if memeplex:
             world_model = memeplex.to_system_prompt()
 
-        if user_card and user_card.identity_prose:
-            user_context = f"## Who They Are\n\n{user_card.identity_prose}"
-
         if working_memory:
-            user_context += f"\n\n## Recent Context\n\n{working_memory}"
+            # working_memory already includes <user>/<recent_context>/<active_context> sections
+            user_context = working_memory
+        elif user_card and user_card.identity_prose:
+            user_context = f"<user>\n{user_card.identity_prose}\n</user>"
 
         return world_model, user_context
 
