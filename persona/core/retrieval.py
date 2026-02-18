@@ -1,190 +1,191 @@
-"""Retrieval Layer: Time-windowed working memory with prose formatting.
+"""
+Retrieval Layer for Persona.
 
-No query expansion. No vector search for base context.
-Just time-windowed fetch of recent memories with links, formatted as prose.
+Retrieves context for LLM queries using Vector Search + Graph Crawl.
 """
 
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any, Sequence
+from typing import List, Optional
 from uuid import UUID
 
 from persona.core.graph_ops import GraphOps
 from persona.core.memory_store import MemoryStore
-from persona.core.context import format_working_memory_prose
-from persona.models.memory import (
-    Memory,
-    MemoryLink,
-    EpisodeMemory,
-    PsycheMemory,
-    NoteMemory,
-    UserCard,
-    WorkingMemoryConfig,
-    DEFAULT_WORKING_MEMORY_CONFIG,
-)
+from persona.core.context import ContextFormatter, convert_to_memories
+from persona.models.memory import Memory
 from server.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def _to_utc(dt: Optional[datetime]) -> datetime:
-    if not dt:
-        return datetime.min.replace(tzinfo=timezone.utc)
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
 class Retriever:
-    """Retrieves working memory for LLM via time-windowed fetch + prose formatting."""
-
+    """
+    Retrieves context for LLM queries.
+    
+    V1 Implementation: Vector Search + Graph Crawl.
+    
+    TODO:
+    - Agentic Retrieval: Implement multi-step retrieval loops to refine context.
+    - Reasoning Models: Enable toggle for o1/reasoning-style models for better query planning.
+    - Agent Loops: Instrumentation for multi-turn internal reasoning before final response.
+    
+    Future Signals (TODO):
+    - BM25: Keyword match for exact terms, proper nouns.
+    - Type Filter: Restrict to specific memory types (goal, psyche).
+    - Date Filter: Temporal window queries.
+    - Re-Ranker: Cross-encoder for precision (expensive).
+    - RRF Fusion: Merge ranked lists from multiple signals.
+    - LLM Query Planner: Generate smart queries from schema knowledge.
+    """
+    
     def __init__(self, user_id: str, store: MemoryStore, graph_ops: GraphOps):
+        """
+        Initialize retriever.
+        
+        Args:
+            user_id: The user whose memories to retrieve.
+            store: MemoryStore for typed memory access.
+            graph_ops: GraphOps for vector search and graph queries.
+        """
         self.user_id = user_id
         self.store = store
         self.graph_ops = graph_ops
-
-    async def get_working_memory(
-        self,
-        config: Optional[WorkingMemoryConfig] = None,
-        user_card: Optional[UserCard] = None,
-        user_timezone: str = "UTC",
-        collect_stats: bool = False,
-        **kwargs,
-    ) -> str | tuple[str, Dict[str, Any]]:
-        """Get prose-formatted working memory for a dialog turn."""
-        cfg = config or DEFAULT_WORKING_MEMORY_CONFIG
-        now = datetime.now(timezone.utc)
-        stats: Dict[str, Any] = {}
-
-        episodes = await self._get_recent_episodes(now, cfg)
-        psyche = await self._get_recent_psyche(now, cfg)
-        active_notes = await self._get_active_notes(cfg)
-
-        all_memories: Sequence[Memory] = [*episodes, *psyche, *active_notes]
-        memory_ids = [m.id for m in all_memories]
-        links = await self._get_links_for_memories(memory_ids)
-
-        working_memory = format_working_memory_prose(
-            user_card=user_card,
-            episodes=episodes,
-            psyche=psyche,
-            active_notes=active_notes,
-            links=links,
-        )
-
-        if collect_stats:
-            stats = {
-                "episode_count": len(episodes),
-                "psyche_count": len(psyche),
-                "note_count": len(active_notes),
-                "link_count": len(links),
-                "working_memory_chars": len(working_memory),
-                "config": {
-                    "episode_window_days": cfg.episode_window.days,
-                    "psyche_window_days": cfg.psyche_window.days,
-                },
-            }
-            logger.info(f"Retriever stats: {stats}")
-            return working_memory, stats
-
-        logger.info(
-            f"Retriever: {len(all_memories)} memories, {len(working_memory)} chars"
-        )
-        return working_memory
-
-    async def get_working_memory_with_stats(
-        self,
-        config: Optional[WorkingMemoryConfig] = None,
-        user_card: Optional[UserCard] = None,
-        user_timezone: str = "UTC",
-    ) -> tuple[str, Dict[str, Any]]:
-        result = await self.get_working_memory(
-            config=config,
-            user_card=user_card,
-            user_timezone=user_timezone,
-            collect_stats=True,
-        )
-        return result  # type: ignore
-
-    async def _get_recent_episodes(
-        self, now: datetime, cfg: WorkingMemoryConfig
-    ) -> list[EpisodeMemory]:
-        since = now - cfg.episode_window
+        self.formatter = ContextFormatter()
+    
+    async def get_context(
+        self, 
+        query: str, 
+        top_k: int = 5, 
+        hop_depth: int = 1,
+        include_static: bool = True
+    ) -> str:
+        """
+        Get formatted context for a user query.
+        
+        Args:
+            query: Natural language query.
+            top_k: Number of vector search results.
+            hop_depth: How many relationship hops to crawl.
+            include_static: Whether to include static context (active goals, psyche).
+        
+        Returns:
+            XML-formatted context string.
+        """
+        all_memories: dict[UUID, Memory] = {}
+        
+        # 1. Static Context (always-on background)
+        if include_static:
+            static = await self._get_static_context()
+            for m in static:
+                all_memories[m.id] = m
+            logger.debug(f"Static context: {len(static)} memories")
+        
+        # 2. Vector Search (query-specific)
+        seeds = await self._vector_search(query, top_k)
+        for m in seeds:
+            all_memories[m.id] = m
+        logger.debug(f"Vector search: {len(seeds)} seeds")
+        
+        # 3. Graph Crawl (expand from seeds)
+        expanded = await self._expand_graph(seeds, hop_depth)
+        for m in expanded:
+            all_memories[m.id] = m
+        logger.debug(f"Graph expansion: {len(expanded)} total after crawl")
+        
+        # 4. Format
+        memories = list(all_memories.values())
+        context = self.formatter.format_context(memories)
+        logger.info(f"Retriever: {len(memories)} memories, {len(context)} chars context")
+        
+        return context
+    
+    async def _get_static_context(self) -> List[Memory]:
+        """
+        Get always-included context.
+        
+        TODO: Implement persistent memory marking (pinned flag).
+        
+        Currently includes:
+        - Active goals (status != "COMPLETED")
+        - Core psyche items (first 5)
+        """
+        memories = []
+        
+        # Active goals
         try:
-            memories = await self.store.get_by_type(
-                "episode", self.user_id, limit=cfg.max_episodes
+            goals = await self.store.get_by_type("goal", self.user_id, limit=10)
+            active_goals = [g for g in goals if getattr(g, 'status', 'active') != "COMPLETED"]
+            memories.extend(active_goals)
+        except Exception as e:
+            logger.warning(f"Failed to get goals for static context: {e}")
+        
+        # Core psyche
+        try:
+            psyche = await self.store.get_by_type("psyche", self.user_id, limit=5)
+            memories.extend(psyche)
+        except Exception as e:
+            logger.warning(f"Failed to get psyche for static context: {e}")
+        
+        return memories
+    
+    async def _vector_search(self, query: str, top_k: int) -> List[Memory]:
+        """
+        Semantic similarity search.
+        
+        Embeds the query and finds top-K most similar memories.
+        """
+        try:
+            results = await self.graph_ops.text_similarity_search(
+                query=query, 
+                user_id=self.user_id, 
+                limit=top_k
             )
-            recent = []
-            for m in memories:
-                if not m.event_time:
-                    continue
-                event_time = _to_utc(m.event_time)
-                if event_time >= since:
-                    recent.append(m)
-
-            recent.sort(key=lambda m: _to_utc(m.event_time), reverse=True)
-            return [
-                m for m in recent[: cfg.max_episodes] if isinstance(m, EpisodeMemory)
-            ]
         except Exception as e:
-            logger.warning(f"Failed to get episodes: {e}")
+            logger.error(f"Vector search failed: {e}")
             return []
-
-    async def _get_recent_psyche(
-        self, now: datetime, cfg: WorkingMemoryConfig
-    ) -> list[PsycheMemory]:
-        since = now - cfg.psyche_window
-        try:
-            memories = await self.store.get_by_type(
-                "psyche", self.user_id, limit=cfg.max_psyche
-            )
-            recent = []
-            for m in memories:
-                if not m.event_time:
-                    continue
-                event_time = _to_utc(m.event_time)
-                if event_time >= since:
-                    recent.append(m)
-
-            recent.sort(key=lambda m: _to_utc(m.event_time), reverse=True)
-            return [m for m in recent[: cfg.max_psyche] if isinstance(m, PsycheMemory)]
-        except Exception as e:
-            logger.warning(f"Failed to get psyche: {e}")
-            return []
-
-    async def _get_active_notes(self, cfg: WorkingMemoryConfig) -> list[NoteMemory]:
-        try:
-            notes = await self.store.get_by_type(
-                "note", self.user_id, limit=cfg.max_active_notes * 2
-            )
-            active = [
-                n
-                for n in notes
-                if getattr(n, "status", "active").lower() != "completed"
-            ]
-            active.sort(key=lambda n: _to_utc(n.event_time), reverse=True)
-            return [
-                n for n in active[: cfg.max_active_notes] if isinstance(n, NoteMemory)
-            ]
-        except Exception as e:
-            logger.warning(f"Failed to get notes: {e}")
-            return []
-
-    async def _get_links_for_memories(self, memory_ids: list[UUID]) -> list[MemoryLink]:
-        if not memory_ids:
-            return []
-        try:
-            connections = await self.store.get_connected_batch(memory_ids, self.user_id)
-            all_links = []
-            for source_id, targets in connections.items():
-                for target_id, relation in targets:
-                    all_links.append(
-                        MemoryLink(
-                            source_id=source_id,
-                            target_id=target_id,
-                            relation=relation,
-                        )
-                    )
-            return all_links
-        except Exception as e:
-            logger.warning(f"Failed to get links: {e}")
-            return []
+        
+        memory_ids = [r['nodeName'] for r in results.get('results', [])]
+        memories = []
+        
+        for mid in memory_ids:
+            try:
+                mem = await self.store.get(UUID(mid), self.user_id)
+                if mem:
+                    memories.append(mem)
+            except (ValueError, Exception) as e:
+                logger.debug(f"Could not retrieve memory {mid}: {e}")
+        
+        return memories
+    
+    async def _expand_graph(
+        self, 
+        seeds: List[Memory], 
+        hop_depth: int
+    ) -> List[Memory]:
+        """
+        Crawl graph from seed memories.
+        
+        Follows relationships to find linked memories up to hop_depth.
+        This justifies using a graph database - we get relational context
+        that pure vector search would miss.
+        """
+        if hop_depth <= 0:
+            return seeds
+        
+        all_memories = {m.id: m for m in seeds}
+        frontier = list(seeds)
+        
+        for hop in range(hop_depth):
+            next_frontier = []
+            for memory in frontier:
+                try:
+                    linked = await self.store.get_connected(memory.id, self.user_id)
+                    for m in linked:
+                        if m.id not in all_memories:
+                            all_memories[m.id] = m
+                            next_frontier.append(m)
+                except Exception as e:
+                    logger.debug(f"Failed to get connected for {memory.id}: {e}")
+            
+            frontier = next_frontier
+            logger.debug(f"Hop {hop + 1}: found {len(next_frontier)} new memories")
+        
+        return list(all_memories.values())

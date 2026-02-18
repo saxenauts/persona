@@ -1,0 +1,32 @@
+{
+  "Q1": {
+    "question": "How did my early diet choices affect my European trip planning?",
+    "answer": "Your early diet choices, particularly the high spending on keto items at Whole Foods, directly impac",
+    "confidence": "High",
+    "context_length": 10058
+  },
+  "Q2": {
+    "question": "We decided on a tech stack a while ago, specifically for privacy. Did we ever implement it?",
+    "answer": "Yes, the user has implemented the chosen tech stack for FocusFlow's MVP, specifically selecting Supa",
+    "confidence": "High",
+    "context_length": 8439
+  },
+  "Q3": {
+    "question": "I met someone at a meetup who liked my design choices. Who was it and what did they like?",
+    "answer": "The person was an investor known as the 'Bald Guy' from a tech meetup. He liked the app's Dark Mode,",
+    "confidence": "High",
+    "context_length": 11229
+  },
+  "Q4": {
+    "question": "What happened to the Clean Body ritual?",
+    "answer": "The Clean Body ritual has been restarted. The user ended a previous streak by eating pizza and garli",
+    "confidence": "High",
+    "context_length": 4854
+  },
+  "Q5": {
+    "question": "I had a random idea about using AI for the app. Did I follow up on it?",
+    "answer": "Yes, you followed up on it by planning and developing an OpenAI-powered summary feature for your app",
+    "confidence": "High",
+    "context_length": 9176
+  }
+}
