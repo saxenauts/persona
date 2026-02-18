@@ -158,26 +158,19 @@ Exit criteria:
 
 Goal: ship the audited release first; defer paper drafting until after release tag.
 
-- [x] Create release PR from clean release branch.
-- [x] Run final claims audit on PR description and release notes.
-- [x] Merge and tag release.
+- [ ] Create release PR from clean release branch.
+- [ ] Run final claims audit on PR description and release notes.
+- [ ] Merge and tag release.
 
 Validation and tests:
 
-- [x] PR includes links to canonical claims table and methodology source.
-- [x] Release tag points to audited commit.
-- [x] Release notes retain safe-claim boundaries (including BEAM `event_ordering=0%` caveat).
+- [ ] PR includes links to canonical claims table and methodology source.
+- [ ] Release tag points to audited commit.
+- [ ] Release notes retain safe-claim boundaries (including BEAM `event_ordering=0%` caveat).
 
 Exit criteria:
 
-- [x] Release shipped from an audited commit with consistent claim set.
-
-Release operation evidence (2026-02-18):
-
-- PR created and merged: `https://github.com/saxenauts/persona/pull/11`.
-- PR claims framing includes canonical links to `docs/CLAIMS_TABLE_V03.md` and `release_artifacts/methodology.md`.
-- Merge commit on `main`: `fa34e69aaaaa567a60898f8a12948ec1b382b6b6`.
-- Release tag created from audited merge commit: `v0.3.0` -> `fa34e69aaaaa567a60898f8a12948ec1b382b6b6`.
+- [ ] Release shipped from an audited commit with consistent claim set.
 
 ---
 
