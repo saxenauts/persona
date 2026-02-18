@@ -12,6 +12,8 @@
 
 - **Official Docs**: [docs.buildpersona.ai](https://docs.buildpersona.ai)
 - **Deep Dive**: [The Philosophy of Persona (saxenauts.io)](https://saxenauts.io/blog/persona-graph)
+- **Quick Start (v0.3)**: [`docs/QUICK_START_V03.md`](docs/QUICK_START_V03.md)
+- **Release Notes (v0.3)**: [`docs/RELEASE_NOTES_V03.md`](docs/RELEASE_NOTES_V03.md)
 
 ---
 
@@ -42,23 +44,29 @@ But true intelligence requires more than storage. It requires a dynamic, living 
 
 ## Benchmarks
 
-Persona v0.3 includes critical bug fixes (H1-H5) validated through partial evaluation:
+Persona v0.3 includes critical bug fixes (H1-H5) and a canonical claim policy that separates audit-grade baselines from experimental slices:
 
-| Metric | v0.2 Baseline | v0.3 Partial Validation | Delta |
-|--------|---------------|------------------------|-------|
-| PersonaMem Accuracy | 65.3% | 66%* | +0.7% |
-| Generic Response Rate | 43% | 0%* | -43% ✓ |
-
-*Partial validation: 50 questions, seed 42. See [methodology](release_artifacts/methodology.md) for limitations.
+| Metric | v0.3 Canonical Value | Scope | Claim ID |
+|--------|----------------------|-------|----------|
+| PersonaMem subset baseline | 65.3% | N=150, seeds 42/123/456 | A-001 |
+| PersonaMem full single-seed baseline | 66.2% | N=589, seed 42 | A-002 |
+| LongMemEval baseline | 81.3% | N=300, seeds 42/123/456 | A-003 |
+| BEAM (10 abilities) baseline | 69.0% | N=100, seed 1 (`event_ordering=0%`) | A-004 |
 
 **Key Improvements**:
-- **Generic response problem solved**: 0% vs 43% baseline (Psyche inference working)
 - **Temporal bugs fixed**: H1-H5 bug fixes improve chronological reasoning
-- **Scientific integrity**: Full methodology + limitations documented
+- **Claims governance hardened**: release and paper claims are constrained to canonical methodology + canonical claims table
+- **Experimental slices retained as non-headline evidence**: paired 50Q/100Q findings are documented separately
 
 **PersonaMem** measures personal memory accuracy across 500 synthetic user profiles. Frontier models (GPT-4.5, o4-mini, Gemini-2.0) achieve ~50% per the [benchmark paper](https://arxiv.org/abs/2501.14260).
 
-> **Note**: Partial validation with GPT-5.2 via Azure Foundry. Full methodology, limitations, and reproducibility package: [release_artifacts/methodology.md](release_artifacts/methodology.md).
+> **Note**: Audit-grade release headlines come from canonical claim rows A-001 through A-004.
+> Experimental paired slices (50Q/100Q) remain non-headline and are documented in `docs/PERSONAMEM_EVAL_CANONICAL.md`.
+> Canonical methodology: [release_artifacts/methodology.md](release_artifacts/methodology.md)
+> Canonical claims table: [docs/CLAIMS_TABLE_V03.md](docs/CLAIMS_TABLE_V03.md)
+> Canonical policy: [docs/METHODOLOGY_CANONICAL_V03.md](docs/METHODOLOGY_CANONICAL_V03.md)
+> No new eval runs are included in this release program.
+> In any metric mismatch, the canonical claims table is authoritative.
 
 ---
 
