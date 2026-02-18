@@ -19,7 +19,7 @@ This document describes the **planned** evaluation protocol for Persona v0.3, al
 - Metrics: Accuracy, generic response rate, temporal reasoning
 - Status: **PLANNED, NOT COMPLETED** (infrastructure blocker)
 
-**LongMemEval** (170 questions)
+**Deferred Benchmark** (170 questions)
 - 10 memory abilities: instruction following, preference tracking, summarization, temporal reasoning, knowledge updates, contradiction resolution, multi-session reasoning, event ordering, information extraction, abstention
 - Seeds: 42, 123, 456, 789, 1337 (5 runs)
 - Status: **PLANNED, NOT COMPLETED** (infrastructure blocker)
@@ -73,7 +73,7 @@ The following fixes were applied before validation:
 ### Scope
 
 **Completed**: Partial validation on PersonaMem (50 questions, seed 42)  
-**Not Completed**: Full PersonaMem (150q), LongMemEval (170q), multi-seed runs
+**Not Completed**: Full PersonaMem (150q), deferred benchmark (170q), multi-seed runs
 
 ### Results
 
@@ -109,13 +109,13 @@ For each question:
 **Eval Runner Crashes** (Task 7-9 blocker)
 - Multi-seed runs (seeds 42, 123, 456, 789, 1337) trigger eval runner crashes
 - Root cause: Memory exhaustion or timeout in batch processing
-- Impact: Cannot complete full PersonaMem (150q) or LongMemEval (170q)
+- Impact: Cannot complete full PersonaMem (150q) or deferred benchmark (170q)
 - Workaround: Single-seed partial validation (50q) completed successfully
 
 ### Incomplete Validation
 
 1. **PersonaMem**: Only 50/150 questions validated (33% coverage)
-2. **LongMemEval**: 0/170 questions validated (0% coverage)
+2. **Deferred benchmark**: 0/170 questions validated (0% coverage)
 3. **Multi-Seed Runs**: Only seed 42 completed; seeds 123, 456, 789, 1337 not attempted
 4. **Statistical Significance**: Single run insufficient for confidence intervals
 
@@ -224,7 +224,7 @@ Persona's advantage is **not** raw accuracy (+0.7 pts is marginal), but **respon
    - Estimate: 2-4 hours with fixed runner
    - Compute confidence intervals (95% CI)
 
-3. **Run LongMemEval** (170q, all seeds)
+3. **Run deferred benchmark** (170q, all seeds)
    - Estimate: 3-5 hours
    - Validate all 10 memory abilities
 

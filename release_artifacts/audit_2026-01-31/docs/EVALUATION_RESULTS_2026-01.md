@@ -3,7 +3,7 @@
 **Date**: January 31, 2026  
 **Evaluation Period**: January 26-31, 2026  
 **Model**: GPT-5.2 via Azure Foundry  
-**Benchmarks**: PersonaMem, LongMemEval, BEAM (10 abilities)  
+**Benchmarks**: PersonaMem, BEAM (10 abilities)  
 **Source of Truth**: `docs/BENCHMARK_TRUTH_TABLE.md`
 
 ---
@@ -17,8 +17,6 @@ This document only reports results that can be traced to on-disk JSON artifacts.
   Source: `../memory-evals/results/competitor_full/persona_personamem/persona_personamem_summary.json`
 - **PersonaMem (full benchmark, single seed)**: **66.2%** on 589 questions, seed 42.  
   Source: `../memory-evals/results/persona_personamem_full/persona_personamem_seed42.json`
-- **LongMemEval**: **81.3%** on 300 questions, 3 seeds (42/123/456).  
-  Source: `../memory-evals/results/persona_longmemeval_summary.json`
 - **BEAM (10 abilities, 100Q, 1 seed)**: **69.0%** baseline; **event_ordering = 0%**.  
   Source: `../memory-evals/results/beam_100q_minimal_prompt/run_20260126_113003/final_results.json`
 
@@ -30,7 +28,6 @@ This document only reports results that can be traced to on-disk JSON artifacts.
 |-----------|----------|---------|-------|-------|--------|
 | PersonaMem (subset) | **65.3%** | 150 (50 per seed) | 42, 123, 456 | `recall_user_shared_facts` only | `../memory-evals/results/competitor_full/persona_personamem/persona_personamem_summary.json` |
 | PersonaMem (full) | **66.2%** | 589 | 42 | Full benchmark, single seed | `../memory-evals/results/persona_personamem_full/persona_personamem_seed42.json` |
-| LongMemEval | **81.3%** | 300 (100 per seed) | 42, 123, 456 | Two categories: single-session and multi-session | `../memory-evals/results/persona_longmemeval_summary.json` |
 | BEAM (10 abilities) | **69.0%** | 100 | 1 seed | Event ordering still 0% | `../memory-evals/results/beam_100q_minimal_prompt/run_20260126_113003/final_results.json` |
 
 ---
@@ -43,7 +40,6 @@ These runs are **real** but **not** comparable to the audit-grade set. Use only 
 |-----------|----------|---------|-------|--------------------------|--------|
 | PersonaMem (subset, smaller) | 70.0% | 90 | 42, 123, 456 | Smaller sample than 150Q run | `../memory-evals/results/persona_personamem_summary.json` |
 | BEAM (2 abilities only) | 79.6% | 240 (80 per seed) | 456, 789, 999 | Only info_extraction + temporal_reasoning | `../memory-evals/results/persona_beam_summary.json` |
-| LongMemEval (5 seeds) | 72.6% | 500 | 42, 123, 456, 789, 999 | High variance vs 3-seed run | `../memory-evals/results/persona_longmemeval_5seeds_summary.json` |
 
 ---
 
@@ -97,7 +93,6 @@ Source: `../memory-evals/results/competitor_full/persona_personamem/run_20260129
 
 - **PersonaMem (subset)**: 65.3% on 150 questions (3 seeds).  
 - **PersonaMem (full, 1 seed)**: 66.2% on 589 questions.  
-- **LongMemEval**: 81.3% on 300 questions (3 seeds).  
 - **BEAM (10 abilities, 1 seed)**: 69.0% baseline, event_ordering still 0%.
 
 ---

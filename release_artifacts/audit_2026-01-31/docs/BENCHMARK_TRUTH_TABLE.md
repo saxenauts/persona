@@ -11,8 +11,9 @@
 |-----------|----------|---------|-------|-------|--------|
 | PersonaMem (subset) | 65.3% | 150 | 42, 123, 456 | recall_user_shared_facts only | ../memory-evals/results/competitor_full/persona_personamem/persona_personamem_summary.json |
 | PersonaMem (full) | 66.2% | 589 | 42 | full benchmark, single seed | ../memory-evals/results/persona_personamem_full/persona_personamem_seed42.json |
-| LongMemEval | 81.3% | 300 | 42, 123, 456 | 3 seeds x 100 questions | ../memory-evals/results/persona_longmemeval_summary.json |
 | BEAM (10 abilities) | 69.0% | 100 | 1 | baseline, event_ordering=0% | ../memory-evals/results/beam_100q_minimal_prompt/run_20260126_113003/final_results.json |
+
+Deferred benchmark note: one previously published benchmark line is intentionally removed from v0.3 public release claim surfaces.
 
 # Exploratory Competitor Snapshot
 

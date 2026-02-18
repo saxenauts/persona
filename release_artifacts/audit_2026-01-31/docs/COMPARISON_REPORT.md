@@ -20,7 +20,6 @@ Source of truth: `docs/BENCHMARK_TRUTH_TABLE.md`
 |-----------|----------|---------|-------|-------|--------|
 | PersonaMem (subset) | **65.3%** | 150 | 42, 123, 456 | recall_user_shared_facts only | `../memory-evals/results/competitor_full/persona_personamem/persona_personamem_summary.json` |
 | PersonaMem (full) | **66.2%** | 589 | 42 | Full benchmark, single seed | `../memory-evals/results/persona_personamem_full/persona_personamem_seed42.json` |
-| LongMemEval | **81.3%** | 300 | 42, 123, 456 | 3 seeds × 100 | `../memory-evals/results/persona_longmemeval_summary.json` |
 | BEAM (10 abilities) | **69.0%** | 100 | 1 | Event ordering still 0% | `../memory-evals/results/beam_100q_minimal_prompt/run_20260126_113003/final_results.json` |
 
 ---
@@ -54,7 +53,6 @@ From `../memory-evals/results/competitor_full/persona_personamem/run_20260129_17
 
 - PersonaMem (subset): 65.3% on 150Q (3 seeds).
 - PersonaMem (full, single seed): 66.2% on 589Q.
-- LongMemEval: 81.3% on 300Q (3 seeds).
 - BEAM (10 abilities, 1 seed): 69.0% baseline; event ordering remains 0%.
 
 ---

@@ -18,7 +18,6 @@
 
 - PersonaMem (subset, 150Q): 65.3%
 - PersonaMem (full, 589Q, 1 seed): 66.2%
-- LongMemEval (300Q, 3 seeds): 81.3%
 - BEAM (10 abilities, 100Q, 1 seed): 69.0%, event_ordering = 0%
 
 Source of truth: `docs/BENCHMARK_TRUTH_TABLE.md`
@@ -35,7 +34,6 @@ Source of truth: `docs/BENCHMARK_TRUTH_TABLE.md`
 ### Gate B: Benchmark Coverage
 - [ ] PersonaMem full benchmark run (589Q) completed across ≥3 seeds.
 - [ ] BEAM full (10 abilities) completed across ≥5 seeds.
-- [ ] LongMemEval run across ≥5 seeds (reduce variance).
 
 ### Gate C: Known Failure Mode Fixes
 - [ ] Event ordering > 40% on BEAM-10 (tooling/output fix).
@@ -63,8 +61,7 @@ Source of truth: `docs/BENCHMARK_TRUTH_TABLE.md`
 ### Phase 4: Full Re-runs (Release-Grade)
 1. PersonaMem full benchmark ×3 seeds.
 2. BEAM-10 ×5–10 seeds.
-3. LongMemEval ×5 seeds.
-4. Commit all artifacts + manifests.
+3. Commit all artifacts + manifests.
 
 ---
 
