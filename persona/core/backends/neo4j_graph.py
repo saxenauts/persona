@@ -1,6 +1,7 @@
 """Neo4j implementation of the GraphDatabase interface."""
 
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from neo4j import AsyncGraphDatabase, basic_auth
 import asyncio
 import time
@@ -15,26 +16,29 @@ logger = get_logger(__name__)
 
 class Neo4jGraphDatabase(GraphDatabase):
     """Neo4j implementation of GraphDatabase interface."""
-    
+
     def __init__(self):
         self.uri = config.NEO4J.URI
         self.username = config.NEO4J.USER
         self.password = config.NEO4J.PASSWORD
         self.driver = None
-    
+
     async def initialize(self) -> None:
         """Initialize the connection and wait for Neo4j to be ready."""
         await self._connect()
         await self._wait_for_ready()
-    
+        await self._ensure_indexes()
+
     async def _connect(self) -> None:
-        """Create the driver connection."""
         self.driver = AsyncGraphDatabase.driver(
             self.uri,
             auth=basic_auth(self.username, self.password),
-            max_connection_lifetime=3600
+            max_connection_pool_size=50,
+            connection_acquisition_timeout=60.0,
+            max_connection_lifetime=3600,
+            keep_alive=True,
         )
-    
+
     async def _wait_for_ready(self, timeout: int = 60) -> None:
         """Wait for Neo4j to be ready."""
         start_time = time.time()
@@ -53,78 +57,75 @@ class Neo4jGraphDatabase(GraphDatabase):
                     logger.error(f"Failed to connect to Neo4j after {timeout} seconds.")
                     raise e
                 await asyncio.sleep(2)
-    
+
+    async def _ensure_indexes(self) -> None:
+        """Create indexes for efficient lookups."""
+        indexes = [
+            "CREATE INDEX entity_canonical_name IF NOT EXISTS FOR (n:entity) ON (n.canonical_name)",
+            "CREATE INDEX entity_type IF NOT EXISTS FOR (n:entity) ON (n.entity_type)",
+            "CREATE INDEX node_type IF NOT EXISTS FOR (n:NodeName) ON (n.type)",
+            "CREATE INDEX node_event_time IF NOT EXISTS FOR (n:NodeName) ON (n.event_time)",
+        ]
+        async with self.driver.session() as session:
+            for idx_query in indexes:
+                try:
+                    await session.run(idx_query)
+                except Exception as e:
+                    logger.debug(f"Index creation skipped (may exist): {e}")
+
     async def close(self) -> None:
         if self.driver:
             await self.driver.close()
             self.driver = None
-    
+
     async def clean_graph(self) -> None:
         async with self.driver.session() as session:
             await session.run("MATCH (n) DETACH DELETE n")
-    
+
     # Node Operations
     async def create_nodes(self, nodes: List[Dict[str, Any]], user_id: str) -> None:
         if not await self.user_exists(user_id):
             logger.warning(f"User {user_id} does not exist. Cannot create nodes.")
             return
-        
+
+        clean_uid = user_id.replace("-", "_").replace(" ", "_")
+        user_label = f"User_{clean_uid}"
+
+        grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
+        for node in nodes:
+            node_type = node.get("type", "").replace(" ", "").replace("/", "")
+            labels = f"NodeName:{user_label}"
+            if node_type:
+                labels += f":{node_type}"
+
+            props = {}
+            for k, v in node.items():
+                if k == "name" or v is None:
+                    continue
+
+                is_complex = isinstance(v, dict)
+                if isinstance(v, list) and v:
+                    if any(isinstance(item, (dict, list)) for item in v):
+                        is_complex = True
+
+                props[k] = json.dumps(v, default=str) if is_complex else v
+
+            grouped_rows.setdefault(labels, []).append(
+                {"name": node["name"], "props": props}
+            )
+
         async with self.driver.session() as session:
-            for node in nodes:
-                node_type = node.get("type", "").replace(" ", "").replace("/", "")
-                
-                # Dynamic User Label for Isolation
-                clean_uid = user_id.replace("-", "_").replace(" ", "_")
-                user_label = f"User_{clean_uid}"
-                
-                labels = f"NodeName:{user_label}"
-                if node_type:
-                    labels += f":{node_type}"
-                
-                # Extract all properties as flat key-value pairs
-                # Skip 'name' as it's handled in MERGE, but KEEP 'type' as a property
-                props = {}
-                for k, v in node.items():
-                    if k == 'name':
-                        continue
-                    
-                    # Serialize complex types (dict or lists of complex types) to JSON string
-                    # Neo4j supports lists of primitive types natively
-                    is_complex = isinstance(v, dict)
-                    if isinstance(v, list) and v:
-                        # If list contains dicts or other lists, it's complex
-                        if any(isinstance(item, (dict, list)) for item in v):
-                            is_complex = True
-                    
-                    if is_complex:
-                        import json
-                        props[k] = json.dumps(v)
-                    else:
-                        props[k] = v
-                
-                # Build dynamic SET clause for all properties
-                set_clauses = []
-                for key in props.keys():
-                    if props[key] is not None:  # Skip None values
-                        set_clauses.append(f"n.{key} = ${key}")
-                
-                set_clause = ", ".join(set_clauses) if set_clauses else "n.type = $type"
-                
-                query = (
-                    f"MERGE (n:{labels} {{name: $name, UserId: $user_id}}) "
-                    f"SET {set_clause}"
-                )
-                
-                params = {
-                    "name": node["name"],
-                    "user_id": user_id,
-                    **{k: v for k, v in props.items() if v is not None}
-                }
-                
-                await session.run(query, params)
-    
+            for labels, rows in grouped_rows.items():
+                if not rows:
+                    continue
+                query = f"""
+                UNWIND $rows AS row
+                MERGE (n:{labels} {{name: row.name, UserId: $user_id}})
+                SET n += row.props
+                """
+                await session.run(query, rows=rows, user_id=user_id)
+
     async def get_node(self, node_name: str, user_id: str) -> Optional[Dict[str, Any]]:
-        # Return all node properties as flat dict
         query = """
         MATCH (n:NodeName {name: $node_name, UserId: $user_id})
         RETURN n
@@ -136,7 +137,22 @@ class Neo4jGraphDatabase(GraphDatabase):
                 node = dict(record["n"])
                 return node
             return None
-    
+
+    async def get_nodes_by_ids(
+        self, node_names: List[str], user_id: str
+    ) -> List[Dict[str, Any]]:
+        if not node_names:
+            return []
+        query = """
+        MATCH (n:NodeName {UserId: $user_id})
+        WHERE n.name IN $node_names
+        RETURN n
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, node_names=node_names, user_id=user_id)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
     async def get_all_nodes(self, user_id: str) -> List[Dict[str, Any]]:
         # Return all node properties as flat dicts
         query = """
@@ -151,41 +167,60 @@ class Neo4jGraphDatabase(GraphDatabase):
                 node = dict(record["n"])
                 nodes.append(node)
             return nodes
-    
-    async def check_node_exists(self, node_name: str, node_type: str, user_id: str) -> bool:
+
+    async def check_node_exists(
+        self, node_name: str, node_type: str, user_id: str
+    ) -> bool:
         query = """
         MATCH (n {name: $node_name, NodeType: $node_type, UserId: $user_id})
         RETURN n.name AS NodeName
         """
         async with self.driver.session() as session:
-            result = await session.run(query, node_name=node_name, node_type=node_type, user_id=user_id)
+            result = await session.run(
+                query, node_name=node_name, node_type=node_type, user_id=user_id
+            )
             return result.single() is not None
-    
+
     # Relationship Operations
-    async def create_relationships(self, relationships: List[Dict[str, Any]], user_id: str) -> None:
+    async def create_relationships(
+        self, relationships: List[Dict[str, Any]], user_id: str
+    ) -> None:
         if not await self.user_exists(user_id):
-            logger.warning(f"User {user_id} does not exist. Cannot create relationships.")
+            logger.warning(
+                f"User {user_id} does not exist. Cannot create relationships."
+            )
             return
-        
-        async with self.driver.session() as session:
-            for relationship in relationships:
-                relation_type = relationship["relation"].upper().replace(" ", "_")
-                
-                # Use dynamic relationship type (APOC or raw Cypher)
-                # For Neo4j 5+, we can use dynamic relationship creation
-                query = f"""
-                    MATCH (source {{UserId: $user_id}}), (target {{UserId: $user_id}})
-                    WHERE source.name = $source AND target.name = $target
-                    MERGE (source)-[r:{relation_type}]->(target)
-                    SET r.created_at = datetime()
-                """
-                await session.run(query, {
+
+        grouped_rows: Dict[str, List[Dict[str, Any]]] = {}
+        for relationship in relationships:
+            relation_type = relationship["relation"].upper().replace(" ", "_")
+            grouped_rows.setdefault(relation_type, []).append(
+                {
                     "source": relationship["source"],
                     "target": relationship["target"],
-                    "user_id": user_id
-                })
-    
-    async def get_node_relationships(self, node_name: str, user_id: str) -> List[Dict[str, Any]]:
+                    "value": relationship.get("value"),
+                }
+            )
+
+        async with self.driver.session() as session:
+            for relation_type, rows in grouped_rows.items():
+                if not rows:
+                    continue
+                query = f"""
+                    UNWIND $rows AS row
+                    MATCH (source {{UserId: $user_id, name: row.source}})
+                    MATCH (target {{UserId: $user_id, name: row.target}})
+                    MERGE (source)-[r:{relation_type}]->(target)
+                    SET r.created_at = datetime()
+                    FOREACH (_ IN CASE WHEN row.value IS NULL THEN [] ELSE [1] END |
+                        SET r.value = row.value
+                    )
+                """
+                await session.run(query, rows=rows, user_id=user_id)
+
+    async def get_node_relationships(
+        self, node_name: str, user_id: str
+    ) -> List[Dict[str, Any]]:
         query = """
         MATCH (n:NodeName {name: $node_name, UserId: $user_id})-[r]-(m:NodeName)
         RETURN type(r) AS relation, m.name AS related_node, r.value AS value,
@@ -195,14 +230,18 @@ class Neo4jGraphDatabase(GraphDatabase):
             result = await session.run(query, node_name=node_name, user_id=user_id)
             return [
                 {
-                    "source": node_name if record["direction"] == "outgoing" else record["related_node"],
-                    "target": record["related_node"] if record["direction"] == "outgoing" else node_name,
+                    "source": node_name
+                    if record["direction"] == "outgoing"
+                    else record["related_node"],
+                    "target": record["related_node"]
+                    if record["direction"] == "outgoing"
+                    else node_name,
                     "relation": record["relation"],
-                    "value": record["value"]
-                } 
+                    "value": record["value"],
+                }
                 for record in await result.data()
             ]
-    
+
     async def get_all_relationships(self, user_id: str) -> List[Dict[str, Any]]:
         query = """
         MATCH (source:NodeName {UserId: $user_id})-[r]->(target:NodeName {UserId: $user_id})
@@ -211,7 +250,35 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
             return await result.data()
-    
+
+    async def get_relationships_for_nodes(
+        self, node_names: List[str], user_id: str
+    ) -> List[Dict[str, Any]]:
+        if not node_names:
+            return []
+        query = """
+        MATCH (n:NodeName {UserId: $user_id})-[r]-(m:NodeName {UserId: $user_id})
+        WHERE n.name IN $node_names
+        RETURN n.name AS source_node, type(r) AS relation, m.name AS related_node,
+               CASE WHEN startNode(r) = n THEN 'outgoing' ELSE 'incoming' END AS direction
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, node_names=node_names, user_id=user_id)
+            records = await result.data()
+            return [
+                {
+                    "source": record["source_node"]
+                    if record["direction"] == "outgoing"
+                    else record["related_node"],
+                    "target": record["related_node"]
+                    if record["direction"] == "outgoing"
+                    else record["source_node"],
+                    "relation": record["relation"],
+                    "source_node": record["source_node"],
+                }
+                for record in records
+            ]
+
     # User Management
     async def create_user(self, user_id: str) -> None:
         query = """
@@ -221,7 +288,7 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             await session.run(query, user_id=user_id)
         logger.info(f"User {user_id} created successfully.")
-    
+
     async def user_exists(self, user_id: str) -> bool:
         query = """
         MATCH (u:User {id: $user_id})
@@ -230,8 +297,8 @@ class Neo4jGraphDatabase(GraphDatabase):
         async with self.driver.session() as session:
             result = await session.run(query, user_id=user_id)
             record = await result.single()
-            return record and record['exists']
-    
+            return record and record["exists"]
+
     async def delete_user(self, user_id: str) -> None:
         query1 = """
         MATCH (n {UserId: $user_id})
@@ -245,3 +312,176 @@ class Neo4jGraphDatabase(GraphDatabase):
             await session.run(query1, user_id=user_id)
             await session.run(query2, user_id=user_id)
         logger.info(f"User {user_id} and all associated nodes deleted successfully.")
+
+    async def get_nodes_by_type(
+        self,
+        user_id: str,
+        memory_type: str,
+        limit: int = 50,
+        date_start: Optional[datetime] = None,
+        date_end: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
+        # Build WHERE clause for date filtering
+        where_clauses = []
+        params = {"user_id": user_id, "memory_type": memory_type, "limit": limit}
+
+        if date_start:
+            where_clauses.append("n.event_time >= $date_start")
+            params["date_start"] = date_start.isoformat()
+
+        if date_end:
+            where_clauses.append("n.event_time <= $date_end")
+            params["date_end"] = date_end.isoformat()
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "AND " + " AND ".join(where_clauses)
+
+        query = f"""
+        MATCH (n:NodeName {{UserId: $user_id, type: $memory_type}})
+        WHERE true {where_clause}
+        RETURN n
+        ORDER BY n.event_time DESC
+        LIMIT $limit
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_nodes_by_day(self, user_id: str, day_id: str) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, day_id: $day_id})
+        RETURN n
+        ORDER BY n.event_time ASC
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, user_id=user_id, day_id=day_id)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_nodes_by_session(
+        self, user_id: str, session_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, session_id: $session_id})
+        RETURN n
+        ORDER BY n.event_time ASC
+        LIMIT $limit
+        """
+        async with self.driver.session() as session:
+            result = await session.run(
+                query, user_id=user_id, session_id=session_id, limit=limit
+            )
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_recent_nodes(
+        self, user_id: str, memory_type: Optional[str] = None, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        if memory_type:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id, type: $memory_type})
+            RETURN n
+            ORDER BY n.event_time DESC
+            LIMIT $limit
+            """
+            params = {"user_id": user_id, "memory_type": memory_type, "limit": limit}
+        else:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id})
+            RETURN n
+            ORDER BY n.event_time DESC
+            LIMIT $limit
+            """
+            params = {"user_id": user_id, "limit": limit}
+
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_temporal_predecessor(
+        self, user_id: str, target_time: str
+    ) -> Optional[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: 'episode'})
+        WHERE n.event_time < $target_time
+        RETURN n
+        ORDER BY n.event_time DESC
+        LIMIT 1
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, user_id=user_id, target_time=target_time)
+            record = await result.single()
+            if record:
+                return dict(record["n"])
+            return None
+
+    async def get_entities_by_type(
+        self, user_id: str, entity_type: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: 'entity', entity_type: $entity_type})
+        RETURN n
+        ORDER BY n.event_time DESC
+        LIMIT $limit
+        """
+        async with self.driver.session() as session:
+            result = await session.run(
+                query, user_id=user_id, entity_type=entity_type, limit=limit
+            )
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
+
+    async def get_entity_by_name(
+        self, user_id: str, name: str
+    ) -> Optional[Dict[str, Any]]:
+        query = """
+        MATCH (n:NodeName {UserId: $user_id, type: 'entity'})
+        WHERE toLower(n.canonical_name) = toLower($name)
+        RETURN n
+        LIMIT 1
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, user_id=user_id, name=name)
+            record = await result.single()
+            if record:
+                return dict(record["n"])
+            return None
+
+    async def search_text_nodes(
+        self,
+        user_id: str,
+        query_text: str,
+        types: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        query_lower = query_text.lower()
+        if types:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id})
+            WHERE n.type IN $types
+              AND (toLower(n.title) CONTAINS $query_text OR toLower(n.content) CONTAINS $query_text)
+            RETURN n
+            LIMIT $limit
+            """
+            params = {
+                "user_id": user_id,
+                "types": types,
+                "query_text": query_lower,
+                "limit": limit,
+            }
+        else:
+            query = """
+            MATCH (n:NodeName {UserId: $user_id})
+            WHERE toLower(n.title) CONTAINS $query_text OR toLower(n.content) CONTAINS $query_text
+            RETURN n
+            LIMIT $limit
+            """
+            params = {"user_id": user_id, "query_text": query_lower, "limit": limit}
+
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]

@@ -31,7 +31,7 @@
 persona/
 ├── adapters/         # High-level orchestrators (PersonaAdapter)
 ├── core/             # Database operations, retrieval, context
-├── services/         # Business logic (ingestion, RAG, ask)
+├── services/         # Business logic (ingestion, persona)
 ├── models/           # Memory types and API schemas
 └── llm/              # LLM clients and functions
 
@@ -52,18 +52,18 @@ tests/
    - Unified entry point for ingestion
    - Orchestrates extraction → linking → persistence
 
-2. **Retriever** (`core/retrieval.py`)
-   - Vector similarity + graph traversal
-   - Returns formatted context for LLM
+2. **PersonaService** (`services/persona_service.py`)
+   - Primary entry point for memory-augmented dialogue
+   - `run_agent()`: Agent loop with recall/record tools
+   - `ask()`: Structured JSON extraction
 
-3. **MemoryStore** (`core/memory_store.py`)
+3. **Retriever** (`core/retrieval.py`)
+   - Time-windowed fetch + graph traversal (via stored links)
+   - Returns prose-formatted context for LLM
+
+4. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories
    - Handles temporal linking
-
-4. **Services** (`services/`)
-   - `ingestion_service.py`: Memory extraction from text
-   - `rag_service.py`: RAG query processing
-   - `ask_service.py`: Structured insights
 
 ## Development Workflow
 
@@ -141,8 +141,13 @@ curl -X POST "http://localhost:8000/api/v1/users/my_user/ingest" \
   -H "Content-Type: application/json" \
   -d '{"content": "I love Python programming"}'
 
-# Query
-curl -X POST "http://localhost:8000/api/v1/users/my_user/rag/query" \
+# Chat with agent loop
+curl -X POST "http://localhost:8000/api/v1/users/my_user/chat" \
   -H "Content-Type: application/json" \
-  -d '{"query": "What do I like?"}'
+  -d '{"messages": [{"role": "user", "content": "What do I like?"}]}'
+
+# Get structured output
+curl -X POST "http://localhost:8000/api/v1/users/my_user/persona/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What are my preferences?", "output_schema": {"preferences": []}}'
 ```
