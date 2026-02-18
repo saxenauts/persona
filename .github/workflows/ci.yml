@@ -18,6 +18,9 @@ jobs:
       PASSWORD_NEO4J: password
       URI_NEO4J: bolt://neo4j:7687
       OPENAI_API_KEY: fake-key-for-testing
+      OPENAI_CHAT_MODEL: gpt-4o-mini
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      CI: "true"
 
     steps:
       - name: Checkout repository
@@ -31,6 +34,9 @@ jobs:
           URI_NEO4J=${{ env.URI_NEO4J }}
           NEO4J_AUTH=${{ env.USER_NEO4J }}/${{ env.PASSWORD_NEO4J }}
           OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
+          OPENAI_CHAT_MODEL=${{ env.OPENAI_CHAT_MODEL }}
+          OPENAI_EMBEDDING_MODEL=${{ env.OPENAI_EMBEDDING_MODEL }}
+          CI=${{ env.CI }}
           EOF
 
       - name: Start Neo4j and wait for readiness
