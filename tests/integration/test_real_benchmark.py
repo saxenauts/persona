@@ -11,6 +11,7 @@ Run: docker compose run --rm app poetry run pytest tests/integration/test_real_b
 
 import asyncio
 import pytest
+import os
 from datetime import datetime
 
 from persona.services.ingestion_service import MemoryIngestionService, IngestionResult
@@ -74,58 +75,60 @@ These apps are great for earning rewards on purchases you're already making!"""
 USER_ID = "benchmark_real_v2"
 
 
-async def generate_memory_episode(raw_content, user_id, session_id, graph_db, memory_store, ingestion_service):
+async def generate_memory_episode(
+    raw_content, user_id, session_id, graph_db, memory_store, ingestion_service
+):
     """Full pipeline: Ingest → Embed → Persist."""
     result = await ingestion_service.ingest(
         raw_content=raw_content,
         user_id=user_id,
         session_id=session_id,
         timestamp=datetime.utcnow(),
-        source_type="conversation"
+        source_type="conversation",
     )
-    
+
     if not result.success:
         return result
-    
+
     for memory in result.memories:
         memory_links = [l for l in result.links if l.source_id == memory.id]
         await memory_store.create(memory, links=memory_links)
-    
+
     episode = next((m for m in result.memories if m.type == "episode"), None)
     if episode:
         previous = await memory_store.get_most_recent_episode(user_id)
         if previous and previous.id != episode.id:
             await memory_store.link_temporal_chain(episode, previous)
-    
+
     return result
 
 
 @pytest.mark.asyncio
 async def test_ingest_real_benchmark_sessions():
     """Ingest real benchmark sessions and verify memories are created."""
-    
+
     # Initialize
     graph_db = Neo4jGraphDatabase()
     await graph_db.initialize()
-    
+
     if not await graph_db.user_exists(USER_ID):
         await graph_db.create_user(USER_ID)
-    
+
     memory_store = MemoryStore(graph_db)
     ingestion_service = MemoryIngestionService()
-    
+
     sessions = [
         ("degree_answer", DEGREE_SESSION),
         ("spotify_answer", SPOTIFY_SESSION),
         ("haystack_cashback", HAYSTACK_SESSION),
     ]
-    
+
     all_memories = []
-    
+
     print("\n" + "=" * 60)
     print("INGESTING REAL BENCHMARK SESSIONS")
     print("=" * 60)
-    
+
     for session_id, content in sessions:
         result = await generate_memory_episode(
             raw_content=content,
@@ -133,29 +136,29 @@ async def test_ingest_real_benchmark_sessions():
             session_id=session_id,
             graph_db=graph_db,
             memory_store=memory_store,
-            ingestion_service=ingestion_service
+            ingestion_service=ingestion_service,
         )
-        
+
         assert result.success, f"Failed to ingest {session_id}: {result.error}"
         all_memories.extend(result.memories)
-        
+
         print(f"\n📝 Session: {session_id}")
         for m in result.memories:
             print(f"   [{m.type}] {m.title}")
-    
+
     await graph_db.close()
-    
+
     print("\n" + "=" * 60)
     print(f"✅ TOTAL MEMORIES CREATED: {len(all_memories)}")
     print(f"   User ID: {USER_ID}")
     print("=" * 60)
-    
+
     # Assertions
     assert len(all_memories) >= 3, "Should have at least 3 episodes"
-    
+
     episodes = [m for m in all_memories if m.type == "episode"]
     assert len(episodes) == 3, "Should have 3 episodes"
-    
+
     # Print queries for user
     print(f"""
 📊 NEO4J QUERIES TO VERIFY (http://localhost:7474):
@@ -192,3 +195,8 @@ RETURN n, r, m
 
 if __name__ == "__main__":
     asyncio.run(test_ingest_real_benchmark_sessions())
+if os.getenv("CI"):
+    pytest.skip(
+        "Requires local benchmark artifacts and extended runtime; skipped in CI",
+        allow_module_level=True,
+    )
