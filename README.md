@@ -50,7 +50,6 @@ Persona v0.3 includes critical bug fixes (H1-H5) and a canonical claim policy th
 |--------|----------------------|-------|----------|
 | PersonaMem subset baseline | 65.3% | N=150, seeds 42/123/456 | A-001 |
 | PersonaMem full single-seed baseline | 66.2% | N=589, seed 42 | A-002 |
-| LongMemEval baseline | 81.3% | N=300, seeds 42/123/456 | A-003 |
 | BEAM (10 abilities) baseline | 69.0% | N=100, seed 1 (`event_ordering=0%`) | A-004 |
 
 **Key Improvements**:
@@ -58,9 +57,10 @@ Persona v0.3 includes critical bug fixes (H1-H5) and a canonical claim policy th
 - **Claims governance hardened**: release and paper claims are constrained to canonical methodology + canonical claims table
 - **Experimental slices retained as non-headline evidence**: paired 50Q/100Q findings are documented separately
 
-**PersonaMem** measures personal memory accuracy across 500 synthetic user profiles. Frontier models (GPT-4.5, o4-mini, Gemini-2.0) achieve ~50% per the [benchmark paper](https://arxiv.org/abs/2501.14260).
+**PersonaMem** benchmark framing and external reference baselines are documented in the [benchmark paper](https://arxiv.org/abs/2501.14260).
 
-> **Note**: Audit-grade release headlines come from canonical claim rows A-001 through A-004.
+> **Note**: Audit-grade release headlines come from canonical claim rows A-001, A-002, and A-004.
+> One previously published benchmark claim is intentionally deferred from v0.3 public release headlines.
 > Experimental paired slices (50Q/100Q) remain non-headline and are documented in `docs/PERSONAMEM_EVAL_CANONICAL.md`.
 > Canonical methodology: [release_artifacts/methodology.md](release_artifacts/methodology.md)
 > Canonical claims table: [docs/CLAIMS_TABLE_V03.md](docs/CLAIMS_TABLE_V03.md)

@@ -72,5 +72,5 @@ Last updated: 2026-02-18 (America/Los_Angeles)
 
 - Sequencing detour captured: release-first execution with paper deferred to post-release phase.
 - Validation detour captured: temporary unit-only Docker gate superseded by full-profile gate evidence (`211 passed, 8 skipped`).
-- Claims detour captured: README benchmark wording aligned to canonical claims table IDs (A-001 through A-004).
+- Claims detour captured: README benchmark wording aligned to canonical claims table IDs (A-001, A-002, A-004).
 - Governance detour captured: evidence-scope and phase-lock/revalidation wording normalized across active control docs.

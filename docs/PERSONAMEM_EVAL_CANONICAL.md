@@ -55,6 +55,10 @@ These are valid and reproducible, but are not yet promoted to external claim bas
 | Paired 50Q (fixed IDs) | 64.0% (32/50) | 68.0% (34/50) | +4pp | McNemar p=0.6875 | `../memory-evals/results/run_20260208_154926`, `../memory-evals/results/run_20260208_212320` |
 | Paired 100Q (fixed IDs) | 63.0% (63/100) | 67.0% (67/100) | +4pp | McNemar p=0.34375 | `../memory-evals/results/ulw_paired100_20260209_armA/run_20260209_133301`, `../memory-evals/results/ulw_paired100_20260209_armB/run_20260209_035700` |
 
+Denominator note for paired 100Q Arm B:
+- Raw Arm B `summary.json` reports `82/119` because duplicate-ID entries are present in that run output.
+- Canonical paired view is normalized to the shared 100 unique IDs against Arm A, yielding `67/100`.
+
 Operational diagnostics on paired runs:
 - no tool inflation (`1.04 -> 1.02` on 50Q, `1.02 -> 1.00` on 100Q),
 - no cost/loop blow-up observed,
@@ -67,7 +71,7 @@ Operational diagnostics on paired runs:
 Source: `../memory-evals/results/run_20260208_154926/deep_logs.jsonl`, `../memory-evals/results/ulw_paired100_20260209_armA/run_20260209_133301/deep_logs.jsonl`, `../memory-evals/results/ulw_paired100_20260209_armB/run_20260209_035700/deep_logs.jsonl`
 
 1. **Temporal evolution misses are real (P0)**: at least 3 deterministic failures where earlier preference is stored and later reversal is not reflected (cases 342, 80, 131).
-2. **Retrieval insufficiency is a major driver**: multiple "ambiguous" failures become explainable when full source conversations are examined.
+2. **Retrieval insufficiency is a major driver**: in 50Q forensics, initial classification marked `14/18` as ambiguous, but source-trace review reclassified most of those as retrieval insufficiency once full conversation arcs were examined.
 3. **`suggest_new_ideas` is structurally weak**: ~30% in the 100Q paired slice (Arm B: 6/20), with option-style/verbosity effects interacting with weak evidence selection.
 4. **Second-pass gate is provisional winner**: consistent `+4pp` in 50Q and 100Q paired tests, with stable cost profile.
 

@@ -88,7 +88,7 @@ This timeline is commit-backed (Tier 1).
 ### A) Governance and evidence discipline
 
 - Single canonical status file created: `docs/PERSONAMEM_EVAL_CANONICAL.md`.
-- Audit-grade baseline preserved: PersonaMem 65.3% subset, 66.2% full (single seed), LongMemEval 81.3%, BEAM 69.0 (event_ordering 0).
+- Audit-grade baseline preserved: PersonaMem 65.3% subset, 66.2% full (single seed), BEAM 69.0 (event_ordering 0).
 - Experimental runs explicitly labeled non-headline until promotion criteria are met.
 
 ### B) Runtime and eval interventions executed
