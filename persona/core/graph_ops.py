@@ -80,15 +80,9 @@ class GraphOps:
         query: str, 
         user_id: str, 
         limit: int = 5, 
-        index_name: str = "embeddings_index",
-        date_range: Optional[tuple] = None
+        index_name: str = "embeddings_index"
     ) -> Dict[str, Any]:
-        """
-        Perform similarity search on the graph based on a text query.
-        
-        Args:
-            date_range: Optional tuple of (start_date, end_date) to filter results.
-        """
+        """Perform similarity search on the graph based on a text query."""
         if not await self.user_exists(user_id):
             logger.warning(f"User {user_id} does not exist. Cannot perform similarity search.")
             return {"query": query, "results": []}
@@ -100,17 +94,7 @@ class GraphOps:
             return {"query": query, "results": []}
 
         logger.debug(f"Performing similarity search for the query: '{query}' for user ID: '{user_id}'")
-        
-        filters = {}
-        if date_range:
-            filters["date_range"] = date_range
-
-        results = await self.vector_store.search_similar(
-            query_embeddings[0], 
-            user_id, 
-            limit,
-            filters=filters
-        )
+        results = await self.vector_store.search_similar(query_embeddings[0], user_id, limit)
 
         return {
             "query": query,

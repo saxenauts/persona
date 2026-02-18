@@ -2,18 +2,15 @@
 
 This document provides a high-level orientation for contributors.
 
-> **For the full architecture vision and philosophy, see [ARCHITECTURE.md](architecture/ARCHITECTURE.md)**
-
-## Project Structure
+## Architecture
 
 ```
 persona/           # Core library
 ├── adapters/      # High-level orchestrators
 ├── core/          # Database operations and retrieval
-├── llm/           # LLM providers, prompts, embeddings
+├── llm/           # LLM providers and functions
 ├── models/        # Data models
-├── services/      # Business logic (ingestion, persona)
-└── tools/         # Agent tools (recall, record, expand, follow)
+└── services/      # Business logic
 
 server/            # FastAPI application
 tests/             # Test suite
@@ -22,21 +19,17 @@ docs/              # Documentation
 
 ## Core Concepts
 
-### 4-Pillar Memory Model
+### Memory Model
 
-| Pillar | Purpose | Example |
-|--------|---------|---------|
+Persona stores user data as three typed memory classes:
+
+| Type | Purpose | Example |
+|------|---------|---------|
 | **Episode** | What happened | "Had coffee with Sam to discuss his startup" |
-| **Psyche** | Who they are | "Prefers remote work", "Values efficiency" |
-| **Entity** | What/who exists | People, places, orgs, projects, concepts |
-| **Note** | What to do | Goals, tasks, reminders (intention-triggered only) |
+| **Psyche** | Who they are | "Prefers remote work" |
+| **Goal** | What they want | "Finish Q4 roadmap by Friday" |
 
 All memories are stored in Neo4j with embeddings for vector similarity search.
-
-**Entity vs Note (CRITICAL):**
-- Entity = Things that EXIST (nouns): "Sarah", "Paris", "Project Alpha"
-- Note = Things to DO (intentions): "call Sarah", "book trip to Paris"
-- Facts about entities (e.g., "Sarah's birthday is June 5") are **Entity attributes**, not Notes
 
 ### Key Components
 
@@ -45,48 +38,16 @@ All memories are stored in Neo4j with embeddings for vector similarity search.
    - Orchestrates: extraction → linking → persistence
 
 2. **Retriever** (`core/retrieval.py`)
-   - Time-windowed fetch + link expansion
-   - Returns prose-formatted context for LLM consumption
+   - Combines vector similarity with graph traversal
+   - Returns formatted context for LLM consumption
 
-3. **Tools Layer** (`tools/memory.py`)
-   - **Agent-Native Design**: Tools are atomic primitives; complex features are emergent outcomes of the agent's dialectic loop.
-   - **Read Tools**: `recall(query)`, `browse()` (chronological), `get_memory(id)`, `expand_neighbors(id)`, `follow_relationship(id, type)`.
-   - **Write Tools**: `record(text)` (auto-ingest), `update_memory(id, updates)` (edit status, due_date, importance).
-
-4. **MemoryStore** (`core/memory_store.py`)
+3. **MemoryStore** (`core/memory_store.py`)
    - CRUD operations for typed memories
    - Handles temporal linking between episodes
-   - Batch operations: `get_memories_by_ids()`, `get_nodes_by_ids()`
 
-5. **ContextFormatter** (`core/context.py`)
-   - Transforms memories into prose context
-   - Renders links inline for narrative continuity
-   - Sections: `<user>`, `<recent_context>`, `<active_context>`
-
-6. **Memeplex** (`models/memory.py`)
-   - Per-user "world model index" - what the LLM knows about this user
-   - Topics (universal), people, projects, places, concepts
-   - Time windows: last_week_topics, last_month_topics
-   - Stored as JSON blob, injected into system prompt as `{world_model}`
-
-### Services
-
-Business logic layer between API and core:
-
-1. **PersonaService** (`services/persona_service.py`) - **PRIMARY ENTRY POINT**
-   - Unified orchestrator for memory-augmented dialogue
-   - `run_agent()`: Agent loop with recall/record/expand/follow tools
-   - `ask()`: Structured JSON extraction via agent loop
-   - Accepts `graph_ops` via constructor (no duplicate connections)
-
-2. **MemoryIngestionService** (`services/ingestion_service.py`)
-   - Extracts memories from raw text using LLM
-   - Creates Episode, Psyche, Entity, and Note memories
-   - Handles temporal linking between episodes
-
-3. **ConsolidationService** (`services/consolidation_service.py`)
-   - Synthesizes UserCard identity prose + Memeplex refresh
-   - Cached in graph with TTL (lazy generation on first query)
+4. **ContextFormatter** (`core/context.py`)
+   - Transforms memories into XML context
+   - Groups by type for LLM readability
 
 ## Data Flow
 
@@ -97,56 +58,31 @@ Raw Text → PersonaAdapter → MemoryIngestionService → MemoryStore → Neo4j
                          LLM extracts:
                          - Episode (what happened)
                          - Psyche (traits/preferences)
-                         - Entity (people/places/things)
-                         - Note (tasks/goals/reminders)
-                         
-                         Provenance tracked:
-                         - session_id (source conversation)
-                         - extraction_model (which LLM)
+                         - Goals (tasks/todos)
 ```
 
-### Retrieval (Agent Loop)
+### Retrieval
 ```
-User Message → /chat endpoint → PersonaService.run_agent()
-                                       ↓
-                              Agent decides which tools to call:
-                              - recall(query) → vector search + time filter
-                              - expand_neighbors(id) → graph traversal
-                              - follow_relationship(id, type) → chain tracing
-                              - record(text) → save new memories
-                                       ↓
-                              Format context → LLM generates response
+Query → Retriever → Vector Search + Graph Traversal → ContextFormatter → LLM
+                                                            ↓
+                                                    <memory_context>
+                                                      <episodes>...</episodes>
+                                                      <psyche>...</psyche>
+                                                      <goals>...</goals>
+                                                    </memory_context>
 ```
-
-## API Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/users/{user_id}/chat` | POST | **Primary** - Personal AI conversation |
-| `/users/{user_id}/persona/ask` | POST | Structured JSON extraction |
-| `/users/{user_id}/ingest` | POST | Ingest single content |
-| `/users/{user_id}/ingest/batch` | POST | Batch ingest |
-| `/users/{user_id}/sessions/{session_id}/close` | POST | Close session + integrate |
-| `/users/{user_id}/memeplex` | GET | Read user's world model index |
-| `/users/{user_id}/memeplex/refresh` | POST | Force refresh memeplex from memories |
-| `/users/{user_id}/memories` | GET | List memories (debug) |
-| `/users/{user_id}/memories/stats` | GET | Memory statistics (debug) |
-| `/users/{user_id}` | POST | Create user |
-| `/users/{user_id}` | DELETE | Delete user |
 
 ## Dependency Injection
 
 The application uses FastAPI's dependency injection:
 
 ```python
-@router.post("/users/{user_id}/chat")
-async def chat(
+@router.post("/users/{user_id}/rag/query")
+async def rag_query(
     user_id: str,
-    request: ChatRequest,
+    query: RAGQuery,
     graph_ops: GraphOps = Depends(get_graph_ops)
 ):
-    service = PersonaService(graph_ops)
-    result = await service.run_agent(user_id=user_id, query=request.messages[-1].content)
     ...
 ```
 
@@ -164,82 +100,32 @@ docker compose up -d
 # Neo4j: http://localhost:7474
 ```
 
-## Design Philosophy: LLM-First
+## Session & Episode Management
 
-**No manual routers. No keyword matching. No heuristic gating.**
+An **Episode** in Persona represents a distinct block of interaction or event. The definition of an episode is flexible and depends on the **UI and integration context** of the agent using Persona.
 
-All decisions are made by LLMs through prompt engineering:
-- Tool selection: LLM decides which tool to call based on context
-- Write vs defer: LLM decides when to `record()` based on prompt guidance
-- Retrieval strategy: LLM chooses vector vs graph based on query semantics
+Factors influencing episode boundaries:
+- **Time Blocks**: Dividing a user's day into morning/afternoon/evening sessions.
+- **Auth Sessions**: Ingesting data per login session.
+- **UI Interaction**: Triggering a new episode on "New Chat", "Reload", or "Clear Context".
+- **Token Limits**: Chunking long histories to manage LLM context windows.
+- **Multiple Sources**: Handling parallel streams from different platforms (Slack, Email, Chat).
 
-**Anti-patterns (NEVER do these):**
-- `if "remind" in message: enable_record_tool()` - NO keyword routing
-- `has_immediate_write_intent(message)` - NO intent classifiers
-- Manual routing logic before LLM calls - NO preprocessing gates
+The system is designed to handle both **Single-Session** (one focused chat) and **Multi-Session** (long-term historical) retrieval patterns.
 
-## Context Engineering
+## Customization & Extensibility
 
-### UserCard
+Persona is built to be highly customizable via the **PersonaAdapter**.
 
-Compact identity anchor placed at the start of context (primacy position):
+- **Custom Schemas**: Define your own extraction logic to focus on specific domains (e.g., medical, financial, technical).
+- **Extraction Rules**: Modify how text is parsed into Episode, Psyche, and Goal types.
+- **Cross-Linking**: Configure how memories are linked across different sessions or sources.
+- **Memory Priority**: Customize weighted retrieval for specific use cases.
 
-```python
-UserCard(
-    user_id="user_123",
-    timezone="America/Los_Angeles",
-    identity_prose="Alex is a software engineer and parent who values work-life balance...",
-)
-```
-
-### Prose Format
-
-Context rendered as natural language with semantic sections:
-
-```
-<user>
-Alex is a software engineer and parent...
-</user>
-
-<recent_context>
-December 27: Had a great meeting with team (led to project kickoff)
-December 20: Started the new project
-</recent_context>
-
-<active_context>
-Trait: Values efficiency. Preference: Morning meetings.
-Current tasks: Launch MVP. Review documentation.
-</active_context>
-```
-
-## Memeplex: World Model Index
-
-The Memeplex provides the LLM with a "table of contents" for the user's world. Without it, the agent only sees what's retrieved - with it, the agent knows what *exists* and can proactively explore.
-
-**Schema** (`persona/models/memory.py`):
-```python
-Memeplex(
-    user_id: str,
-    topics: List[str],           # "fitness", "AI research", "cooking"
-    people: List[str],           # "Sarah (wife)", "Max (colleague)"
-    projects: List[str],         # "Persona", "Home Renovation"
-    places: List[str],           # "SF (home)", "Tokyo (2024 trip)"
-    concepts: List[str],         # "stoicism", "minimalism"
-    last_week_topics: List[str], # What's been active recently
-    last_month_topics: List[str],
-    recent_focus: str,           # "Building Memeplex for v1 release"
-    memory_stats: MemoryStats,
-)
-```
-
-**Design Principle**: Topics are universal (everyone has them). Entities (people/projects/places) are optional.
-
-**Injected into system prompt** via `{world_model}` slot in `PERSONAL_AI_SYSTEM_PROMPT`.
-
-**Refresh flow**: Ingestion → Integration → Consolidation → `refresh_memeplex()` → stored in Neo4j.
+The `PersonaAdapter` acts as the primary interface for these customizations, allowing you to tailor the "memetic digital organism" to your specific application needs.
 
 ## Further Reading
 
 - [API Reference](API.md)
-- [Memory Model Deep Dive](MEMORY_MODEL.md)
+- [LLM Clients Implementation](LLM_CLIENTS_IMPLEMENTATION.md)
 - [Development Guide](DEVELOPMENT.md)

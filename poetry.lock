@@ -1381,43 +1381,6 @@ files = [
 tests = ["pytest"]
 
 [[package]]
-name = "honcho-ai"
-version = "1.6.0"
-description = "Official DX Optimized Python SDK for Honcho"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "honcho_ai-1.6.0-py3-none-any.whl", hash = "sha256:621e6ef4c392dde1190b3945d7955d9d747e410fdd830465de89805f6c713aac"},
-]
-
-[package.dependencies]
-honcho-core = ">=1.6.1"
-httpx = ">=0.28.0,<1"
-pydantic = ">=2.0.0,<3"
-
-[[package]]
-name = "honcho-core"
-version = "1.8.0"
-description = "The official Python library for the honcho API"
-optional = false
-python-versions = ">=3.9"
-files = [
-    {file = "honcho_core-1.8.0-py3-none-any.whl", hash = "sha256:30a44b7d421328dfac015e8a6ecbe09c89b6cac9f3a913262244e7d15698a8a8"},
-    {file = "honcho_core-1.8.0.tar.gz", hash = "sha256:ffe0840639651640722ad0ed38d193cc9402b077dac3e6726ac7be551398d952"},
-]
-
-[package.dependencies]
-anyio = ">=3.5.0,<5"
-distro = ">=1.7.0,<2"
-httpx = ">=0.23.0,<1"
-pydantic = ">=1.9.0,<3"
-sniffio = "*"
-typing-extensions = ">=4.10,<5"
-
-[package.extras]
-aiohttp = ["aiohttp", "httpx-aiohttp (>=0.1.9)"]
-
-[[package]]
 name = "hpack"
 version = "4.1.0"
 description = "Pure-Python HPACK header encoding"
@@ -1430,24 +1393,24 @@ files = [
 
 [[package]]
 name = "httpcore"
-version = "1.0.8"
+version = "0.17.3"
 description = "A minimal low-level HTTP client."
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.7"
 files = [
-    {file = "httpcore-1.0.8-py3-none-any.whl", hash = "sha256:5254cf149bcb5f75e9d1b2b9f729ea4a4b883d1ad7379fc632b727cec23674be"},
-    {file = "httpcore-1.0.8.tar.gz", hash = "sha256:86e94505ed24ea06514883fd44d2bc02d90e77e7979c8eb71b90f41d364a1bad"},
+    {file = "httpcore-0.17.3-py3-none-any.whl", hash = "sha256:c2789b767ddddfa2a5782e3199b2b7f6894540b17b16ec26b2c4d8e103510b87"},
+    {file = "httpcore-0.17.3.tar.gz", hash = "sha256:a6f30213335e34c1ade7be6ec7c47f19f50c56db36abef1a9dfa3815b1cb3888"},
 ]
 
 [package.dependencies]
+anyio = ">=3.0,<5.0"
 certifi = "*"
 h11 = ">=0.13,<0.15"
+sniffio = "==1.*"
 
 [package.extras]
-asyncio = ["anyio (>=4.0,<5.0)"]
 http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
-trio = ["trio (>=0.22.0,<1.0)"]
 
 [[package]]
 name = "httplib2"
@@ -1517,28 +1480,27 @@ files = [
 
 [[package]]
 name = "httpx"
-version = "0.28.1"
+version = "0.24.1"
 description = "The next generation HTTP client."
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.7"
 files = [
-    {file = "httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"},
-    {file = "httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc"},
+    {file = "httpx-0.24.1-py3-none-any.whl", hash = "sha256:06781eb9ac53cde990577af654bd990a4949de37a28bdb4a230d434f3a30b9bd"},
+    {file = "httpx-0.24.1.tar.gz", hash = "sha256:5853a43053df830c20f8110c5e69fe44d035d850b2dfe795e196f00fdb774bdd"},
 ]
 
 [package.dependencies]
-anyio = "*"
 certifi = "*"
 h2 = {version = ">=3,<5", optional = true, markers = "extra == \"http2\""}
-httpcore = "==1.*"
+httpcore = ">=0.15.0,<0.18.0"
 idna = "*"
+sniffio = "*"
 
 [package.extras]
 brotli = ["brotli", "brotlicffi"]
 cli = ["click (==8.*)", "pygments (==2.*)", "rich (>=10,<14)"]
 http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
-zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
 name = "huggingface-hub"
@@ -2230,87 +2192,6 @@ pytz = "*"
 numpy = ["numpy (>=1.7.0,<3.0.0)"]
 pandas = ["numpy (>=1.7.0,<3.0.0)", "pandas (>=1.1.0,<3.0.0)"]
 pyarrow = ["pyarrow (>=1.0.0)"]
-
-[[package]]
-name = "neo4j-rust-ext"
-version = "5.28.2.1"
-description = "Rust Extensions for a Faster Neo4j Bolt Driver for Python"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:26fccce081bf75f590aaa670a2d6885513876f551246d361f27fdbd3acf3bd32"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:ac22c85ea5cc10e4431f39205173e400d1dd3bfe4d0b70d5f5692a3933689dba"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6856e3ba16afc1b6693a4470b40fdc9969eb44276050bbd17c218ff6f563d67b"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:1315f4e3b8fd500c558d055ab2ac49f8ee90200c9577f815979ffd7b1f486529"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:472a59991e3c19fc0640c024b1b1c62b812e5ab9c9194b20769e400193d1ab7e"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:b6f74a0f32b6214bf4992f555e8ca70ecba6c7a8b4f88d73427cfcf06ce9e94a"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-win32.whl", hash = "sha256:2f99adc61c4530ab033cf34603abe1b97d82541b691882116993793aa32782b6"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-win_amd64.whl", hash = "sha256:547a551ee61136eebb199c4891e4519a8f6b1d3e3aad99e03294580e3e2f1309"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp310-cp310-win_arm64.whl", hash = "sha256:1f49c5a2b785eddf7d4f296d881cca223f3fb7f716a2ddab13ad84eba8f79f73"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:e5a44159f5d09a9aed1eec4671cc9b97f0e812c1cc607f849f59e6419647f655"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:fae99eaf111de3486f70d6f242b336de67004eac1fbcceb9c35262ced2f94e99"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b1e0afc2b4f3e88da96c162c9d86790c7c2a6f6c0415e3ec4f681def3d548ed4"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:d1fecafeb228dab3196a8d11ca0d4ca97aa75a4ca6b8bfc488b90d38a8baaa92"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a1513a8d1c022e6aab75de8ced6720cd5584a27b96f5c7181514ad7a04ec4f39"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:e8a2bc6cc5188e2234d94ccba873e72119b4e849c7ce34b241f984204a1904e1"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-win32.whl", hash = "sha256:8417b3160ccd8b63b48402bb7f6b914a8ce85ac4a3c9e9250d20f9ac3ceea667"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-win_amd64.whl", hash = "sha256:7e18ce7da07fae13967ce5da0dbd0502aaedf083c0aca2c700fcb7f982e3b7a0"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp311-cp311-win_arm64.whl", hash = "sha256:269ff6a3c741d16d2f3482bdfb7cab5bb4fbd98aee7af9d80133d62898e619ac"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:f187bdd40a63b1c0d97680269591a857ab902747cd005eab054da72b130505da"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:7ec9e36eda7acbe454800f09de5cef5aa8d7c7a2a291f308ff1df4b93d7e98e5"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:36dfc60b2f4f389c487238840c3c51be9afe74aa9e6aff5ec359ca4ff4f09370"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:b2a5a76d88ee001a854749cde2e06469bf693b443a1174f6a30ba24da66748d7"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3acbb1a7b42206e8c0ecd0053bdc0019012292696f6c76c278a4aa79e3b7148a"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:586b2d6fddd17513a4f6a616f434bb4d7644b05bee714cef24384960e37a33cd"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-win32.whl", hash = "sha256:97e6a6e6ff599c64cf0b0135755eb4968de3618de2ace79784cd81935d41ec53"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:29399f3ae0aef524de7a84dfa4bd6bd2e5444b3b0b0e4478d11f246404ddffde"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp312-cp312-win_arm64.whl", hash = "sha256:6563a4878a3c2dfda2fbee3e9e24a2980ce565449648aec33339f3a206b41168"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:cabaff0b19fc23f93e8f3c9827573f2d732f4ca4162bc62065cde192ee469b81"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:3529f697e417ef8562082db456cf95772869f92bfa180bb7cecd82d856f20c7f"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e93368f0b877e92c736ebf59c9306fa8534499544184b9cb9840a668377ea4d6"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:d28103acc7e4e77a5d66091285e5618cef30814a643b1bef234c397bd39d9a80"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:93a2b845e5b634c09e385ba6ff808e3fb150cb497373c7ea2d14ee79cd21a549"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:26fb73b599aaee12fc7130ad88abc1f37b309f7d8b082977ea3ed311d6ba0f3f"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-win32.whl", hash = "sha256:fc0787332c14e1f8cc9464e112dc3455053c73b4f7a865c2e4fc52e5af7e8cc7"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:8cd3c5f22c69eb90ee475f22eab6f7973b93cfbb929c15fc06de598b7aff3438"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp313-cp313-win_arm64.whl", hash = "sha256:ed66fcc373f8ed8a43a3052f73b50aa7bef50db4c232baeeac12f3a826e95440"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-macosx_10_12_x86_64.whl", hash = "sha256:15e15c65080630b7d10e7446325225becfdc049a84a4f3571f030819560dc698"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-macosx_11_0_arm64.whl", hash = "sha256:7757712691999e584181a441a391d1a1c85b5ef7fce7b9ec83bc606b1d6602a1"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:56a63f6db5af033e34bd46743a09290e0c66eeef15ccc576dd7551731cfdf1d8"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:66a187725d88f1037a60655cfb822ea76418561ee8506d45725cc4e3174ae95c"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0b076d7fc459d448d51c43be67b85801ac6255c987dd32b3cfbace65c4bc5244"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-musllinux_1_2_x86_64.whl", hash = "sha256:ea09474bbbe91770875a71a6d1a6527f760c745af821fe41dd575c034caae519"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-win32.whl", hash = "sha256:f4e81f480356ebcfa4b6a6431b5ff074d5cf69f5bbd57f2b7c54e7fc25215a7a"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-win_amd64.whl", hash = "sha256:2b82c3166ac1d6cfce612bc76cea93a3eef0e3007ea7ccb5e317cac5b6479d1c"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp37-cp37m-win_arm64.whl", hash = "sha256:4dcadb4660d2a7c712c412e44550ee6f41d80ee7ce412ec3e847b5845ec33c6e"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-macosx_10_12_x86_64.whl", hash = "sha256:b1377a38e2284fadb0b5281881a7b15a7b163f80bc55bb784069a045489c430e"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:19e9c708d36317d51df2ca61ec6b4c0468ecdaec8981ad4b821c601672670a13"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8cbacc309f0044b9dfe3d071339bdad3303fd56f5b29ad47e78d64623144179b"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:4ff04a021402c6656711ddceb3d499d49a8a9b6cd4e3e4e75a81842dcd42595d"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:298db240d08b6f11078f9fee55868be69b353f29ca6d65159b085756438db8bc"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-musllinux_1_2_x86_64.whl", hash = "sha256:e74d9540d59c9dd7f04a104c27e28825fefad5be753ba0394b8e83b350c21827"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-win32.whl", hash = "sha256:6c8f2fa57853c095d12872ab934bb1a1da15dc8a9176f0a5eb3833a7039a9e0b"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-win_amd64.whl", hash = "sha256:28048a81f67631740cebdf8bfd5164589db4f72d7cbc8e1954dfa8fe32086487"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp38-cp38-win_arm64.whl", hash = "sha256:1d0b6c76a7bc66d1fbcea46ce605dd2989f2bf4d9d3269311bcb3a086161835e"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-macosx_10_12_x86_64.whl", hash = "sha256:dea369a8ea4e082295f5e1d2f8427d0bc0d9c52bcae4b835ae9891a3c2bd6c61"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:2fef4a2f1229deac007f8d52b76a1dc9c97739f5acd1f2e43cf6a21043119148"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e3d21a4f08247bf97b97222888a4381039327b3f594b715fbab4247c9ddbd7b7"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:7ddc18ec4d2e855d8e518bfcd49559f00a9b0324eb4d840a23881820e3b26aa1"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cbd86e4cdc250579f64ae55711443577609b0b566c6fb97a00eeec70885d79b0"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:e0ff8e73a6eb86ec4ce14e557f741d97103f466e3c2583b33e4ef7dfeb412925"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-win32.whl", hash = "sha256:6a00d47d8aabd39f57617f10c00d5b73a223d4b2ffbfc57b9af082a7429ea8c7"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-win_amd64.whl", hash = "sha256:26ed6e2e901214474ad67312cf7444186f8b5c27fd97f73634374bc529aff628"},
-    {file = "neo4j_rust_ext-5.28.2.1-cp39-cp39-win_arm64.whl", hash = "sha256:06cd8e190c9272230496b4c5fb7b3c42e2f32f1fe7653614c1847947d88e9b1b"},
-    {file = "neo4j_rust_ext-5.28.2.1.tar.gz", hash = "sha256:f4b7dfa47443b50c0a8ea21abc26b1877ebc6a584a23e2b9f06ce2672bb1df1f"},
-]
-
-[package.dependencies]
-neo4j = "5.28.2"
-
-[package.extras]
-numpy = ["neo4j[numpy]"]
-pandas = ["neo4j[pandas]"]
-pyarrow = ["neo4j[pyarrow]"]
 
 [[package]]
 name = "nest-asyncio"
@@ -4710,4 +4591,4 @@ cffi = ["cffi (>=1.17,<2.0)", "cffi (>=2.0.0b)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.12.0"
-content-hash = "78a1667fa46e2ad7b6d5823501b1e34c39c39629d79af5663ff900ed84cbfc17"
+content-hash = "edbedf500469eb7200b407467b1b2088d4c14687f8bbeaa46ce7332fe034be3a"
