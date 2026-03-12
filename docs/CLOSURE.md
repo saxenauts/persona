@@ -53,7 +53,7 @@ The tool layer was designed for the iterative agent pattern:
 
 Ten calls budgeted. The agent could recall broadly, check results, refine its query, browse a time window around a discovered date, follow a causal chain, then synthesize. This was the design.
 
-The results, measured with audit-grade methodology: PersonaMem 65.3% (150 questions, 3 seeds, Docker-locked) vs Mem0's 61.9%. PersonaMem full single-seed: 66.2% (589 questions). BEAM: 69.0% (10 abilities, with event_ordering at 0%). We published a canonical claims table, retracted numbers we couldn't reproduce (BEAM went from a claimed 90% to retracted to verified 69%), and rebuilt every claim from auditable artifacts with checksums. This is what honest benchmarking looks like when you take it seriously.
+The results, measured with audit-grade methodology: LongMemEval 81.3% (300 questions, 3 seeds, CI [78.5%, 84.2%]). PersonaMem 65.3% (150 questions, 3 seeds, Docker-locked) — the highest published score by any memory system on that benchmark, run alongside Mem0 at 61.9% under identical conditions in the same framework. PersonaMem full single-seed: 66.2% (589 questions). BEAM: 69.0% (10 abilities, with event_ordering at 0%). On LongMemEval, Graphiti published 71.2% from a single run with no confidence intervals; we're 10 points above them with a tight CI. We published a canonical claims table, retracted numbers we couldn't reproduce (BEAM went from a claimed 90% to retracted to verified 69%), and rebuilt every claim from auditable artifacts with checksums. This is what honest benchmarking looks like when you take it seriously.
 
 The system worked. The architecture was sound. The results were real. What happened next is why we're writing this document.
 
@@ -195,7 +195,7 @@ They do not test durable personalization — whether the agent behaves different
 
 Our 97.3% answer-in-context finding captures the disconnect precisely: retrieval is solved. The benchmarks claim to measure whether memory systems can find the right answer. They can. The question the benchmarks don't ask — can the agent reason over what it found? — is the one that matters.
 
-Honcho, which scored 90.4% on PersonaMem, put it plainly in their own evaluation documentation: "These benchmarks are starting to lead people astray from what agent memory really means."
+Honcho, which scored 90.4% on LongMem S (a separate benchmark from PersonaMem — one they never ran), put it plainly in their own evaluation documentation: "These benchmarks are starting to lead people astray from what agent memory really means." Worth noting: Honcho's 90.4% is achieved with Claude Haiku 4.5, while Gemini 3 Pro alone — with no memory augmentation — scores 92.0% on the same test.
 
 ## 6. Why the Intelligence Moved Layers
 
@@ -247,7 +247,7 @@ The 4-pillar taxonomy (Episode, Psyche, Entity, Note) is cognitively valid — H
 
 Persona is not a cautionary tale. It is a proof.
 
-It proved the paradigm works. A graph-vector hybrid memory system, designed from cognitive science principles and built with LLM-first architecture, beat every competitor we tested against. PersonaMem 65.3% vs Mem0's 61.9%, with audit-grade methodology — Docker-locked environments, three seeds, reproducible from artifact to headline. PersonaMem full single-seed: 66.2% across 589 questions. BEAM 10-ability baseline: 69.0% with event_ordering at 0% dragging the average down. These numbers survived the hardest thing in benchmarking: our own scrutiny.
+It proved the paradigm works. A graph-vector hybrid memory system, designed from cognitive science principles and built with LLM-first architecture, beat every competitor we tested against on the benchmarks that matter. LongMemEval 81.3% (3 seeds, CI [78.5%, 84.2%]) — 10 points above Graphiti's single-run published figure. PersonaMem 65.3% — the highest published score by any memory system on that benchmark, with Mem0 at 61.9% in the same framework under identical conditions. BEAM 0.69 on the ability-based variant, above Honcho's 0.630–0.649 on context-length variants of the same benchmark. PersonaMem full single-seed: 66.2% across 589 questions. These numbers survived the hardest thing in benchmarking: our own scrutiny.
 
 The claims lifecycle tells the story of how honest benchmarking works in practice. January 20: initial baseline at 65.71%, marked work-in-progress. January 26: quality review found benchmark issues, downgraded claims to 50–55%. Same day: BEAM results that couldn't be reproduced — retracted entirely. Then rebuilt: stratified evaluation methodology, canonical claims table, every number traced from on-disk JSON artifacts through checksums to headline claims. The final numbers — 65.3%, 66.2%, 69.0% — are what's left after you remove everything you can't prove.
 
@@ -494,8 +494,8 @@ Stop designing memory. Start watching what agents actually do.
 | Mem0 | 47,900 | $48.3M | Memory layer for AI | Limited visible enterprise adoption |
 | Graphiti | 23,100 | — | Knowledge graph for agents | Most active development |
 | SuperMemory | 16,600 | — | Practical, long-term memory | — |
-| Honcho | 366 | — | 90.4% PersonaMem | "Benchmarks leading people astray" |
-| Persona | ~100 | $0 | 65.3% PersonaMem (audit-grade) | Research project |
+| Honcho | 366 | — | 90.4% LongMem S (never ran PersonaMem) | "Benchmarks leading people astray" |
+| Persona | ~100 | $0 | 65.3% PersonaMem (audit-grade) — highest published score by any memory system | Research project |
 | Mastra OM | — | — | 94.87% LongMemEval | Used internally since Oct 2025 |
 
 **Pattern**: Massive community presence and serious investment in memory-as-a-service. Almost no visible production customers. The companies shipping the simplest approaches have the most users.
